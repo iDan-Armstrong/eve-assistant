@@ -3,7 +3,8 @@
 An interactive star atlas of the EVE Online universe, built the way a GIS
 professional builds a map: **5,432 real solar systems** as point features with
 full attribute data, **6,888 stargate connections** as a line network,
-**5,150 stations** joined to their systems by foreign key, and **69 regions**
+**5,150 stations** joined to their systems by foreign key, the full celestial
+hierarchy (**46,172 planets, 234,651 moons**, every star), and **69 regions**
 — a spatial / attribute / relational dataset rendered with the same tooling
 (Leaflet, GeoJSON) used in production web GIS.
 
@@ -28,11 +29,15 @@ survey data:
   (local / constellation / regional) by whether they cross a boundary.
 - **Attribute** — click any system for its full record; security coloring
   uses the game's own 11-step ramp, so the map reads like the in-game one.
-- **Relational** — the jump network is an edge list keyed by system ID, and
+- **Relational** — the jump network is an edge list keyed by system ID;
   stations live in their own table (`stations.json`) with `systemId` as the
-  foreign key, joined client-side at view time. The info panel walks both:
-  every neighbor is one click away, and selecting a system lists its
-  stations (Jita shows all 15, 4-4 included). The two sources cross-check:
+  foreign key; and the celestial hierarchy (region › system › star/planet ›
+  moon) is sharded into one file per region, fetched lazily when a system
+  in that region is first selected and joined client-side — the access
+  pattern of a feature-service query, without a server. The info panel
+  walks all of it: every neighbor one click away, stations listed per
+  system (Jita shows all 15, 4-4 included), planets expandable to their
+  moons with star class and temperature up top. The sources cross-check:
   station counts derived from the universe tree match the station table in
   5,431 of 5,432 systems.
 
@@ -43,7 +48,8 @@ EVE Static Data Export (CCP)          tools/build_map_data.py         web/data/
 universe/eve/**/solarsystem.yaml  →   parse, project X/Z → ly,    →   systems.geojson   1.8 MB
 8,436 YAML files, 282 MB              dedupe gate pairs,              jumps.geojson     1.4 MB
 bsd/staStations.yaml                  classify jumps,                 regions.json      6 KB
-                                      key stations to systems         stations.json     0.5 MB
+fsd/types.yaml (streamed, 142 MB)     key stations to systems,        stations.json     0.5 MB
+                                      shard celestials by region      celestials/*.json 16 MB
 ```
 
 Rebuild anytime: download the [SDE](https://developers.eveonline.com/docs/guides/staticdata/)

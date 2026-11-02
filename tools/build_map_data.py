@@ -8,6 +8,11 @@ loads:
     web/data/jumps.geojson     LineString per stargate connection
     web/data/regions.json      region metadata + label anchors
     web/data/stations.json     every NPC station, keyed to its system
+    web/data/celestials/<regionId>.json
+                               per-region celestial hierarchy: each
+                               system's star, planets and moons, fetched
+                               lazily when a system in that region is
+                               selected (feature-service style access)
 
 Usage:
     python tools/build_map_data.py <path-to-sde>/universe/eve [out_dir]
@@ -121,11 +126,71 @@ def load_stations(root: Path) -> list[dict]:
         key=lambda s: s["name"])
 
 
+def load_type_names(root: Path) -> dict[int, str]:
+    """Stream fsd/types.yaml (140 MB) for star/planet/moon type names
+    (groupIDs 6, 7, 8) without a full YAML parse."""
+    path = root.parent.parent / "fsd" / "types.yaml"
+    if not path.is_file():
+        print("  (no fsd/types.yaml — celestial type names unavailable)")
+        return {}
+    names: dict[int, str] = {}
+    type_id, group, in_name = None, None, False
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            if line[0].isdigit():
+                type_id, group, in_name = int(line.split(":", 1)[0]), None, False
+            elif line.startswith("  groupID:"):
+                group = int(line.split(":", 1)[1])
+            elif line.startswith("  "):
+                if not line.startswith("    "):
+                    in_name = line.startswith("  name:")
+                elif in_name and line.startswith("    en:") and group in (6, 7, 8):
+                    names[type_id] = line.split(":", 1)[1].strip().strip("'\"")
+    return names
+
+
+def star_row(doc: dict, names: dict[int, str], types: dict[int, str]) -> dict | None:
+    star = doc.get("star")
+    if not star:
+        return None
+    stats = star.get("statistics", {})
+    return {
+        "id": star.get("id"),
+        "name": names.get(star.get("id"), ""),
+        "type": types.get(star.get("typeID"), ""),
+        "tempK": round(stats.get("temperature", 0)),
+        "radiusKm": round(star.get("radius", 0) / 1000),
+        "luminosity": round(stats.get("luminosity", 0), 4),
+        "spectral": stats.get("spectralClass", ""),
+    }
+
+
+def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list[dict]:
+    rows = []
+    for pid, p in (doc.get("planets") or {}).items():
+        if not isinstance(p, dict):
+            continue
+        rows.append({
+            "id": pid,
+            "name": names.get(pid, ""),
+            "idx": p.get("celestialIndex", 0),
+            "type": types.get(p.get("typeID"), ""),
+            "radiusKm": round(p.get("radius", 0) / 1000),
+            "belts": len(p.get("asteroidBelts", {}) or {}),
+            "moons": [{"id": mid, "name": names.get(mid, "")}
+                      for mid in (p.get("moons", {}) or {})],
+        })
+    rows.sort(key=lambda r: r["idx"])
+    return rows
+
+
 def load_universe(root: Path):
     """Walk universe/eve/<Region>/<Constellation>/<System>/solarsystem.yaml."""
     names = load_names(root)
+    types = load_type_names(root)
     systems: dict[int, dict] = {}
     regions: dict[int, dict] = {}
+    celestials: dict[int, dict] = {}  # region id -> {system id -> hierarchy}
     gate_owner: dict[int, int] = {}   # stargate id -> owning system id
     gate_dest: dict[int, int] = {}    # stargate id -> destination gate id
 
@@ -141,6 +206,7 @@ def load_universe(root: Path):
             "center": [to_ly(rmeta["center"][0]), to_ly(rmeta["center"][2])],
             "systems": 0,
         }
+        celestials[rid] = {}
         print(f"  [{n:3d}/{len(region_dirs)}] {region_name}", flush=True)
 
         for const_dir in sorted(p for p in region_dir.iterdir() if p.is_dir()):
@@ -178,15 +244,22 @@ def load_universe(root: Path):
                     "border": bool(doc.get("border")),
                 }
                 regions[rid]["systems"] += 1
+                celestials[rid][sid] = {
+                    "star": star_row(doc, names, types),
+                    "planets": planet_rows(doc, names, types),
+                }
 
-    return systems, regions, gate_owner, gate_dest
+    return systems, regions, celestials, gate_owner, gate_dest
 
 
 def build(root: Path, out_dir: Path) -> dict:
     t0 = time.time()
-    systems, regions, gate_owner, gate_dest = load_universe(root)
+    systems, regions, celestials, gate_owner, gate_dest = load_universe(root)
     edges = dedupe_edges(gate_owner, gate_dest)
     stations = [s for s in load_stations(root) if s["systemId"] in systems]
+    n_planets = sum(len(c["planets"]) for r in celestials.values() for c in r.values())
+    n_moons = sum(len(p["moons"]) for r in celestials.values()
+                  for c in r.values() for p in c["planets"])
 
     sys_features = [{
         "type": "Feature",
@@ -210,6 +283,7 @@ def build(root: Path, out_dir: Path) -> dict:
     meta = {"built": time.strftime("%Y-%m-%d"),
             "systems": len(sys_features), "jumps": len(jump_features),
             "regions": len(regions), "stations": len(stations),
+            "planets": n_planets, "moons": n_moons,
             "units": "light years",
             "projection": "EVE X/Z plane (top-down)"}
 
@@ -224,6 +298,11 @@ def build(root: Path, out_dir: Path) -> dict:
         separators=(",", ":")))
     (out_dir / "stations.json").write_text(json.dumps(
         {"meta": meta, "stations": stations}, separators=(",", ":")))
+    cel_dir = out_dir / "celestials"
+    cel_dir.mkdir(exist_ok=True)
+    for rid, sys_map in celestials.items():
+        (cel_dir / f"{rid}.json").write_text(json.dumps(
+            {"regionId": rid, "systems": sys_map}, separators=(",", ":")))
 
     meta["seconds"] = round(time.time() - t0, 1)
     return meta

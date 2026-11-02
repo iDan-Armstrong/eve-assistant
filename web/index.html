@@ -142,6 +142,25 @@
     margin-bottom: 2px; line-height: 1.35;
   }
   .stations li .at { color: var(--ink-dim); }
+  .star-line { font-size: 12px; color: var(--ink-dim); margin-top: 6px; }
+  .star-line b { color: var(--ink); font-weight: 400; }
+  .cel h3 {
+    margin: 14px 0 6px; font-size: 12px; font-weight: 400; color: var(--ink-dim);
+    border-top: 1px solid var(--panel-edge); padding-top: 12px;
+  }
+  .cel details { margin-bottom: 2px; }
+  .cel summary {
+    font-size: 12.5px; padding: 4px 8px; cursor: pointer; border-radius: 3px;
+    list-style-position: outside; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .cel summary::-webkit-details-marker { display: none; }
+  .cel summary:hover, .cel summary:focus-visible { background: #162032; outline: none; }
+  .cel summary .what { color: var(--ink-dim); font-size: 11.5px; white-space: nowrap; }
+  .cel details[open] summary { color: #e4ecf7; }
+  .cel ul { margin: 2px 0 6px; padding: 0 0 0 16px; list-style: none; }
+  .cel li { font-size: 11.5px; color: var(--ink-dim); padding: 1.5px 0; border-left: 2px solid var(--panel-edge); padding-left: 8px; }
+  .cel .nomoons { cursor: default; }
+  .cel .nomoons:hover { background: none; }
   .panel-foot { padding: 9px 16px; border-top: 1px solid var(--panel-edge); font-size: 11px; color: var(--ink-faint); }
 
   /* ---- map labels --------------------------------------------------- */
@@ -228,9 +247,14 @@
   <div class="panel-body">
     <div class="attr-grid" id="pAttrs"></div>
     <div class="flags" id="pFlags"></div>
+    <div class="star-line" id="pStar"></div>
     <div class="neighbors">
       <h3>Stargate connections</h3>
       <div id="pNeighbors"></div>
+    </div>
+    <div class="cel" id="pPlanetsWrap">
+      <h3 id="pPlanetsHead">Planets and moons</h3>
+      <div id="pPlanets"></div>
     </div>
     <div class="stations" id="pStationsWrap">
       <h3 id="pStationsHead">Stations</h3>
@@ -336,9 +360,11 @@ async function boot() {
   map.fitBounds(L.latLngBounds(bounds).pad(.05));
   const meta = sysFC.meta;
   const nStations = stationDb.stations.length;
-  document.getElementById("stats").textContent =
+  const line2 = (meta.planets ? `${meta.planets.toLocaleString()} planets, ${meta.moons.toLocaleString()} moons, ` : "")
+              + `${nStations.toLocaleString()} stations — SDE ${meta.built}`;
+  document.getElementById("stats").innerHTML =
     `${meta.systems.toLocaleString()} systems, ${meta.jumps.toLocaleString()} stargate links, ` +
-    `${nStations.toLocaleString()} stations, ${meta.regions} regions — SDE ${meta.built}`;
+    `${meta.regions} regions<br>${line2}`;
 
   /* zoom-driven styling */
   function restyle() {
@@ -423,6 +449,8 @@ function select(id) {
   document.querySelectorAll("#pNeighbors button").forEach(b =>
     b.onclick = () => { const nid = +b.dataset.id; select(nid); flyTo(state.byId.get(nid).ll, Math.max(map.getZoom(), 6)); });
 
+  loadCelestials(p);
+
   /* stations in this system (joined by systemId) */
   const sts = state.stations.get(id) || [];
   document.getElementById("pStationsWrap").style.display = sts.length ? "" : "none";
@@ -440,6 +468,51 @@ function select(id) {
   document.getElementById("panel").classList.add("open");
   history.replaceState(null, "", `#s=${encodeURIComponent(p.name)}`);
 }
+/* celestial hierarchy: lazy-fetched per region, cached — the join runs
+   region -> system -> planet -> moon entirely client-side */
+const celCache = new Map();
+async function loadCelestials(p) {
+  document.getElementById("pStar").textContent = "";
+  document.getElementById("pPlanets").innerHTML = "";
+  let shard = celCache.get(p.regionId);
+  if (!shard) {
+    try {
+      shard = await fetch(`data/celestials/${p.regionId}.json`).then(r => r.json());
+      celCache.set(p.regionId, shard);
+    } catch { return; }
+  }
+  if (state.selected !== p.id) return;   // user moved on while we fetched
+  const cel = shard.systems[p.id];
+  if (!cel) return;
+
+  if (cel.star) {
+    const s = cel.star;
+    document.getElementById("pStar").innerHTML =
+      `<b>${s.type || "Star"}</b>, ${s.tempK.toLocaleString()} K` +
+      (s.spectral ? `, class ${s.spectral}` : "");
+  }
+  const strip = name => name && name.startsWith(p.name)
+    ? name.slice(p.name.length).trim().replace(/^[-–]\s*/, "") : name;
+  document.getElementById("pPlanetsWrap").style.display = cel.planets.length ? "" : "none";
+  document.getElementById("pPlanetsHead").textContent =
+    `Planets and moons (${cel.planets.length})`;
+  document.getElementById("pPlanets").innerHTML = cel.planets.map(pl => {
+    const bits = [pl.type.replace("Planet (", "").replace(")", ""),
+                  pl.moons.length ? `${pl.moons.length} moon${pl.moons.length > 1 ? "s" : ""}` : "",
+                  pl.belts ? `${pl.belts} belt${pl.belts > 1 ? "s" : ""}` : ""]
+                 .filter(Boolean).join(", ");
+    const moonRows = pl.moons.map(m => {
+      const n = m.name && m.name.startsWith(pl.name)
+        ? m.name.slice(pl.name.length).trim().replace(/^[-–]\s*/, "") : m.name;
+      return `<li>${n || m.id}</li>`;
+    }).join("");
+    if (!pl.moons.length) {
+      return `<details><summary class="nomoons" tabindex="-1"><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary></details>`;
+    }
+    return `<details><summary><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary><ul>${moonRows}</ul></details>`;
+  }).join("");
+}
+
 document.getElementById("panelClose").onclick = () => {
   document.getElementById("panel").classList.remove("open");
   if (state.selRing) state.selRing.remove();
