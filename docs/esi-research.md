@@ -76,6 +76,32 @@ CCP replaced path versioning (`/v1/`, `/v2/`, `/latest/`) with a date header:
 - **Respect `Expires`/cache times.** Send a **descriptive `User-Agent` with a
   contact email** — CCP asks for this and can rate-limit anonymous traffic harder.
 
+## Player-corporation structures (the "are corp stations in the data?" question)
+
+The 5,154 stations in the SDE are **NPC stations only**. Player-owned
+"stations" are **Upwell structures** (Astrahus/Fortizar/Keepstar citadels,
+Raitaru/Azbel/Sotiyo engineering complexes, Athanor/Tatara refineries),
+anchored and destroyed by players at runtime — so they are deliberately
+absent from the static export. (The old player-conquerable NPC outposts
+were converted to faction Fortizars in 2018; nothing conquerable remains
+in the static station table.)
+
+What the API offers for them, by access tier:
+
+- **Public, no login:** `GET /universe/structures/` returns the IDs of
+  every structure whose owner allows public access (optionally filtered
+  to ones hosting a public market). IDs only — no names, no positions.
+  `GET /sovereignty/structures/` (public) lists sov infrastructure.
+  Killmails via zKillboard also reveal structures as they die.
+- **Authenticated (any character's SSO token):**
+  `GET /universe/structures/{id}` resolves a structure's name, owner,
+  solar system, position and type — CCP requires a logged-in character
+  because structure visibility is itself gameplay information.
+
+For the Atlas this is a clean phase-2 layer: the basemap stays NPC-true,
+and once SSO lands, public player structures join the same
+system-ID-keyed join as everything else — fetched live, never baked in.
+
 ## Companion data sources (not ESI, but standard in the ecosystem)
 
 - **SDE (Static Data Export)** — bulk static data: every type, blueprint,
