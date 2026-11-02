@@ -124,6 +124,9 @@ def main() -> None:
     most_gates = max(systems.values(), key=lambda p: p["gates"])
     L.append(f"- Most stargates: **{most_gates['gates']}** "
              f"({most_gates['name']}, {most_gates['region']})")
+    most_belts = max(systems.values(), key=lambda p: p["belts"])
+    L.append(f"- Most asteroid belts: **{most_belts['belts']}** "
+             f"({most_belts['name']}, {most_belts['region']})")
 
     def dist(a, b):
         (ax, ay), (bx, by) = systems[a]["xy"], systems[b]["xy"]

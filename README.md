@@ -4,7 +4,8 @@ An interactive star atlas of the EVE Online universe, built the way a GIS
 professional builds a map: **5,432 real solar systems** as point features with
 full attribute data, **6,888 stargate connections** as a line network,
 **5,150 stations** joined to their systems by foreign key, the full celestial
-hierarchy (**46,172 planets, 234,651 moons**, every star), and **69 regions**
+hierarchy (**46,172 planets, 234,651 moons, 40,928 asteroid belts**, every
+star), and **69 regions**
 — a spatial / attribute / relational dataset rendered with the same tooling
 (Leaflet, GeoJSON) used in production web GIS.
 
@@ -37,7 +38,12 @@ survey data:
   pattern of a feature-service query, without a server. The info panel
   walks all of it: every neighbor one click away, stations listed per
   system (Jita shows all 15, 4-4 included), planets expandable to their
-  moons with star class and temperature up top. The sources cross-check:
+  moons and named asteroid belts with star class and temperature up top.
+  Ice belts and gas clouds are deliberately absent: the static export
+  confirms zero ice fields remain in the map (they became dynamic
+  anomalies in 2013's Odyssey), and gas sites are scanner signatures —
+  both are runtime content, which is exactly the line between a basemap
+  and a live layer. The sources cross-check:
   station counts derived from the universe tree match the station table in
   5,431 of 5,432 systems.
 

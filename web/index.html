@@ -159,6 +159,7 @@
   .cel details[open] summary { color: #e4ecf7; }
   .cel ul { margin: 2px 0 6px; padding: 0 0 0 16px; list-style: none; }
   .cel li { font-size: 11.5px; color: var(--ink-dim); padding: 1.5px 0; border-left: 2px solid var(--panel-edge); padding-left: 8px; }
+  .cel li.belt { color: #a78d5c; border-left-color: #4a3f28; }
   .cel .nomoons { cursor: default; }
   .cel .nomoons:hover { background: none; }
   .panel-foot { padding: 9px 16px; border-top: 1px solid var(--panel-edge); font-size: 11px; color: var(--ink-faint); }
@@ -361,6 +362,7 @@ async function boot() {
   const meta = sysFC.meta;
   const nStations = stationDb.stations.length;
   const line2 = (meta.planets ? `${meta.planets.toLocaleString()} planets, ${meta.moons.toLocaleString()} moons, ` : "")
+              + (meta.belts ? `${meta.belts.toLocaleString()} belts, ` : "")
               + `${nStations.toLocaleString()} stations — SDE ${meta.built}`;
   document.getElementById("stats").innerHTML =
     `${meta.systems.toLocaleString()} systems, ${meta.jumps.toLocaleString()} stargate links, ` +
@@ -497,19 +499,22 @@ async function loadCelestials(p) {
   document.getElementById("pPlanetsHead").textContent =
     `Planets and moons (${cel.planets.length})`;
   document.getElementById("pPlanets").innerHTML = cel.planets.map(pl => {
+    const nBelts = Array.isArray(pl.belts) ? pl.belts.length : pl.belts;
     const bits = [pl.type.replace("Planet (", "").replace(")", ""),
                   pl.moons.length ? `${pl.moons.length} moon${pl.moons.length > 1 ? "s" : ""}` : "",
-                  pl.belts ? `${pl.belts} belt${pl.belts > 1 ? "s" : ""}` : ""]
+                  nBelts ? `${nBelts} belt${nBelts > 1 ? "s" : ""}` : ""]
                  .filter(Boolean).join(", ");
-    const moonRows = pl.moons.map(m => {
-      const n = m.name && m.name.startsWith(pl.name)
-        ? m.name.slice(pl.name.length).trim().replace(/^[-–]\s*/, "") : m.name;
-      return `<li>${n || m.id}</li>`;
-    }).join("");
-    if (!pl.moons.length) {
+    const stripPl = name => name && name.startsWith(pl.name)
+      ? name.slice(pl.name.length).trim().replace(/^[-–]\s*/, "") : name;
+    const rows = [
+      ...pl.moons.map(m => `<li>${stripPl(m.name) || m.id}</li>`),
+      ...(Array.isArray(pl.belts) ? pl.belts : []).map(b =>
+        `<li class="belt">${stripPl(b.name) || b.id}</li>`),
+    ].join("");
+    if (!rows) {
       return `<details><summary class="nomoons" tabindex="-1"><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary></details>`;
     }
-    return `<details><summary><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary><ul>${moonRows}</ul></details>`;
+    return `<details><summary><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary><ul>${rows}</ul></details>`;
   }).join("");
 }
 

@@ -27,6 +27,7 @@
 - Most planets: **18** (Horkkisen, The Citadel)
 - Most stations: **22** (Nonni, Lonetrek)
 - Most stargates: **8** (Aghesi, Domain)
+- Most asteroid belts: **50** (Jarkkolen, The Bleak Lands)
 - Longest stargate link (map plane): **35.9 ly**, HD-JVQ (Venal) ↔ MTO2-2 (Perrigen Falls)
 
 ## Curiosities

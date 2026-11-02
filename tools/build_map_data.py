@@ -153,6 +153,12 @@ def star_row(doc: dict, names: dict[int, str], types: dict[int, str]) -> dict | 
     }
 
 
+def trailing_number(name: str) -> int:
+    """'… - Asteroid Belt 12' -> 12, for natural ordering."""
+    tail = name.rsplit(" ", 1)[-1]
+    return int(tail) if tail.isdigit() else 0
+
+
 def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list[dict]:
     rows = []
     for pid, p in (doc.get("planets") or {}).items():
@@ -164,9 +170,12 @@ def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list
             "idx": p.get("celestialIndex", 0),
             "type": types.get(p.get("typeID"), ""),
             "radiusKm": round(p.get("radius", 0) / 1000),
-            "belts": len(p.get("asteroidBelts", {}) or {}),
-            "moons": [{"id": mid, "name": names.get(mid, "")}
-                      for mid in (p.get("moons", {}) or {})],
+            "belts": sorted(({"id": bid, "name": names.get(bid, "")}
+                             for bid in (p.get("asteroidBelts", {}) or {})),
+                            key=lambda b: trailing_number(b["name"])),
+            "moons": sorted(({"id": mid, "name": names.get(mid, "")}
+                             for mid in (p.get("moons", {}) or {})),
+                            key=lambda m: trailing_number(m["name"])),
         })
     rows.sort(key=lambda r: r["idx"])
     return rows
@@ -250,6 +259,8 @@ def build(root: Path, out_dir: Path) -> dict:
     n_planets = sum(len(c["planets"]) for r in celestials.values() for c in r.values())
     n_moons = sum(len(p["moons"]) for r in celestials.values()
                   for c in r.values() for p in c["planets"])
+    n_belts = sum(len(p["belts"]) for r in celestials.values()
+                  for c in r.values() for p in c["planets"])
 
     sys_features = [{
         "type": "Feature",
@@ -273,7 +284,7 @@ def build(root: Path, out_dir: Path) -> dict:
     meta = {"built": time.strftime("%Y-%m-%d"),
             "systems": len(sys_features), "jumps": len(jump_features),
             "regions": len(regions), "stations": len(stations),
-            "planets": n_planets, "moons": n_moons,
+            "planets": n_planets, "moons": n_moons, "belts": n_belts,
             "units": "light years",
             "projection": "EVE X/Z plane (top-down)"}
 

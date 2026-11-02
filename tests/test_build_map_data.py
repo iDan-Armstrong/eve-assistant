@@ -58,3 +58,11 @@ def test_component_finder_separates_islands():
     comps = components(nodes, edges)
     assert [len(c) for c in comps] == [3, 1, 1]
     assert comps[0] == {1, 2, 3}
+
+
+def test_trailing_number_orders_celestials_naturally():
+    from build_map_data import trailing_number
+    names = ["X - Asteroid Belt 10", "X - Asteroid Belt 2", "X - Moon 1"]
+    assert sorted(names, key=trailing_number) == [
+        "X - Moon 1", "X - Asteroid Belt 2", "X - Asteroid Belt 10"]
+    assert trailing_number("Zarzakh - Star") == 0
