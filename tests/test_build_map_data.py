@@ -48,3 +48,13 @@ def test_count_stations_walks_planets_and_moons():
         40000003: {},
     }}
     assert count_stations(system) == 3
+
+
+def test_component_finder_separates_islands():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from audit_universe import components
+    nodes = {1, 2, 3, 4, 5}
+    edges = [(1, 2), (2, 3)]           # 4 and 5 are isolated
+    comps = components(nodes, edges)
+    assert [len(c) for c in comps] == [3, 1, 1]
+    assert comps[0] == {1, 2, 3}

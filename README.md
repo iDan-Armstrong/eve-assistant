@@ -57,6 +57,14 @@ and run `python tools/build_map_data.py <sde>/universe/eve`. The builder is
 pure Python + PyYAML; canonical display names come from `bsd/invNames.yaml`
 ("TheForge" folders become "The Forge").
 
+`tools/audit_universe.py` then audits what was built — referential
+integrity, stargate-graph topology, attribute outliers — and writes
+[docs/universe-audit.md](docs/universe-audit.md). It classifies, a human
+judges: the 27-system Pochven island and 217 gateless Jove systems are by
+design; Zarzakh's station missing from the universe tree is a genuine SDE
+inconsistency; and the audit's first run caught a mislabeled faction in
+this project's own builder.
+
 ## Roadmap
 
 - **Live layers (ESI):** CCP's public API serves sovereignty, faction-warfare

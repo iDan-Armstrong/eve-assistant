@@ -44,18 +44,6 @@ Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 LIGHT_YEAR_M = 9.4607e15
 
-# factionID -> name for region sovereignty labels (static NPC factions).
-FACTIONS = {
-    500001: "Caldari State", 500002: "Minmatar Republic", 500003: "Amarr Empire",
-    500004: "Gallente Federation", 500005: "Jove Empire", 500007: "Ammatar Mandate",
-    500008: "Khanid Kingdom", 500010: "Guristas Pirates", 500011: "Angel Cartel",
-    500012: "Blood Raider Covenant", 500014: "ORE", 500016: "Sisters of EVE",
-    500019: "Sansha's Nation", 500020: "Serpentis", 500023: "CONCORD",
-    500024: "Mordu's Legion", 500026: "The Society", 500027: "InterBus",
-    500029: "SoCT", 500110: "Deathless Circle",
-}
-
-
 def to_ly(meters: float) -> float:
     return round(meters / LIGHT_YEAR_M, 3)
 
@@ -202,7 +190,9 @@ def load_universe(root: Path):
         regions[rid] = {
             "id": rid,
             "name": region_name,
-            "faction": FACTIONS.get(rmeta.get("factionID"), ""),
+            # faction IDs are items too, so invNames is the source of truth
+            # (a hardcoded lookup here once mislabeled Pochven — never again)
+            "faction": names.get(rmeta.get("factionID"), ""),
             "center": [to_ly(rmeta["center"][0]), to_ly(rmeta["center"][2])],
             "systems": 0,
         }
