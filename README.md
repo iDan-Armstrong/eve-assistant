@@ -27,7 +27,11 @@ survey data:
 
 - **Spatial** — systems are GeoJSON `Point` features in a light-year CRS;
   stargate links are `LineString` features classified Dotlan-style
-  (local / constellation / regional) by whether they cross a boundary.
+  (local / constellation / regional) by whether they cross a boundary —
+  plus three special classes read from the SDE's own gate types and drawn
+  distinctly: 48 smuggler routes, Pochven's 30 Triglavian conduits, and
+  the 4 Jovian spokes that all converge on Zarzakh. The gate graph itself
+  audits clean: 13,776 gates, none dangling, none one-way.
 - **Attribute** — click any system for its full record; security coloring
   uses the game's own 11-step ramp, so the map reads like the in-game one.
 - **Relational** — the jump network is an edge list keyed by system ID;

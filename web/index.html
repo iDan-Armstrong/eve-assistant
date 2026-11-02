@@ -281,6 +281,10 @@ const JUMP_STYLE = {
   local:        { color: "#3b4b6b", opacity: .34, weight: .7 },
   constellation:{ color: "#4e6f9e", opacity: .42, weight: .8 },
   regional:     { color: "#8a5fb0", opacity: .55, weight: .9 },
+  /* special gate types from the SDE — these links are not ordinary travel */
+  smuggler:     { color: "#c98a2c", opacity: .65, weight: 1.0, dashArray: "4 4" },
+  triglavian:   { color: "#d1352f", opacity: .7,  weight: 1.1 },
+  jovian:       { color: "#e8d26a", opacity: .85, weight: 1.3, dashArray: "6 5" },
 };
 
 const map = L.map("map", {
@@ -317,10 +321,11 @@ async function boot() {
   }
 
   /* jump lines, grouped by class, non-interactive = cheap */
-  const jumpGroups = { local: [], constellation: [], regional: [] };
+  const jumpGroups = {};
+  for (const cls of Object.keys(JUMP_STYLE)) jumpGroups[cls] = [];
   for (const f of jumpFC.features) {
     const [[ax, az], [bx, bz]] = f.geometry.coordinates;
-    jumpGroups[f.properties.class].push([[az, ax], [bz, bx]]);
+    (jumpGroups[f.properties.class] || jumpGroups.local).push([[az, ax], [bz, bx]]);
   }
   const jumpLayer = L.layerGroup(Object.entries(jumpGroups).map(([cls, lines]) =>
     L.polyline(lines, { ...JUMP_STYLE[cls], renderer: canvas, interactive: false })

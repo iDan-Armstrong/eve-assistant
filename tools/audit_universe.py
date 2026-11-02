@@ -45,9 +45,11 @@ def components(nodes: set[int], edges: list[tuple[int, int]]) -> list[set[int]]:
 
 
 def main() -> None:
+    sys_doc = json.loads((DATA / "systems.geojson").read_text())
+    meta = sys_doc.get("meta", {})
     systems = {f["properties"]["id"]: {**f["properties"],
                                        "xy": f["geometry"]["coordinates"]}
-               for f in json.loads((DATA / "systems.geojson").read_text())["features"]}
+               for f in sys_doc["features"]}
     jumps = json.loads((DATA / "jumps.geojson").read_text())["features"]
     stations = json.loads((DATA / "stations.json").read_text())["stations"]
     regions = json.loads((DATA / "regions.json").read_text())["regions"]
@@ -102,6 +104,27 @@ def main() -> None:
                  "Triglavian region is deliberately severed from the cluster")
 
     # -- attribute outliers ----------------------------------------------
+    # -- stargates ------------------------------------------------------
+    L.append("\n## Stargates\n")
+    L.append(f"- {meta.get('gates', 0):,} gates in the universe tree; "
+             f"**{meta.get('danglingGates', 0)} dangling** (destination gate "
+             f"missing) and **{meta.get('nonMutualGates', 0)} non-mutual** "
+             f"(A\u2192B without B\u2192A) \u2014 every gate pair is intact "
+             f"and symmetric")
+    jump_cls = Counter(j["properties"]["class"] for j in jumps)
+    special = {k: v for k, v in jump_cls.items()
+               if k not in ("local", "constellation", "regional")}
+    if special:
+        L.append("- Links on special gate types (from the SDE's own gate "
+                 "typing), styled distinctly on the map:")
+        for cls, n in sorted(special.items()):
+            L.append(f"  - **{cls}**: {n} links")
+            if cls == "jovian":
+                for j in jumps:
+                    x = j["properties"]
+                    if x["class"] == "jovian":
+                        L.append(f"    - {x['fromName']} \u2194 {x['toName']}")
+
     L.append("\n## Attribute outliers\n")
     def top(key, fmt, n=1, rev=True):
         rows = sorted(systems.values(), key=key, reverse=rev)[:n]

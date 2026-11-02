@@ -68,6 +68,24 @@ def count_stations(node) -> int:
     return total
 
 
+# Gate types that mark a link as something other than ordinary travel.
+JOVIAN_GATES = {77918, 77921, 78264, 78265, 78266}   # the Zarzakh hub spokes
+TRIGLAVIAN_GATES = {56317}                            # Pochven conduits
+SMUGGLER_GATES = {12292}                              # smuggler routes
+
+
+def special_class(type_a: int | None, type_b: int | None) -> str:
+    """Non-empty when either endpoint gate is a special type."""
+    pair = {type_a, type_b}
+    if pair & JOVIAN_GATES:
+        return "jovian"
+    if pair & TRIGLAVIAN_GATES:
+        return "triglavian"
+    if pair & SMUGGLER_GATES:
+        return "smuggler"
+    return ""
+
+
 def classify_jump(a: dict, b: dict) -> str:
     """Dotlan-style jump classes: regional > constellation > local."""
     if a["region"] != b["region"]:
@@ -190,6 +208,7 @@ def load_universe(root: Path):
     celestials: dict[int, dict] = {}  # region id -> {system id -> hierarchy}
     gate_owner: dict[int, int] = {}   # stargate id -> owning system id
     gate_dest: dict[int, int] = {}    # stargate id -> destination gate id
+    gate_types: dict[int, int] = {}   # stargate id -> gate type id
 
     region_dirs = sorted(p for p in root.iterdir() if p.is_dir())
     for n, region_dir in enumerate(region_dirs, 1):
@@ -223,6 +242,7 @@ def load_universe(root: Path):
                 for gid, g in gates.items():
                     gate_owner[gid] = sid
                     gate_dest[gid] = g["destination"]
+                    gate_types[gid] = g.get("typeID")
                 x, y, z = doc["center"]
                 systems[sid] = {
                     "id": sid,
@@ -248,13 +268,26 @@ def load_universe(root: Path):
                     "planets": planet_rows(doc, names, types),
                 }
 
-    return systems, regions, celestials, gate_owner, gate_dest
+    return systems, regions, celestials, gate_owner, gate_dest, gate_types
 
 
 def build(root: Path, out_dir: Path) -> dict:
     t0 = time.time()
-    systems, regions, celestials, gate_owner, gate_dest = load_universe(root)
+    systems, regions, celestials, gate_owner, gate_dest, gate_types = load_universe(root)
     edges = dedupe_edges(gate_owner, gate_dest)
+
+    # gate-level integrity (direction exists only here, so record it in meta)
+    dangling = sum(1 for d in gate_dest.values() if d not in gate_owner)
+    non_mutual = sum(1 for g, d in gate_dest.items()
+                     if d in gate_dest and gate_dest[d] != g)
+    edge_special: dict[tuple[int, int], str] = {}
+    for gid, dest in gate_dest.items():
+        a, b = gate_owner.get(gid), gate_owner.get(dest)
+        if a is None or b is None:
+            continue
+        cls = special_class(gate_types.get(gid), gate_types.get(dest))
+        if cls:
+            edge_special[(min(a, b), max(a, b))] = cls
     stations = [s for s in load_stations(root) if s["systemId"] in systems]
     n_planets = sum(len(c["planets"]) for r in celestials.values() for c in r.values())
     n_moons = sum(len(p["moons"]) for r in celestials.values()
@@ -277,7 +310,8 @@ def build(root: Path, out_dir: Path) -> dict:
                          "coordinates": [[a["x"], a["z"]], [b["x"], b["z"]]]},
             "properties": {"from": a_id, "to": b_id,
                            "fromName": a["name"], "toName": b["name"],
-                           "class": classify_jump(a, b)},
+                           "class": edge_special.get((a_id, b_id))
+                                    or classify_jump(a, b)},
         })
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -285,6 +319,8 @@ def build(root: Path, out_dir: Path) -> dict:
             "systems": len(sys_features), "jumps": len(jump_features),
             "regions": len(regions), "stations": len(stations),
             "planets": n_planets, "moons": n_moons, "belts": n_belts,
+            "gates": len(gate_owner), "danglingGates": dangling,
+            "nonMutualGates": non_mutual,
             "units": "light years",
             "projection": "EVE X/Z plane (top-down)"}
 

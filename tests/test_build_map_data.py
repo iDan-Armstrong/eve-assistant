@@ -66,3 +66,12 @@ def test_trailing_number_orders_celestials_naturally():
     assert sorted(names, key=trailing_number) == [
         "X - Moon 1", "X - Asteroid Belt 2", "X - Asteroid Belt 10"]
     assert trailing_number("Zarzakh - Star") == 0
+
+
+def test_special_gate_classes_override_geography():
+    from build_map_data import special_class
+    assert special_class(77921, 77918) == "jovian"      # Zarzakh spoke
+    assert special_class(56317, 56317) == "triglavian"  # Pochven conduit
+    assert special_class(12292, 16) == "smuggler"       # one end suffices
+    assert special_class(77921, 56317) == "jovian"      # jovian outranks
+    assert special_class(16, 3875) == ""                # ordinary gates

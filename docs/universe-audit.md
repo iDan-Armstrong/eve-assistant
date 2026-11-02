@@ -20,6 +20,18 @@
   - All in the three Jove regions: charted in the data, unreachable in game — by design, not a defect
 - Pochven forms its own 27-system component: the Triglavian region is deliberately severed from the cluster
 
+## Stargates
+
+- 13,776 gates in the universe tree; **0 dangling** (destination gate missing) and **0 non-mutual** (A→B without B→A) — every gate pair is intact and symmetric
+- Links on special gate types (from the SDE's own gate typing), styled distinctly on the map:
+  - **jovian**: 4 links
+    - G-0Q86 ↔ Zarzakh
+    - H-PA29 ↔ Zarzakh
+    - Turnur ↔ Zarzakh
+    - Alsavoinon ↔ Zarzakh
+  - **smuggler**: 48 links
+  - **triglavian**: 30 links
+
 ## Attribute outliers
 
 - True security runs -1.0 (D4R-H7, Branch) to 1.0 (Sarum Prime, Domain)
