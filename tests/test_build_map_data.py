@@ -84,3 +84,13 @@ def test_one_way_links_detected_with_direction():
     dirs = collect_edges(owner, dest)
     assert dirs[(100, 200)] == {"ab", "ba"}
     assert dirs[(100, 300)] == {"ba"}   # travel runs hi->lo only
+
+
+def test_station_service_classes_rank_by_distinctiveness():
+    from build_map_data import classify_services
+    assert classify_services(["Cloning", "Market", "Factory"]) == "cloning"
+    assert classify_services(["Factory", "Market"]) == "industry"
+    assert classify_services(["Laboratory", "Repair Facilities"]) == "industry"
+    assert classify_services(["Market", "Fitting"]) == "market"
+    assert classify_services(["Repair Facilities"]) == "basic"
+    assert classify_services([]) == "basic"

@@ -13,6 +13,14 @@
 import * as THREE from "three";
 import { OrbitControls } from "./vendor/three/OrbitControls.js";
 
+/* station symbology by service capability (classified at build time) */
+export const STATION_CLASS_COLORS = {
+  cloning: 0xe8828c,    // has a clone bay — a med station
+  industry: 0xe0a84f,   // factory or laboratory
+  market: 0x74c476,     // market hub without industry
+  basic: 0x9fd9ff,      // docking, repair, the everyday services
+};
+
 const PLANET_COLORS = {
   Barren: 0x9d8d7f, Gas: 0xc9a86f, Ice: 0xa9c9e2, Lava: 0xd4663a,
   Oceanic: 0x3f7fc2, Plasma: 0xc45fd1, Storm: 0x8f9fb8,
@@ -84,7 +92,10 @@ export function openOrrery(host, data, onClose) {
     </div>
     <div class="orr-note">
     <span class="orr-key"><i class="k-gate"></i> stargate</span>
-    <span class="orr-key"><i class="k-station"></i> station</span>
+    <span class="orr-key">stations:
+      <i class="k-station k-st-market"></i> market
+      <i class="k-station k-st-industry"></i> industry
+      <i class="k-station k-st-cloning"></i> clone bay</span>
     <span class="orr-key"><i class="k-belt"></i> asteroid belt</span>
     <span class="orr-key"><i class="k-moon"></i> moon</span><br>
     directions true · distances log-compressed · bodies enlarged
@@ -283,13 +294,16 @@ export function openOrrery(host, data, onClose) {
     } else {
       v = place(st.pos);
     }
+    const scol = STATION_CLASS_COLORS[st.svcClass] ?? STATION_CLASS_COLORS.basic;
     const mesh = body(new THREE.Mesh(
       new THREE.BoxGeometry(.8, .3, .3),
-      new THREE.MeshLambertMaterial({ color: 0x9fd9ff, emissive: 0x2e5a78 })),
+      new THREE.MeshLambertMaterial({ color: scol,
+        emissive: new THREE.Color(scol).multiplyScalar(.35) })),
       { kind: "Station", name: st.name,
         sub: `${Math.hypot(...st.pos).toFixed(1)} AU from star`,
         rows: [["Operator", st.corp || ""],
                ["Station type", st.type || ""],
+               ["Services", (st.svc || []).join(", ")],
                ["Reprocessing efficiency",
                 st.reproc ? Math.round(st.reproc * 100) + "%" : ""],
                ["Max dockable volume", F.vol(st.maxDock)],

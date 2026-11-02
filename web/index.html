@@ -184,6 +184,10 @@
   .orr-key i { display: inline-block; margin-right: 5px; vertical-align: -1px; }
   .k-gate { width: 9px; height: 9px; background: #e8d26a; transform: rotate(45deg); }
   .k-station { width: 11px; height: 5px; background: #9fd9ff; }
+  .k-st-basic { background: #9fd9ff; }
+  .k-st-market { background: #74c476; margin-left: 8px; }
+  .k-st-industry { background: #e0a84f; margin-left: 8px; }
+  .k-st-cloning { background: #e8828c; margin-left: 8px; }
   .k-belt { width: 10px; height: 10px;
     background: radial-gradient(circle at 30% 40%, #c9a86a 1.5px, transparent 2px),
                 radial-gradient(circle at 70% 30%, #c9a86a 1.5px, transparent 2px),
@@ -572,12 +576,16 @@ function select(id) {
   const sts = state.stations.get(id) || [];
   document.getElementById("pStationsWrap").style.display = sts.length ? "" : "none";
   document.getElementById("pStationsHead").textContent = `Stations (${sts.length})`;
+  const SVC_CSS = { cloning: "#e8828c", industry: "#e0a84f", market: "#74c476" };
   document.getElementById("pStations").innerHTML = sts.map(st => {
     const parts = st.name.split(" - ");
     const facility = parts.pop();
     let loc = parts.join(" - ");
     if (loc.startsWith(p.name)) loc = loc.slice(p.name.length).trim();
-    return `<li>${facility}${loc ? ` <span class="at">${loc}</span>` : ""}</li>`;
+    const edge = SVC_CSS[st.svcClass];
+    return `<li${edge ? ` style="border-left-color:${edge}"` : ""}` +
+           `${st.svc ? ` title="${st.svc.join(", ")}"` : ""}>` +
+           `${facility}${loc ? ` <span class="at">${loc}</span>` : ""}</li>`;
   }).join("");
 
   document.getElementById("pFoot").textContent =

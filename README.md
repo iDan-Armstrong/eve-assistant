@@ -45,6 +45,10 @@ survey data:
   (chevrons in a caution color) instead of a plain line.
 - **Attribute** — click any system for its full record; security coloring
   uses the game's own 11-step ramp, so the map reads like the in-game one.
+  In the 3D view every body opens a profile window with its complete
+  attribute record, and stations are symbolized by service capability
+  (clone bay, factory/lab, market, basic) resolved through the SDE's
+  operation → services join.
 - **Relational** — the jump network is an edge list keyed by system ID;
   stations live in their own table (`stations.json`) with `systemId` as the
   foreign key; and the celestial hierarchy (region › system › star/planet ›

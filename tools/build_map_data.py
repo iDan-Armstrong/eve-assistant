@@ -135,6 +135,35 @@ def load_names(root: Path) -> dict[int, str]:
     return {r["itemID"]: r["itemName"] for r in rows}
 
 
+def load_operation_services(root: Path) -> dict[int, list[str]]:
+    """operationID -> sorted English service names, from
+    fsd/stationOperations.yaml (services per operation) joined to
+    fsd/stationServices.yaml (service names)."""
+    fsd = root.parent.parent / "fsd"
+    ops_path, svc_path = fsd / "stationOperations.yaml", fsd / "stationServices.yaml"
+    if not (ops_path.is_file() and svc_path.is_file()):
+        print("  (no station operations/services tables — skipping services)")
+        return {}
+    svc_names = {sid: s.get("serviceNameID", {}).get("en", "")
+                 for sid, s in yaml.load(svc_path.read_text(), Loader).items()}
+    return {op_id: sorted(filter(None, (svc_names.get(s) for s in
+                                        op.get("services", []) or [])))
+            for op_id, op in yaml.load(ops_path.read_text(), Loader).items()}
+
+
+# Symbology classes, most-distinctive-first: a med bay outranks a factory
+# outranks a market; everything else is a basic station.
+def classify_services(services: list[str]) -> str:
+    s = set(services)
+    if "Cloning" in s:
+        return "cloning"
+    if s & {"Factory", "Laboratory", "Laboratories"}:
+        return "industry"
+    if "Market" in s:
+        return "market"
+    return "basic"
+
+
 def load_stations(root: Path, names: dict[int, str],
                   types: dict[int, str]) -> list[dict]:
     """bsd/staStations.yaml -> one row per NPC station, systemId as the
@@ -145,17 +174,21 @@ def load_stations(root: Path, names: dict[int, str],
         print("  (no bsd/staStations.yaml — skipping stations)")
         return []
     rows = yaml.load(path.read_text(), Loader)
-    return sorted(
-        ({"id": r["stationID"], "name": r["stationName"],
-          "systemId": r["solarSystemID"],
-          "pos": au3((r.get("x", 0), r.get("y", 0), r.get("z", 0))),
-          "corp": names.get(r.get("corporationID"), ""),
-          "type": types.get(r.get("stationTypeID"), ""),
-          "reproc": r.get("reprocessingEfficiency", 0),
-          "maxDock": r.get("maxShipVolumeDockable", 0),
-          "rent": r.get("officeRentalCost", 0)}
-         for r in rows),
-        key=lambda s: s["name"])
+    op_services = load_operation_services(root)
+    out = []
+    for r in rows:
+        svc = op_services.get(r.get("operationID"), [])
+        out.append(
+            {"id": r["stationID"], "name": r["stationName"],
+             "systemId": r["solarSystemID"],
+             "pos": au3((r.get("x", 0), r.get("y", 0), r.get("z", 0))),
+             "corp": names.get(r.get("corporationID"), ""),
+             "type": types.get(r.get("stationTypeID"), ""),
+             "svc": svc, "svcClass": classify_services(svc),
+             "reproc": r.get("reprocessingEfficiency", 0),
+             "maxDock": r.get("maxShipVolumeDockable", 0),
+             "rent": r.get("officeRentalCost", 0)})
+    return sorted(out, key=lambda s: s["name"])
 
 
 CELESTIAL_GROUPS = (6, 7, 8, 9, 10, 15)  # sun, planet, moon, belt, gate, station
