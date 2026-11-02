@@ -7,6 +7,7 @@ loads:
     web/data/systems.geojson   Point per solar system (coords in light years)
     web/data/jumps.geojson     LineString per stargate connection
     web/data/regions.json      region metadata + label anchors
+    web/data/stations.json     every NPC station, keyed to its system
 
 Usage:
     python tools/build_map_data.py <path-to-sde>/universe/eve [out_dir]
@@ -105,6 +106,21 @@ def load_names(root: Path) -> dict[int, str]:
     return {r["itemID"]: r["itemName"] for r in rows}
 
 
+def load_stations(root: Path) -> list[dict]:
+    """bsd/staStations.yaml -> one row per NPC station, systemId as the
+    foreign key. The station name embeds its celestial and operator
+    ("Jita IV - Moon 4 - Caldari Navy Assembly Plant")."""
+    path = root.parent.parent / "bsd" / "staStations.yaml"
+    if not path.is_file():
+        print("  (no bsd/staStations.yaml — skipping stations)")
+        return []
+    rows = yaml.load(path.read_text(), Loader)
+    return sorted(
+        ({"id": r["stationID"], "name": r["stationName"],
+          "systemId": r["solarSystemID"]} for r in rows),
+        key=lambda s: s["name"])
+
+
 def load_universe(root: Path):
     """Walk universe/eve/<Region>/<Constellation>/<System>/solarsystem.yaml."""
     names = load_names(root)
@@ -170,6 +186,7 @@ def build(root: Path, out_dir: Path) -> dict:
     t0 = time.time()
     systems, regions, gate_owner, gate_dest = load_universe(root)
     edges = dedupe_edges(gate_owner, gate_dest)
+    stations = [s for s in load_stations(root) if s["systemId"] in systems]
 
     sys_features = [{
         "type": "Feature",
@@ -192,7 +209,8 @@ def build(root: Path, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     meta = {"built": time.strftime("%Y-%m-%d"),
             "systems": len(sys_features), "jumps": len(jump_features),
-            "regions": len(regions), "units": "light years",
+            "regions": len(regions), "stations": len(stations),
+            "units": "light years",
             "projection": "EVE X/Z plane (top-down)"}
 
     (out_dir / "systems.geojson").write_text(json.dumps(
@@ -204,6 +222,8 @@ def build(root: Path, out_dir: Path) -> dict:
     (out_dir / "regions.json").write_text(json.dumps(
         {"meta": meta, "regions": sorted(regions.values(), key=lambda r: r["name"])},
         separators=(",", ":")))
+    (out_dir / "stations.json").write_text(json.dumps(
+        {"meta": meta, "stations": stations}, separators=(",", ":")))
 
     meta["seconds"] = round(time.time() - t0, 1)
     return meta

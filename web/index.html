@@ -131,6 +131,17 @@
   }
   .neighbors button:hover, .neighbors button:focus-visible { background: #162032; outline: none; }
   .neighbors .via { color: var(--ink-dim); font-size: 11.5px; }
+  .stations h3 {
+    margin: 14px 0 6px; font-size: 12px; font-weight: 400; color: var(--ink-dim);
+    border-top: 1px solid var(--panel-edge); padding-top: 12px;
+  }
+  .stations ul { margin: 0; padding: 0; list-style: none; }
+  .stations li {
+    font-size: 12px; color: var(--ink); padding: 3px 8px;
+    border-left: 2px solid var(--panel-edge);
+    margin-bottom: 2px; line-height: 1.35;
+  }
+  .stations li .at { color: var(--ink-dim); }
   .panel-foot { padding: 9px 16px; border-top: 1px solid var(--panel-edge); font-size: 11px; color: var(--ink-faint); }
 
   /* ---- map labels --------------------------------------------------- */
@@ -221,6 +232,10 @@
       <h3>Stargate connections</h3>
       <div id="pNeighbors"></div>
     </div>
+    <div class="stations" id="pStationsWrap">
+      <h3 id="pStationsHead">Stations</h3>
+      <ul id="pStations"></ul>
+    </div>
   </div>
   <div class="panel-foot" id="pFoot"></div>
 </aside>
@@ -257,17 +272,24 @@ map.attributionControl.addAttribution(
 
 const canvas = L.canvas({ padding: .3 });
 const state = { byId: new Map(), adj: new Map(), markers: new Map(),
+                stations: new Map(),
                 selected: null, selRing: null, sysLabels: L.layerGroup() };
 
 const SYS_LABEL_ZOOM = 6, REGION_LABEL_MAX_ZOOM = 5.5;
 const radiusFor = z => Math.min(7, Math.max(1.4, 1.4 + (z - 3) * .9));
 
 async function boot() {
-  const [sysFC, jumpFC, regions] = await Promise.all([
+  const [sysFC, jumpFC, regions, stationDb] = await Promise.all([
     fetch("data/systems.geojson").then(r => r.json()),
     fetch("data/jumps.geojson").then(r => r.json()),
     fetch("data/regions.json").then(r => r.json()),
+    fetch("data/stations.json").then(r => r.json()).catch(() => ({ stations: [] })),
   ]);
+
+  /* relational join: stations -> their system, by solarSystemID */
+  for (const st of stationDb.stations) {
+    (state.stations.get(st.systemId) || state.stations.set(st.systemId, []).get(st.systemId)).push(st);
+  }
 
   /* jump lines, grouped by class, non-interactive = cheap */
   const jumpGroups = { local: [], constellation: [], regional: [] };
@@ -313,8 +335,10 @@ async function boot() {
 
   map.fitBounds(L.latLngBounds(bounds).pad(.05));
   const meta = sysFC.meta;
+  const nStations = stationDb.stations.length;
   document.getElementById("stats").textContent =
-    `${meta.systems.toLocaleString()} systems, ${meta.jumps.toLocaleString()} stargate links, ${meta.regions} regions — SDE ${meta.built}`;
+    `${meta.systems.toLocaleString()} systems, ${meta.jumps.toLocaleString()} stargate links, ` +
+    `${nStations.toLocaleString()} stations, ${meta.regions} regions — SDE ${meta.built}`;
 
   /* zoom-driven styling */
   function restyle() {
@@ -398,6 +422,18 @@ function select(id) {
     </button>`).join("");
   document.querySelectorAll("#pNeighbors button").forEach(b =>
     b.onclick = () => { const nid = +b.dataset.id; select(nid); flyTo(state.byId.get(nid).ll, Math.max(map.getZoom(), 6)); });
+
+  /* stations in this system (joined by systemId) */
+  const sts = state.stations.get(id) || [];
+  document.getElementById("pStationsWrap").style.display = sts.length ? "" : "none";
+  document.getElementById("pStationsHead").textContent = `Stations (${sts.length})`;
+  document.getElementById("pStations").innerHTML = sts.map(st => {
+    const parts = st.name.split(" - ");
+    const facility = parts.pop();
+    let loc = parts.join(" - ");
+    if (loc.startsWith(p.name)) loc = loc.slice(p.name.length).trim();
+    return `<li>${facility}${loc ? ` <span class="at">${loc}</span>` : ""}</li>`;
+  }).join("");
 
   document.getElementById("pFoot").textContent =
     `x ${p.ll[1].toFixed(1)} ly, z ${p.ll[0].toFixed(1)} ly, id ${p.id}`;
