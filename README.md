@@ -13,6 +13,14 @@ star), and **69 regions**
 python serve.py        →  http://localhost:8800
 ```
 
+Select any system and **enter it in 3D**: the orrery view renders the
+system's real SDE geometry — star colored by its temperature, planets,
+moons, belts, stargates and stations each at their true position
+(directions preserved; radial distances log-compressed and bodies
+enlarged, and the view says so). Jita's four stacked gates really do sit
+within a thousandth of an AU of each other; the view fans their labels
+instead of pretending otherwise.
+
 No build step, no framework, no account needed. The map is a static site:
 the same `web/` folder deploys unchanged to GitHub Pages.
 

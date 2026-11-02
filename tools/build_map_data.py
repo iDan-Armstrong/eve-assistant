@@ -43,6 +43,13 @@ import yaml
 Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 LIGHT_YEAR_M = 9.4607e15
+AU_M = 1.495978707e11
+
+
+def au3(pos) -> list[float]:
+    """System-local meters -> AU, for the 3D system view. 5 decimals keeps
+    moon orbits distinct (~15,000 km resolution)."""
+    return [round(v / AU_M, 5) for v in pos]
 
 def to_ly(meters: float) -> float:
     return round(meters / LIGHT_YEAR_M, 3)
@@ -139,7 +146,9 @@ def load_stations(root: Path) -> list[dict]:
     rows = yaml.load(path.read_text(), Loader)
     return sorted(
         ({"id": r["stationID"], "name": r["stationName"],
-          "systemId": r["solarSystemID"]} for r in rows),
+          "systemId": r["solarSystemID"],
+          "pos": au3((r.get("x", 0), r.get("y", 0), r.get("z", 0)))}
+         for r in rows),
         key=lambda s: s["name"])
 
 
@@ -199,11 +208,14 @@ def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list
             "idx": p.get("celestialIndex", 0),
             "type": types.get(p.get("typeID"), ""),
             "radiusKm": round(p.get("radius", 0) / 1000),
-            "belts": sorted(({"id": bid, "name": names.get(bid, "")}
-                             for bid in (p.get("asteroidBelts", {}) or {})),
+            "pos": au3(p.get("position", (0, 0, 0))),
+            "belts": sorted(({"id": bid, "name": names.get(bid, ""),
+                              "pos": au3(b.get("position", (0, 0, 0)))}
+                             for bid, b in (p.get("asteroidBelts", {}) or {}).items()),
                             key=lambda b: trailing_number(b["name"])),
-            "moons": sorted(({"id": mid, "name": names.get(mid, "")}
-                             for mid in (p.get("moons", {}) or {})),
+            "moons": sorted(({"id": mid, "name": names.get(mid, ""),
+                              "pos": au3(m.get("position", (0, 0, 0)))}
+                             for mid, m in (p.get("moons", {}) or {}).items()),
                             key=lambda m: trailing_number(m["name"])),
         })
     rows.sort(key=lambda r: r["idx"])
@@ -277,6 +289,9 @@ def load_universe(root: Path):
                 celestials[rid][sid] = {
                     "star": star_row(doc, names, types),
                     "planets": planet_rows(doc, names, types),
+                    "gates": [{"id": gid, "name": names.get(gid, ""),
+                               "pos": au3(g.get("position", (0, 0, 0)))}
+                              for gid, g in gates.items()],
                 }
 
     return systems, regions, celestials, gate_owner, gate_dest, gate_types

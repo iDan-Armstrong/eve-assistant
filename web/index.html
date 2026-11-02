@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600&display=swap">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <script src="vendor/leaflet/leaflet.js"></script>
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
 <style>
   :root {
     --bg: #060a12;
@@ -144,6 +145,53 @@
   .stations li .at { color: var(--ink-dim); }
   .star-line { font-size: 12px; color: var(--ink-dim); margin-top: 6px; }
   .star-line b { color: var(--ink); font-weight: 400; }
+  .view3d {
+    margin-top: 10px; width: 100%;
+    background: #16233a; color: var(--ink); border: 1px solid #2b3c5c;
+    border-radius: 3px; font: inherit; font-size: 12.5px;
+    padding: 6px 10px; cursor: pointer;
+  }
+  .view3d:hover { background: #1c2d4a; }
+  .view3d:focus-visible { outline: 2px solid var(--focus); }
+
+  /* ---- 3D system view ---------------------------------------------- */
+  #orrery {
+    position: absolute; inset: 0; z-index: 1500; display: none;
+    background: radial-gradient(ellipse at 50% 45%, #0a101d 0%, #05080f 75%);
+  }
+  #orrery canvas { position: absolute; inset: 0; }
+  .orr-top {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 18px; pointer-events: none;
+  }
+  .orr-top > * { pointer-events: auto; }
+  .orr-crumbs { font-size: 12px; color: var(--ink-dim); }
+  .orr-title { font-size: 24px; font-weight: 600; letter-spacing: .03em; }
+  .orr-title span { font-size: 16px; margin-left: 10px; }
+  .orr-close {
+    background: rgba(13,19,31,.85); color: var(--ink);
+    border: 1px solid var(--panel-edge); border-radius: 3px;
+    font: inherit; font-size: 13px; padding: 7px 14px; cursor: pointer;
+  }
+  .orr-close:hover { background: #162032; }
+  .orr-close:focus-visible { outline: 2px solid var(--focus); }
+  .orr-note {
+    position: absolute; bottom: 14px; left: 18px; z-index: 2;
+    font-size: 11.5px; color: var(--ink-faint);
+  }
+  .orr-label {
+    position: absolute; z-index: 2; transform: translate(-50%, -160%);
+    font-size: 11px; color: #aeb9cc; pointer-events: none;
+    text-shadow: 0 1px 4px #05080f, 0 0 2px #05080f;
+  }
+  .orr-label.gate { color: #d8c470; }
+  .orr-tip {
+    position: absolute; z-index: 3; pointer-events: none;
+    background: rgba(13,19,31,.95); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 6px 10px; font-size: 12px; max-width: 280px;
+  }
+  .orr-tip b { font-weight: 600; }
   .cel h3 {
     margin: 14px 0 6px; font-size: 12px; font-weight: 400; color: var(--ink-dim);
     border-top: 1px solid var(--panel-edge); padding-top: 12px;
@@ -249,6 +297,7 @@
     <div class="attr-grid" id="pAttrs"></div>
     <div class="flags" id="pFlags"></div>
     <div class="star-line" id="pStar"></div>
+    <button class="view3d" id="view3d" hidden>Enter system view (3D)</button>
     <div class="neighbors">
       <h3>Stargate connections</h3>
       <div id="pNeighbors"></div>
@@ -264,6 +313,8 @@
   </div>
   <div class="panel-foot" id="pFoot"></div>
 </aside>
+
+<div id="orrery" role="region" aria-label="3D system view"></div>
 
 <div class="boot" id="boot">CHARTING NEW EDEN</div>
 
@@ -512,6 +563,7 @@ const celCache = new Map();
 async function loadCelestials(p) {
   document.getElementById("pStar").textContent = "";
   document.getElementById("pPlanets").innerHTML = "";
+  document.getElementById("view3d").hidden = true;
   let shard = celCache.get(p.regionId);
   if (!shard) {
     try {
@@ -522,6 +574,12 @@ async function loadCelestials(p) {
   if (state.selected !== p.id) return;   // user moved on while we fetched
   const cel = shard.systems[p.id];
   if (!cel) return;
+
+  const btn = document.getElementById("view3d");
+  if (cel.planets.some(pl => pl.pos)) {   // dataset built with 3D positions
+    btn.hidden = false;
+    btn.onclick = () => openSystem3d(p, cel);
+  }
 
   if (cel.star) {
     const s = cel.star;
@@ -552,6 +610,23 @@ async function loadCelestials(p) {
     }
     return `<details><summary><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary><ul>${rows}</ul></details>`;
   }).join("");
+}
+
+/* the 3D system view loads on first use; the map stays live behind it */
+async function openSystem3d(p, cel) {
+  const host = document.getElementById("orrery");
+  try {
+    const { openOrrery } = await import("./orrery.js");
+    openOrrery(host, {
+      system: p, cel,
+      stations: state.stations.get(p.id) || [],
+      secColor: secColor(p.sec),
+    });
+  } catch (err) {
+    host.style.display = "none";
+    document.getElementById("pStar").innerHTML =
+      "3D view needs WebGL and the three.js vendor files - " + err;
+  }
 }
 
 document.getElementById("panelClose").onclick = () => {
