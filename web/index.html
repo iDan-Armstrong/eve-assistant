@@ -283,7 +283,7 @@ const JUMP_STYLE = {
   regional:     { color: "#8a5fb0", opacity: .55, weight: .9 },
   /* special gate types from the SDE — these links are not ordinary travel */
   smuggler:     { color: "#c98a2c", opacity: .65, weight: 1.0, dashArray: "4 4" },
-  triglavian:   { color: "#d1352f", opacity: .7,  weight: 1.1 },
+  triglavian:   { color: "#d1352f", opacity: .45, weight: 1.0, dashArray: "3 5" },
   jovian:       { color: "#e8d26a", opacity: .85, weight: 1.3, dashArray: "6 5" },
 };
 
@@ -330,6 +330,33 @@ async function boot() {
   const jumpLayer = L.layerGroup(Object.entries(jumpGroups).map(([cls, lines]) =>
     L.polyline(lines, { ...JUMP_STYLE[cls], renderer: canvas, interactive: false })
   )).addTo(map);
+
+  /* one-way links carry direction: arrow chevrons along the line, pointing
+     from -> to (geometry is stored in travel order). Fixed pixel size, so
+     they're re-anchored on every zoom. */
+  const oneways = jumpFC.features.filter(f => f.properties.oneway);
+  const arrowLayer = L.layerGroup().addTo(map);
+  function drawArrows() {
+    arrowLayer.clearLayers();
+    if (!oneways.length) return;
+    for (const f of oneways) {
+      const [[ax, az], [bx, bz]] = f.geometry.coordinates;
+      const p1 = map.latLngToLayerPoint([az, ax]);
+      const p2 = map.latLngToLayerPoint([bz, bx]);
+      const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      for (const t of [0.3, 0.5, 0.7]) {
+        const cx = p1.x + (p2.x - p1.x) * t, cy = p1.y + (p2.y - p1.y) * t;
+        const s = 7;
+        const pt = d => map.layerPointToLatLng(
+          L.point(cx + Math.cos(ang + d) * s, cy + Math.sin(ang + d) * s));
+        arrowLayer.addLayer(L.polyline([pt(2.6), pt(0), pt(-2.6)], {
+          renderer: canvas, color: "#e8a13c", weight: 2,
+          opacity: .95, interactive: false,  // caution color: one-way travel
+        }));
+      }
+    }
+  }
+  map.on("zoomend", drawArrows);
 
   /* systems */
   const z0 = map.getZoom() || 3, r0 = radiusFor(z0);
@@ -400,7 +427,10 @@ async function boot() {
 
   /* toggles */
   const tJumps = document.getElementById("tJumps"), tLabels = document.getElementById("tLabels");
-  tJumps.onchange = () => tJumps.checked ? jumpLayer.addTo(map) : jumpLayer.remove();
+  tJumps.onchange = () => {
+    if (tJumps.checked) { jumpLayer.addTo(map); arrowLayer.addTo(map); }
+    else { jumpLayer.remove(); arrowLayer.remove(); }
+  };
   tLabels.onchange = () => {
     document.body.classList.toggle("hide-sys-labels", !tLabels.checked);
     restyle();
@@ -408,6 +438,7 @@ async function boot() {
 
   wireSearch(regions.regions);
   restyle();
+  drawArrows();
   document.getElementById("boot").classList.add("done");
 
   const want = decodeURIComponent((location.hash.match(/^#s=(.+)/) || [])[1] || "");

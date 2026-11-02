@@ -75,3 +75,12 @@ def test_special_gate_classes_override_geography():
     assert special_class(12292, 16) == "smuggler"       # one end suffices
     assert special_class(77921, 56317) == "jovian"      # jovian outranks
     assert special_class(16, 3875) == ""                # ordinary gates
+
+
+def test_one_way_links_detected_with_direction():
+    from build_map_data import collect_edges
+    owner = {1: 100, 2: 200, 3: 300}
+    dest = {1: 2, 2: 1, 3: 1}        # 100<->200 mutual; 300->100 one-way
+    dirs = collect_edges(owner, dest)
+    assert dirs[(100, 200)] == {"ab", "ba"}
+    assert dirs[(100, 300)] == {"ba"}   # travel runs hi->lo only

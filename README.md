@@ -31,7 +31,10 @@ survey data:
   plus three special classes read from the SDE's own gate types and drawn
   distinctly: 48 smuggler routes, Pochven's 30 Triglavian conduits, and
   the 4 Jovian spokes that all converge on Zarzakh. The gate graph itself
-  audits clean: 13,776 gates, none dangling, none one-way.
+  audits clean: 13,776 gates, none dangling, none one-way — and the
+  symbology is ready for the day that changes: a one-way link stores its
+  geometry in travel order and renders with directional arrow markers
+  (chevrons in a caution color) instead of a plain line.
 - **Attribute** — click any system for its full record; security coloring
   uses the game's own 11-step ramp, so the map reads like the in-game one.
 - **Relational** — the jump network is an edge list keyed by system ID;

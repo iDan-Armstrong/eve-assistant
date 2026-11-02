@@ -95,16 +95,27 @@ def classify_jump(a: dict, b: dict) -> str:
     return "local"
 
 
-def dedupe_edges(gate_owner: dict, gate_dest: dict) -> list[tuple[int, int]]:
-    """gate->system plus gate->destination-gate becomes unique system pairs."""
-    edges = set()
+def collect_edges(gate_owner: dict, gate_dest: dict) -> dict[tuple[int, int], set[str]]:
+    """Unique system pairs with the travel directions that actually exist.
+
+    Key is the sorted pair (lo, hi); the value holds "ab" when a gate goes
+    lo->hi and "ba" when one goes hi->lo. A healthy gate pair has both; a
+    single direction marks a one-way link, which the map draws with arrow
+    markers instead of a plain line."""
+    dirs: dict[tuple[int, int], set[str]] = {}
     for gate_id, dest_gate in gate_dest.items():
         a = gate_owner.get(gate_id)
         b = gate_owner.get(dest_gate)
         if a is None or b is None or a == b:
             continue
-        edges.add((min(a, b), max(a, b)))
-    return sorted(edges)
+        key = (min(a, b), max(a, b))
+        dirs.setdefault(key, set()).add("ab" if a == key[0] else "ba")
+    return dirs
+
+
+def dedupe_edges(gate_owner: dict, gate_dest: dict) -> list[tuple[int, int]]:
+    """gate->system plus gate->destination-gate becomes unique system pairs."""
+    return sorted(collect_edges(gate_owner, gate_dest))
 
 
 def load_names(root: Path) -> dict[int, str]:
@@ -274,7 +285,8 @@ def load_universe(root: Path):
 def build(root: Path, out_dir: Path) -> dict:
     t0 = time.time()
     systems, regions, celestials, gate_owner, gate_dest, gate_types = load_universe(root)
-    edges = dedupe_edges(gate_owner, gate_dest)
+    edge_dirs = collect_edges(gate_owner, gate_dest)
+    edges = sorted(edge_dirs)
 
     # gate-level integrity (direction exists only here, so record it in meta)
     dangling = sum(1 for d in gate_dest.values() if d not in gate_owner)
@@ -303,15 +315,21 @@ def build(root: Path, out_dir: Path) -> dict:
 
     jump_features = []
     for a_id, b_id in edges:
+        dirs = edge_dirs[(a_id, b_id)]
+        if dirs == {"ba"}:          # geometry always runs travel-direction
+            a_id, b_id = b_id, a_id
         a, b = systems[a_id], systems[b_id]
+        props = {"from": a_id, "to": b_id,
+                 "fromName": a["name"], "toName": b["name"],
+                 "class": edge_special.get((min(a_id, b_id), max(a_id, b_id)))
+                          or classify_jump(a, b)}
+        if len(dirs) == 1:
+            props["oneway"] = True
         jump_features.append({
             "type": "Feature",
             "geometry": {"type": "LineString",
                          "coordinates": [[a["x"], a["z"]], [b["x"], b["z"]]]},
-            "properties": {"from": a_id, "to": b_id,
-                           "fromName": a["name"], "toName": b["name"],
-                           "class": edge_special.get((a_id, b_id))
-                                    or classify_jump(a, b)},
+            "properties": props,
         })
 
     out_dir.mkdir(parents=True, exist_ok=True)
