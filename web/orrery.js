@@ -50,8 +50,13 @@ export function openOrrery(host, data, onClose) {
       </div>
       <button class="orr-close" aria-label="Back to map">✕ map</button>
     </div>
-    <div class="orr-note">directions true · distances log-compressed · bodies enlarged
-      · drag to orbit, scroll to zoom</div>
+    <div class="orr-note">
+    <span class="orr-key"><i class="k-gate"></i> stargate</span>
+    <span class="orr-key"><i class="k-station"></i> station</span>
+    <span class="orr-key"><i class="k-belt"></i> asteroid belt</span>
+    <span class="orr-key"><i class="k-moon"></i> moon</span><br>
+    directions true · distances log-compressed · bodies enlarged
+      · drag to orbit, scroll to zoom · hover anything</div>
     <div class="orr-tip" hidden></div>`;
   const canvasHostStyle = host.style;
   canvasHostStyle.display = "block";
@@ -163,17 +168,17 @@ export function openOrrery(host, data, onClose) {
       const bd = size + .5 + Math.pow(d, .35) * 4;
       const centre = new THREE.Vector3(off[0] / d, off[1] / d, -off[2] / d)
         .multiplyScalar(bd).add(p);
-      const g = new THREE.BufferGeometry(), pts = new Float32Array(26 * 3);
-      for (let i = 0; i < 26; i++) {
-        pts[i * 3] = centre.x + (Math.random() - .5) * 1.1;
-        pts[i * 3 + 1] = centre.y + (Math.random() - .5) * .3;
-        pts[i * 3 + 2] = centre.z + (Math.random() - .5) * 1.1;
+      const g = new THREE.BufferGeometry(), pts = new Float32Array(44 * 3);
+      for (let i = 0; i < 44; i++) {
+        pts[i * 3] = centre.x + (Math.random() - .5) * 1.4;
+        pts[i * 3 + 1] = centre.y + (Math.random() - .5) * .35;
+        pts[i * 3 + 2] = centre.z + (Math.random() - .5) * 1.4;
       }
       g.setAttribute("position", new THREE.BufferAttribute(pts, 3));
       scene.add(new THREE.Points(g, new THREE.PointsMaterial({
-        color: 0xa78d5c, size: 2.2, sizeAttenuation: false })));
+        color: 0xc9a86a, size: 2.6, sizeAttenuation: false })));
       const hit = body(new THREE.Mesh(
-        new THREE.SphereGeometry(.7, 8, 8),
+        new THREE.SphereGeometry(.9, 8, 8),
         new THREE.MeshBasicMaterial({ visible: false })),
         { kind: "Asteroid belt", name: b.name, sub: `near ${short}` }, null);
       hit.position.copy(centre);
@@ -195,17 +200,47 @@ export function openOrrery(host, data, onClose) {
         sub: `${Math.hypot(...gexit.pos).toFixed(1)} AU from star` },
       gexit.name.replace(/^Stargate \(|\)$/g, ""), "gate", stacked * 13);
     mesh.position.copy(p);
+    const gg = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTexture(), color: 0xe8d26a,
+      transparent: true, opacity: .5, depthWrite: false }));
+    gg.scale.setScalar(4.5);
+    gg.position.copy(p);
+    scene.add(gg);
   }
 
-  /* stations: small boxes at true positions */
+  /* stations: cyan structures. A station's true position coincides with
+     its host planet or moon, so raw radial compression would bury it
+     inside the enlarged planet sphere — place it the way moons are
+     placed (parent-relative), nudged outward so it reads beside its
+     moon rather than inside it. */
   for (const st of stations) {
     if (!st.pos) continue;
-    const p = place(st.pos);
+    let best = null, bestD = Infinity;
+    for (const pl of cel.planets) {
+      const d = Math.hypot(st.pos[0] - pl.pos[0], st.pos[1] - pl.pos[1],
+                           st.pos[2] - pl.pos[2]);
+      if (d < bestD) { bestD = d; best = pl; }
+    }
+    let v;
+    if (best && bestD < 2) {           // orbits that planet's neighborhood
+      const pp = place(best.pos);
+      const size = Math.min(2.2, Math.max(.55, Math.log10((best.radiusKm || 3000) / 900)));
+      const off = [st.pos[0] - best.pos[0], st.pos[1] - best.pos[1],
+                   st.pos[2] - best.pos[2]];
+      const d = Math.hypot(...off) || 1e-9;
+      const md = (size + .5 + Math.pow(d, .35) * 4) * 1.12;  // just outside the moon shell
+      v = new THREE.Vector3(off[0] / d, off[1] / d, -off[2] / d)
+        .multiplyScalar(md).add(pp);
+    } else {
+      v = place(st.pos);
+    }
     const mesh = body(new THREE.Mesh(
-      new THREE.BoxGeometry(.5, .5, .5),
-      new THREE.MeshLambertMaterial({ color: 0x7fb3d5, emissive: 0x24384a })),
-      { kind: "Station", name: st.name, sub: "" }, null);
-    mesh.position.copy(p);
+      new THREE.BoxGeometry(.8, .3, .3),
+      new THREE.MeshLambertMaterial({ color: 0x9fd9ff, emissive: 0x2e5a78 })),
+      { kind: "Station", name: st.name,
+        sub: `${Math.hypot(...st.pos).toFixed(1)} AU from star` }, null);
+    mesh.position.copy(v);
+    mesh.lookAt(0, 0, 0);
   }
 
   camera.position.set(maxR * .9, maxR * .55, maxR * .9);

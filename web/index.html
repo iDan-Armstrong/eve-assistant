@@ -178,8 +178,17 @@
   .orr-close:focus-visible { outline: 2px solid var(--focus); }
   .orr-note {
     position: absolute; bottom: 14px; left: 18px; z-index: 2;
-    font-size: 11.5px; color: var(--ink-faint);
+    font-size: 11.5px; color: var(--ink-faint); line-height: 1.9;
   }
+  .orr-key { margin-right: 14px; color: var(--ink-dim); }
+  .orr-key i { display: inline-block; margin-right: 5px; vertical-align: -1px; }
+  .k-gate { width: 9px; height: 9px; background: #e8d26a; transform: rotate(45deg); }
+  .k-station { width: 11px; height: 5px; background: #9fd9ff; }
+  .k-belt { width: 10px; height: 10px;
+    background: radial-gradient(circle at 30% 40%, #c9a86a 1.5px, transparent 2px),
+                radial-gradient(circle at 70% 30%, #c9a86a 1.5px, transparent 2px),
+                radial-gradient(circle at 55% 75%, #c9a86a 1.5px, transparent 2px); }
+  .k-moon { width: 7px; height: 7px; border-radius: 50%; background: #9aa4b5; }
   .orr-label {
     position: absolute; z-index: 2; transform: translate(-50%, -160%);
     font-size: 11px; color: #aeb9cc; pointer-events: none;
