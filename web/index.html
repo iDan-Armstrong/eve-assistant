@@ -201,6 +201,25 @@
     border-radius: 3px; padding: 6px 10px; font-size: 12px; max-width: 280px;
   }
   .orr-tip b { font-weight: 600; }
+  .orr-profile {
+    position: absolute; top: 76px; right: 18px; z-index: 4;
+    width: 272px; max-height: calc(100% - 130px); overflow-y: auto;
+    background: rgba(11,16,26,.96); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 13px 15px 11px;
+  }
+  .orr-pkind { font-size: 11px; color: var(--ink-dim); }
+  .orr-pname { font-size: 15.5px; font-weight: 600; margin: 2px 0 9px; line-height: 1.3; }
+  .orr-profile table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .orr-profile td { padding: 3.5px 0; vertical-align: top; }
+  .orr-profile td:first-child { color: var(--ink-dim); padding-right: 10px; white-space: nowrap; }
+  .orr-profile td:last-child { text-align: right; }
+  .orr-pclose {
+    position: absolute; top: 6px; right: 6px;
+    background: none; border: 0; color: var(--ink-dim);
+    font-size: 14px; cursor: pointer; padding: 3px 7px;
+  }
+  .orr-pclose:hover { color: var(--ink); }
+  .orr-pclose:focus-visible { outline: 2px solid var(--focus); }
   .cel h3 {
     margin: 14px 0 6px; font-size: 12px; font-weight: 400; color: var(--ink-dim);
     border-top: 1px solid var(--panel-edge); padding-top: 12px;

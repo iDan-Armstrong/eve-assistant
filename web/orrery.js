@@ -32,6 +32,38 @@ function starColor(tempK) {
 
 const compress = au => Math.pow(Math.max(au, 1e-6), 0.42) * 7;
 
+/* profile-window value formatters */
+const F = {
+  au: v => v >= .01 ? v.toFixed(2) + " AU"
+         : Math.round(v * 1.496e8).toLocaleString() + " km",
+  days: v => v >= 365 ? (v / 365.25).toFixed(1) + " years" : v.toFixed(1) + " days",
+  km: v => v ? v.toLocaleString() + " km" : "",
+  kelvin: v => v ? Math.round(v).toLocaleString() + " K" : "",
+  speed: v => v >= 1000 ? (v / 1000).toFixed(1) + " km/s" : v + " m/s",
+  grav: v => v ? v + " m/s²" : "",
+  density: v => v ? v.toLocaleString() + " kg/m³" : "",
+  age: v => v >= 1e9 ? (v / 1e9).toFixed(2) + " billion years"
+          : (v / 1e6).toFixed(0) + " million years",
+  isk: v => v ? v.toLocaleString() + " ISK" : "",
+  vol: v => v ? v.toLocaleString() + " m³" : "",
+};
+
+/* [tempK, gravity, orbitAU, orbitDays, radiusKm, density, escapeVel,
+    eccentricity, locked] -> labeled rows */
+function statRows(st) {
+  if (!st) return [];
+  const [t, g, oa, od, r, d, e, ec, lk] = st;
+  return [["Orbit radius", oa ? F.au(oa) : ""],
+          ["Orbit period", od ? F.days(od) : ""],
+          ["Radius", F.km(r)],
+          ["Temperature", F.kelvin(t)],
+          ["Surface gravity", F.grav(g)],
+          ["Escape velocity", e ? F.speed(e) : ""],
+          ["Density", F.density(d)],
+          ["Eccentricity", ec || ""],
+          ["Tidally locked", lk ? "yes" : ""]];
+}
+
 function place(pos) {
   /* EVE is y-up left-ish; keep y up, flip z so the 2D map's north matches */
   const r = Math.hypot(pos[0], pos[1], pos[2]);
@@ -57,7 +89,8 @@ export function openOrrery(host, data, onClose) {
     <span class="orr-key"><i class="k-moon"></i> moon</span><br>
     directions true · distances log-compressed · bodies enlarged
       · drag to orbit, scroll to zoom · hover anything</div>
-    <div class="orr-tip" hidden></div>`;
+    <div class="orr-tip" hidden></div>
+    <div class="orr-profile" hidden></div>`;
   const canvasHostStyle = host.style;
   canvasHostStyle.display = "block";
 
@@ -109,7 +142,15 @@ export function openOrrery(host, data, onClose) {
     new THREE.SphereGeometry(3.2, 32, 32),
     new THREE.MeshBasicMaterial({ color: starColor(sTemp) })),
     { kind: "Star", name: cel.star ? (cel.star.name || system.name + " - Star") : "Star",
-      sub: cel.star ? `${cel.star.type}, ${sTemp.toLocaleString()} K` : "" },
+      sub: cel.star ? `${cel.star.type}, ${sTemp.toLocaleString()} K` : "",
+      rows: cel.star ? [
+        ["Type", cel.star.type],
+        ["Spectral class", cel.star.spectral],
+        ["Temperature", F.kelvin(cel.star.tempK)],
+        ["Radius", F.km(cel.star.radiusKm)],
+        ["Luminosity", cel.star.luminosity || ""],
+        ["Age", cel.star.ageYr ? F.age(cel.star.ageYr) : ""],
+      ] : [] },
     null);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: glowTexture(), color: starColor(sTemp),
@@ -136,7 +177,10 @@ export function openOrrery(host, data, onClose) {
       { kind: `Planet (${kindName})`, name: pl.name,
         sub: `${rAu.toFixed(1)} AU from star, r ${pl.radiusKm.toLocaleString()} km`
              + (pl.moons.length ? `, ${pl.moons.length} moons` : "")
-             + (pl.belts.length ? `, ${pl.belts.length} belts` : "") },
+             + (pl.belts.length ? `, ${pl.belts.length} belts` : ""),
+        rows: [["Type", kindName], ...statRows(pl.st),
+               ["Moons", pl.moons.length || ""],
+               ["Asteroid belts", pl.belts.length || ""]] },
       short, "pl");
     mesh.position.copy(p);
 
@@ -157,7 +201,8 @@ export function openOrrery(host, data, onClose) {
       const mm = body(new THREE.Mesh(
         new THREE.SphereGeometry(.16, 10, 10),
         new THREE.MeshLambertMaterial({ color: 0x9aa4b5, emissive: 0x2c3440 })),
-        { kind: "Moon", name: m.name, sub: `orbits ${short}` }, null);
+        { kind: "Moon", name: m.name, sub: `orbits ${short}`,
+          rows: [["Orbits", pl.name], ...statRows(m.st)] }, null);
       mm.position.copy(mv);
     }
 
@@ -180,7 +225,8 @@ export function openOrrery(host, data, onClose) {
       const hit = body(new THREE.Mesh(
         new THREE.SphereGeometry(.9, 8, 8),
         new THREE.MeshBasicMaterial({ visible: false })),
-        { kind: "Asteroid belt", name: b.name, sub: `near ${short}` }, null);
+        { kind: "Asteroid belt", name: b.name, sub: `near ${short}`,
+          rows: [["Near", pl.name], ...statRows(b.st)] }, null);
       hit.position.copy(centre);
     }
   }
@@ -197,7 +243,10 @@ export function openOrrery(host, data, onClose) {
       new THREE.OctahedronGeometry(.9),
       new THREE.MeshLambertMaterial({ color: 0xe8d26a, emissive: 0x4a3f12 })),
       { kind: "Stargate", name: gexit.name,
-        sub: `${Math.hypot(...gexit.pos).toFixed(1)} AU from star` },
+        sub: `${Math.hypot(...gexit.pos).toFixed(1)} AU from star`,
+        rows: [["Gate type", gexit.type || ""],
+               ["Leads to", gexit.to || ""],
+               ["Distance from star", F.au(Math.hypot(...gexit.pos))]] },
       gexit.name.replace(/^Stargate \(|\)$/g, ""), "gate", stacked * 13);
     mesh.position.copy(p);
     const gg = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -238,7 +287,14 @@ export function openOrrery(host, data, onClose) {
       new THREE.BoxGeometry(.8, .3, .3),
       new THREE.MeshLambertMaterial({ color: 0x9fd9ff, emissive: 0x2e5a78 })),
       { kind: "Station", name: st.name,
-        sub: `${Math.hypot(...st.pos).toFixed(1)} AU from star` }, null);
+        sub: `${Math.hypot(...st.pos).toFixed(1)} AU from star`,
+        rows: [["Operator", st.corp || ""],
+               ["Station type", st.type || ""],
+               ["Reprocessing efficiency",
+                st.reproc ? Math.round(st.reproc * 100) + "%" : ""],
+               ["Max dockable volume", F.vol(st.maxDock)],
+               ["Office rent", F.isk(st.rent)],
+               ["Distance from star", F.au(Math.hypot(...st.pos))]] }, null);
     mesh.position.copy(v);
     mesh.lookAt(0, 0, 0);
   }
@@ -268,6 +324,32 @@ export function openOrrery(host, data, onClose) {
     }
   }
   renderer.domElement.addEventListener("pointermove", onMove);
+
+  /* click (not drag) -> profile window with the full attribute record */
+  const prof = host.querySelector(".orr-profile");
+  let downAt = null;
+  renderer.domElement.addEventListener("pointerdown",
+    e => { downAt = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener("click", e => {
+    if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6)
+      return;                                   // that was an orbit drag
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1,
+            -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const hit = ray.intersectObjects(pickables, false)[0];
+    if (!hit) { prof.hidden = true; return; }
+    const u = hit.object.userData;
+    const rows = (u.rows || []).filter(([, v]) => v !== "" && v != null && v !== 0);
+    prof.innerHTML = `
+      <button class="orr-pclose" aria-label="Close profile">✕</button>
+      <div class="orr-pkind">${u.kind}</div>
+      <div class="orr-pname">${u.name}</div>
+      <table>${rows.map(([k, v]) =>
+        `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>`;
+    prof.hidden = false;
+    prof.querySelector(".orr-pclose").onclick = () => { prof.hidden = true; };
+  });
 
   /* label projection */
   const v = new THREE.Vector3();

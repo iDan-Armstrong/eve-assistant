@@ -135,10 +135,11 @@ def load_names(root: Path) -> dict[int, str]:
     return {r["itemID"]: r["itemName"] for r in rows}
 
 
-def load_stations(root: Path) -> list[dict]:
+def load_stations(root: Path, names: dict[int, str],
+                  types: dict[int, str]) -> list[dict]:
     """bsd/staStations.yaml -> one row per NPC station, systemId as the
-    foreign key. The station name embeds its celestial and operator
-    ("Jita IV - Moon 4 - Caldari Navy Assembly Plant")."""
+    foreign key, with the profile attributes: operating corporation,
+    station type, reprocessing efficiency, docking and office terms."""
     path = root.parent.parent / "bsd" / "staStations.yaml"
     if not path.is_file():
         print("  (no bsd/staStations.yaml — skipping stations)")
@@ -147,14 +148,23 @@ def load_stations(root: Path) -> list[dict]:
     return sorted(
         ({"id": r["stationID"], "name": r["stationName"],
           "systemId": r["solarSystemID"],
-          "pos": au3((r.get("x", 0), r.get("y", 0), r.get("z", 0)))}
+          "pos": au3((r.get("x", 0), r.get("y", 0), r.get("z", 0))),
+          "corp": names.get(r.get("corporationID"), ""),
+          "type": types.get(r.get("stationTypeID"), ""),
+          "reproc": r.get("reprocessingEfficiency", 0),
+          "maxDock": r.get("maxShipVolumeDockable", 0),
+          "rent": r.get("officeRentalCost", 0)}
          for r in rows),
         key=lambda s: s["name"])
 
 
+CELESTIAL_GROUPS = (6, 7, 8, 9, 10, 15)  # sun, planet, moon, belt, gate, station
+
+
 def load_type_names(root: Path) -> dict[int, str]:
-    """Stream fsd/types.yaml (140 MB) for star/planet/moon type names
-    (groupIDs 6, 7, 8) without a full YAML parse."""
+    """Stream fsd/types.yaml (140 MB) for celestial-ish type names
+    (stars, planets, moons, belts, stargates, stations) without a full
+    YAML parse."""
     path = root.parent.parent / "fsd" / "types.yaml"
     if not path.is_file():
         print("  (no fsd/types.yaml — celestial type names unavailable)")
@@ -170,9 +180,33 @@ def load_type_names(root: Path) -> dict[int, str]:
             elif line.startswith("  "):
                 if not line.startswith("    "):
                     in_name = line.startswith("  name:")
-                elif in_name and line.startswith("    en:") and group in (6, 7, 8):
+                elif (in_name and line.startswith("    en:")
+                        and group in CELESTIAL_GROUPS):
                     names[type_id] = line.split(":", 1)[1].strip().strip("'\"")
     return names
+
+
+# Per-body physics, stored compactly; the viewer formats units.
+STATS_SCHEMA = ["tempK", "gravity", "orbitAU", "orbitDays", "radiusKm",
+                "density", "escapeVel", "eccentricity", "locked"]
+SECONDS_PER_DAY = 86400.0
+SECONDS_PER_YEAR = 3.1557e7
+
+
+def stats_row(node: dict) -> list:
+    """[tempK, gravity m/s2, orbit AU, orbit days, radius km, density
+    kg/m3, escape m/s, eccentricity, locked] from a body's statistics."""
+    s = node.get("statistics") or {}
+    radius_m = node.get("radius") or s.get("radius") or 0
+    return [round(s.get("temperature", 0), 1),
+            round(s.get("surfaceGravity", 0), 4),
+            round(s.get("orbitRadius", 0) / AU_M, 6),
+            round(s.get("orbitPeriod", 0) / SECONDS_PER_DAY, 2),
+            round(radius_m / 1000),
+            round(s.get("density", 0), 1),
+            round(s.get("escapeVelocity", 0), 1),
+            round(s.get("eccentricity", 0), 5),
+            1 if s.get("locked") else 0]
 
 
 def star_row(doc: dict, names: dict[int, str], types: dict[int, str]) -> dict | None:
@@ -185,9 +219,10 @@ def star_row(doc: dict, names: dict[int, str], types: dict[int, str]) -> dict | 
         "name": names.get(star.get("id"), ""),
         "type": types.get(star.get("typeID"), ""),
         "tempK": round(stats.get("temperature", 0)),
-        "radiusKm": round(star.get("radius", 0) / 1000),
+        "radiusKm": round((star.get("radius") or stats.get("radius", 0)) / 1000),
         "luminosity": round(stats.get("luminosity", 0), 4),
         "spectral": stats.get("spectralClass", ""),
+        "ageYr": round(stats.get("age", 0) / SECONDS_PER_YEAR),
     }
 
 
@@ -209,12 +244,15 @@ def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list
             "type": types.get(p.get("typeID"), ""),
             "radiusKm": round(p.get("radius", 0) / 1000),
             "pos": au3(p.get("position", (0, 0, 0))),
+            "st": stats_row(p),
             "belts": sorted(({"id": bid, "name": names.get(bid, ""),
-                              "pos": au3(b.get("position", (0, 0, 0)))}
+                              "pos": au3(b.get("position", (0, 0, 0))),
+                              "st": stats_row(b)}
                              for bid, b in (p.get("asteroidBelts", {}) or {}).items()),
                             key=lambda b: trailing_number(b["name"])),
             "moons": sorted(({"id": mid, "name": names.get(mid, ""),
-                              "pos": au3(m.get("position", (0, 0, 0)))}
+                              "pos": au3(m.get("position", (0, 0, 0))),
+                              "st": stats_row(m)}
                              for mid, m in (p.get("moons", {}) or {}).items()),
                             key=lambda m: trailing_number(m["name"])),
         })
@@ -222,10 +260,8 @@ def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list
     return rows
 
 
-def load_universe(root: Path):
+def load_universe(root: Path, names: dict[int, str], types: dict[int, str]):
     """Walk universe/eve/<Region>/<Constellation>/<System>/solarsystem.yaml."""
-    names = load_names(root)
-    types = load_type_names(root)
     systems: dict[int, dict] = {}
     regions: dict[int, dict] = {}
     celestials: dict[int, dict] = {}  # region id -> {system id -> hierarchy}
@@ -290,6 +326,7 @@ def load_universe(root: Path):
                     "star": star_row(doc, names, types),
                     "planets": planet_rows(doc, names, types),
                     "gates": [{"id": gid, "name": names.get(gid, ""),
+                               "type": types.get(g.get("typeID"), ""),
                                "pos": au3(g.get("position", (0, 0, 0)))}
                               for gid, g in gates.items()],
                 }
@@ -299,9 +336,20 @@ def load_universe(root: Path):
 
 def build(root: Path, out_dir: Path) -> dict:
     t0 = time.time()
-    systems, regions, celestials, gate_owner, gate_dest, gate_types = load_universe(root)
+    names = load_names(root)
+    types = load_type_names(root)
+    systems, regions, celestials, gate_owner, gate_dest, gate_types = (
+        load_universe(root, names, types))
     edge_dirs = collect_edges(gate_owner, gate_dest)
     edges = sorted(edge_dirs)
+
+    # resolve each gate's destination system name for its profile
+    for sys_map in celestials.values():
+        for cel in sys_map.values():
+            for g in cel["gates"]:
+                dest_sys = gate_owner.get(gate_dest.get(g["id"]))
+                if dest_sys in systems:
+                    g["to"] = systems[dest_sys]["name"]
 
     # gate-level integrity (direction exists only here, so record it in meta)
     dangling = sum(1 for d in gate_dest.values() if d not in gate_owner)
@@ -315,7 +363,8 @@ def build(root: Path, out_dir: Path) -> dict:
         cls = special_class(gate_types.get(gid), gate_types.get(dest))
         if cls:
             edge_special[(min(a, b), max(a, b))] = cls
-    stations = [s for s in load_stations(root) if s["systemId"] in systems]
+    stations = [s for s in load_stations(root, names, types)
+                if s["systemId"] in systems]
     n_planets = sum(len(c["planets"]) for r in celestials.values() for c in r.values())
     n_moons = sum(len(p["moons"]) for r in celestials.values()
                   for c in r.values() for p in c["planets"])
@@ -353,7 +402,7 @@ def build(root: Path, out_dir: Path) -> dict:
             "regions": len(regions), "stations": len(stations),
             "planets": n_planets, "moons": n_moons, "belts": n_belts,
             "gates": len(gate_owner), "danglingGates": dangling,
-            "nonMutualGates": non_mutual,
+            "nonMutualGates": non_mutual, "statsSchema": STATS_SCHEMA,
             "units": "light years",
             "projection": "EVE X/Z plane (top-down)"}
 
