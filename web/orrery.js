@@ -13,6 +13,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "./vendor/three/OrbitControls.js";
 
+/* Services that earn a station the ★ overlay. "Compression" does not
+   exist on any NPC station today (it is an Upwell-structure capability),
+   so the matcher is future-proofing; "Refinery" is the nearest real
+   capability and makes the symbol reviewable now. */
+export const STAR_SERVICES = ["Compression", "Refinery"];
+
 /* station symbology by service capability (classified at build time) */
 export const STATION_CLASS_COLORS = {
   cloning: 0xe8828c,    // has a clone bay — a med station
@@ -95,7 +101,8 @@ export function openOrrery(host, data, onClose) {
     <span class="orr-key">stations:
       <i class="k-station k-st-market"></i> market
       <i class="k-station k-st-industry"></i> industry
-      <i class="k-station k-st-cloning"></i> clone bay</span>
+      <i class="k-station k-st-cloning"></i> clone bay
+      <span class="k-starred">★</span> refinery / compression</span>
     <span class="orr-key"><i class="k-belt"></i> asteroid belt</span>
     <span class="orr-key"><i class="k-moon"></i> moon</span><br>
     directions true · distances log-compressed · bodies enlarged
@@ -304,6 +311,8 @@ export function openOrrery(host, data, onClose) {
         rows: [["Operator", st.corp || ""],
                ["Station type", st.type || ""],
                ["Services", (st.svc || []).join(", ")],
+               ["Ore services",
+                (st.svc || []).filter(s => STAR_SERVICES.includes(s)).join(", ")],
                ["Reprocessing efficiency",
                 st.reproc ? Math.round(st.reproc * 100) + "%" : ""],
                ["Max dockable volume", F.vol(st.maxDock)],
@@ -311,6 +320,14 @@ export function openOrrery(host, data, onClose) {
                ["Distance from star", F.au(Math.hypot(...st.pos))]] }, null);
     mesh.position.copy(v);
     mesh.lookAt(0, 0, 0);
+    if ((st.svc || []).some(s => STAR_SERVICES.includes(s))) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: starTexture(), color: 0xffd966,
+        transparent: true, depthWrite: false }));
+      sp.scale.setScalar(.65);
+      sp.position.copy(v).y += .55;
+      scene.add(sp);
+    }
   }
 
   camera.position.set(maxR * .9, maxR * .55, maxR * .9);
@@ -408,6 +425,26 @@ export function openOrrery(host, data, onClose) {
   const esc = e => { if (e.key === "Escape") { close(); removeEventListener("keydown", esc); } };
   addEventListener("keydown", esc);
   return close;
+}
+
+let _starTex = null;
+function starTexture() {
+  if (_starTex) return _starTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const x = c.getContext("2d");
+  x.translate(32, 34);
+  x.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 9 : 22, a = (i * Math.PI) / 5 - Math.PI / 2;
+    x[i ? "lineTo" : "moveTo"](Math.cos(a) * r, Math.sin(a) * r);
+  }
+  x.closePath();
+  x.fillStyle = "#fff";
+  x.shadowColor = "#fff"; x.shadowBlur = 6;
+  x.fill();
+  _starTex = new THREE.CanvasTexture(c);
+  return _starTex;
 }
 
 function glowTexture() {

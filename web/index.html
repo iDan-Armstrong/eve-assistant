@@ -188,6 +188,7 @@
   .k-st-market { background: #74c476; margin-left: 8px; }
   .k-st-industry { background: #e0a84f; margin-left: 8px; }
   .k-st-cloning { background: #e8828c; margin-left: 8px; }
+  .k-starred { color: #ffd966; margin-left: 8px; }
   .k-belt { width: 10px; height: 10px;
     background: radial-gradient(circle at 30% 40%, #c9a86a 1.5px, transparent 2px),
                 radial-gradient(circle at 70% 30%, #c9a86a 1.5px, transparent 2px),
@@ -583,8 +584,10 @@ function select(id) {
     let loc = parts.join(" - ");
     if (loc.startsWith(p.name)) loc = loc.slice(p.name.length).trim();
     const edge = SVC_CSS[st.svcClass];
+    const starred = (st.svc || []).some(s => s === "Refinery" || s === "Compression");
     return `<li${edge ? ` style="border-left-color:${edge}"` : ""}` +
            `${st.svc ? ` title="${st.svc.join(", ")}"` : ""}>` +
+           `${starred ? '<span style="color:#ffd966">★</span> ' : ""}` +
            `${facility}${loc ? ` <span class="at">${loc}</span>` : ""}</li>`;
   }).join("");
 
