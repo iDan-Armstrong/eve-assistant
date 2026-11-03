@@ -59,6 +59,56 @@
      "name": "Oshaima"
     }
    ]
+  },
+  "Gallente Federation": {
+   "color": "#4fb07a",
+   "warHQ": 30003788,
+   "systems": [
+    {
+     "id": 30003832,
+     "name": "Adacyne"
+    },
+    {
+     "id": 30003831,
+     "name": "Osmeden"
+    },
+    {
+     "id": 30003830,
+     "name": "Orvolle"
+    },
+    {
+     "id": 30003788,
+     "name": "Intaki"
+    },
+    {
+     "id": 30005310,
+     "name": "Scheenins"
+    },
+    {
+     "id": 30005311,
+     "name": "Amygnon"
+    },
+    {
+     "id": 30005308,
+     "name": "Jufvitte"
+    },
+    {
+     "id": 30005309,
+     "name": "Ansalle"
+    },
+    {
+     "id": 30005312,
+     "name": "Gisleres"
+    },
+    {
+     "id": 30005313,
+     "name": "Ellmay"
+    },
+    {
+     "id": 30005314,
+     "name": "Theruesse"
+    }
+   ]
   }
  }
 }

@@ -90,7 +90,8 @@
   .bulwark-key { margin-top: 7px; font-size: 11px; color: var(--ink-dim); }
   .bulwark-key .bk-ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     border: 2px dashed #5fa8d3; vertical-align: -2px; margin-right: 3px; }
-  .bulwark-key .bk-hq { border-style: double; border-width: 3px; margin-left: 8px; }
+  .bulwark-key .bk-item { margin-left: 8px; white-space: nowrap; }
+  .bulwark-key .bk-hq { border-style: double; border-width: 3px; border-color: var(--ink-dim); }
   .bulwark-key .bk-src { display: block; color: var(--ink-faint); font-size: 10.5px; margin-top: 2px; }
   .legend .stats { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--panel-edge); font-size: 11px; color: var(--ink-dim); }
 
@@ -322,9 +323,7 @@
 <div class="legend">
   <div class="ramp" id="ramp"></div>
   <div class="ends"><span>0.0 nullsec</span><span>highsec 1.0</span></div>
-  <div class="bulwark-key" id="bulwarkKey" hidden>
-    <i class="bk-ring"></i> Bulwark system <i class="bk-ring bk-hq"></i> War HQ
-    <span class="bk-src">curated from the in-game map</span></div>
+  <div class="bulwark-key" id="bulwarkKey" hidden></div>
   <div class="stats" id="stats">loading…</div>
 </div>
 
@@ -512,7 +511,13 @@ async function boot() {
   map.on("zoomend", sizeBulwarkRings);
   const tBulwark = document.getElementById("tBulwark");
   tBulwark.onchange = () => tBulwark.checked ? bulwarkLayer.addTo(map) : bulwarkLayer.remove();
-  document.getElementById("bulwarkKey").hidden = !bulwarkRings.length;
+  const key = document.getElementById("bulwarkKey");
+  key.hidden = !bulwarkRings.length;
+  key.innerHTML = "Bulwarks: " + Object.entries(bulwarkDb.factions || {}).map(([f, fx]) =>
+      `<span class="bk-item"><i class="bk-ring" style="border-color:${fx.color}"></i>${
+        f.split(" ")[0]}</span>`).join("") +
+    `<span class="bk-item"><i class="bk-ring bk-hq"></i>War HQ</span>` +
+    `<span class="bk-src">curated from the in-game map</span>`;
 
   /* labels live on their own pane, above lines, markers and arrows */
   map.createPane("labels");
