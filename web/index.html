@@ -488,7 +488,7 @@ async function boot() {
       const p = state.byId.get(b.id);
       if (!p) continue;
       const hq = b.id === fx.warHQ;
-      p.bulwark = { faction, hq, ores: bulwarkDb.campaignOres || [],
+      p.bulwark = { faction, hq, ore: fx.ore || "", site: fx.miningSite || "",
                     oresNote: bulwarkDb.campaignOresNote || "",
                     source: bulwarkDb.source || "" };
       const ring = L.circleMarker(p.ll, { renderer: canvas, interactive: false,
@@ -684,7 +684,8 @@ function select(id) {
   if (p.bulwark) flags.unshift(`${p.bulwark.faction} Bulwark${p.bulwark.hq ? " (War HQ)" : ""}`);
   document.getElementById("pFlags").textContent = flags.join(", ") +
     (p.ores && p.ores.length ? `${flags.length ? " — " : ""}belt ores: ${p.ores.join(", ")}` : "") +
-    (p.bulwark ? ` — campaign ores: ${p.bulwark.ores.join(", ")} (${p.bulwark.oresNote})` : "");
+    (p.bulwark && p.bulwark.ore
+      ? ` — campaign ore: ${p.bulwark.ore}, ${p.bulwark.oresNote}` : "");
 
   const neighbors = (state.adj.get(id) || []).map(nid => state.byId.get(nid))
     .sort((a, b) => a.name.localeCompare(b.name));

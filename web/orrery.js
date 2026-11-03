@@ -254,8 +254,8 @@ export function openOrrery(host, data, onClose) {
                     : "not covered by the reference table"],
                  ["Ore source", (system.ores || []).length
                     ? "EVE University reference (flagged pre-Catalyst)" : ""],
-                 ["Campaign ores", system.bulwark
-                    ? `${system.bulwark.ores.join(", ")} (${system.bulwark.oresNote})` : ""],
+                 ["Campaign ore", system.bulwark && system.bulwark.ore
+                    ? `${system.bulwark.ore} (limited-time ${system.bulwark.site})` : ""],
                  ...statRows(b.st)] }, null);
       hit.position.copy(centre);
     }
