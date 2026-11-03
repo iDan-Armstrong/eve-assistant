@@ -16,11 +16,19 @@
      member of that corporation: a reserve being mined is exactly what a
      ganker would want to know, so nobody outside the corp can read them.
 
+   POST /presence   body {"token": ..., "share": true|false}
+     A pilot who opts in shares their system, ship and online status with
+     their corporation (written only on change or every 15 minutes);
+     share=false removes them at once.
+   POST /corpmates  body {"token": ...} -> {"corporation", "pilots": {id: {name, system, ship, online, at}}}
+     Corp mates seen in the last 30 minutes, for a verified member only.
+
    Bindings: SIGHTINGS (KV), CLIENT_ID and ALLOWED_ORIGINS (vars). The
    salt for pilot hashes is made on first use and kept in KV, which is
    private to the Worker; a SALT secret, if set, takes its place. */
 
-import { ACTIVE_MINUTES, diffLedger, mergeSightings, prune, reserveRows } from "./sightings_core.js";
+import { ACTIVE_MINUTES, diffLedger, freshPresence, mergeSightings, presenceChanged, prune,
+         reserveRows } from "./sightings_core.js";
 
 const JWKS_URL = "https://login.eveonline.com/oauth/jwks";
 const ESI = "https://esi.evetech.net";
@@ -58,7 +66,7 @@ async function verify(token, env, needMining = false) {
   if (![].concat(claims.aud).includes(env.CLIENT_ID)) throw new Error("token is for another app");
   if (claims.exp * 1000 < Date.now()) throw new Error("token expired");
   if (needMining && ![].concat(claims.scp || []).includes("esi-industry.read_character_mining.v1")) throw new Error("mining scope missing");
-  return +String(claims.sub).split(":").pop();
+  return { id: +String(claims.sub).split(":").pop(), name: claims.name, scp: [].concat(claims.scp || []) };
 }
 
 async function salt(env) {
@@ -86,7 +94,7 @@ async function corporationOf(id) {
 
 async function report(req, env) {
   const { token } = await req.json();
-  const id = await verify(token, env, true);
+  const { id } = await verify(token, env, true);
   const corp = await corporationOf(id);
   const resp = await fetch(`${ESI}/characters/${id}/mining`, {
     headers: { Authorization: `Bearer ${token}`, "X-Compatibility-Date": "2025-09-30", "User-Agent": UA } });
@@ -96,15 +104,50 @@ async function report(req, env) {
   const pk = await pilotKey(id, env);
   const prev = await env.SIGHTINGS.get(pk, "json");
   const { snapshot, grew } = diffLedger(prev, rows);
-  await env.SIGHTINGS.put(pk, JSON.stringify(snapshot), { expirationTtl: 3 * 86400 });
+  if (prev === null || JSON.stringify(prev) !== JSON.stringify(snapshot)) {    /* writes are scarce */
+    await env.SIGHTINGS.put(pk, JSON.stringify(snapshot), { expirationTtl: 3 * 86400 });
+  }
 
   const now = new Date(), today = now.toISOString().slice(0, 10);
   if (!rows.length && !grew.length) return { reserveRows: 0, active: 0 };
   const key = `sightings:${corp}`;
   const shared = (await env.SIGHTINGS.get(key, "json")) || {};
   const merged = prune(mergeSightings(shared, rows, grew, now.toISOString(), today), today);
-  await env.SIGHTINGS.put(key, JSON.stringify(merged));
+  if (JSON.stringify(merged) !== JSON.stringify(shared)) await env.SIGHTINGS.put(key, JSON.stringify(merged));
   return { reserveRows: rows.length, active: grew.filter(g => g.date === today).length };
+}
+
+async function esiAuthed(path, token) {
+  const r = await fetch(`${ESI}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, "X-Compatibility-Date": "2025-09-30", "User-Agent": UA } });
+  if (!r.ok) throw new Error(`ESI ${path}: ${r.status}`);
+  return r.json();
+}
+
+async function presence(req, env) {
+  const { token, share } = await req.json();
+  const who = await verify(token, env);
+  const corp = await corporationOf(who.id);
+  const key = `presence:${corp}`;
+  const map = (await env.SIGHTINGS.get(key, "json")) || {};
+  const now = Date.now();
+  if (!share) {
+    if (map[who.id]) { delete map[who.id]; await env.SIGHTINGS.put(key, JSON.stringify(freshPresence(map, now))); }
+    return { shared: false };
+  }
+  for (const s of ["esi-location.read_location.v1", "esi-location.read_ship_type.v1", "esi-location.read_online.v1"]) {
+    if (!who.scp.includes(s)) throw new Error(`scope missing: ${s}`);
+  }
+  const [loc, ship, online] = await Promise.all([
+    esiAuthed(`/characters/${who.id}/location`, token), esiAuthed(`/characters/${who.id}/ship`, token),
+    esiAuthed(`/characters/${who.id}/online`, token)]);
+  const rec = { name: who.name, system: loc.solar_system_id, ship: ship.ship_type_id,
+                online: !!online.online, at: new Date(now).toISOString() };
+  if (presenceChanged(map[who.id], rec, now)) {
+    map[who.id] = rec;
+    await env.SIGHTINGS.put(key, JSON.stringify(freshPresence(map, now)));
+  }
+  return { shared: true };
 }
 
 export default {
@@ -115,10 +158,19 @@ export default {
     try {
       if (req.method === "POST" && url.pathname === "/sightings") {
         const { token } = await req.json();
-        const corp = await corporationOf(await verify(token, env));
+        const corp = await corporationOf((await verify(token, env)).id);
         const systems = (await env.SIGHTINGS.get(`sightings:${corp}`, "json")) || {};
         return json({ updated: new Date().toISOString(), activeMinutes: ACTIVE_MINUTES,
                       corporation: corp, systems }, 200, { ...headers, "Cache-Control": "no-store" });
+      }
+      if (req.method === "POST" && url.pathname === "/presence") {
+        return json(await presence(req, env), 200, headers);
+      }
+      if (req.method === "POST" && url.pathname === "/corpmates") {
+        const { token } = await req.json();
+        const corp = await corporationOf((await verify(token, env)).id);
+        const pilots = freshPresence(await env.SIGHTINGS.get(`presence:${corp}`, "json"), Date.now());
+        return json({ corporation: corp, pilots }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/report") {
         return json(await report(req, env), 200, headers);

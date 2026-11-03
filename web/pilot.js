@@ -38,13 +38,14 @@ async function startPilots() {
   reserves.relay = (cfg.relay || "").replace(/\/$/, "");
   loadSightings();
   setInterval(loadSightings, 5 * 60e3);
-  setInterval(() => { if (shareOn()) reportReserves(); }, 10 * 60e3);
+  setInterval(reportReserves, 10 * 60e3);
+  setInterval(() => { reportPresence(); loadCorpmates(); }, 2 * 60e3);
   let note = "";
   try {
     const p = await EveSSO.init();
     if (p) {
       pilotState.active = p.id; note = `Signed in as ${p.name}`;
-      if (reserves.relay && shareChoice() === null) askToShare(p.name);
+      if (reserves.relay && !shareDecided(p.id)) askToShare(p);
     }
   } catch (e) { note = e.message; }
   wirePilotMenu();
@@ -68,7 +69,9 @@ async function refreshPilots() {
   })));
   await resolveNames();
   drawPilots();
-  if (shareOn()) reportReserves(); else loadSightings();
+  reportReserves();
+  reportPresence();
+  loadCorpmates();
   renderPilotMenu();
   if (state.selected) renderPilotHere(state.byId.get(state.selected));
 }
@@ -200,6 +203,9 @@ function renderPilotHere(p) {
   const box = document.getElementById("pPilot");
   if (!box) return;
   const blocks = [];
+  const cm = corpmatesLine(p);
+  if (cm) blocks.push(`<div class="rb-head"><span class="rb-level" style="color:#7ef0c8">Corp mates here</span></div>` +
+                      `<div class="rb-line">${cm}</div>`);
   const rl = reserveLine(p);
   if (rl) blocks.push(`<div class="rb-head"><span class="rb-level" style="color:${PILOT_COLORS.mined}">Bulwark reserve</span></div>` +
                       `<div class="rb-line">${rl}</div>`);
@@ -294,20 +300,23 @@ function renderPilotMenu(note = "") {
       <div class="pm-who"><div>${d.online ? '<i class="pm-on" title="online"></i>' : ""}${esc(p.name)}</div>
         <div class="pm-where">${esc(where)}${d.errors && d.errors.length ? ` <span title="${esc(d.errors.join("; "))}">(partial data)</span>` : ""}</div></div>
       <button data-act="go" title="Show on map">◎</button>
-      <button data-act="out" title="Sign out this pilot">✕</button></div>`;
+      <button data-act="out" title="Sign out this pilot">✕</button></div>` +
+      (reserves.relay ? `<div class="pm-shares" data-id="${p.id}">share with corp:
+        <label><input type="checkbox" data-kind="reserves"${shareFor(p.id, "reserves") ? " checked" : ""}> reserves</label>
+        <label><input type="checkbox" data-kind="location"${shareFor(p.id, "location") ? " checked" : ""}> location</label></div>` : "");
   }).join("") +
   `<div class="pm-foot"><button data-act="add">Add a character</button><button data-act="refresh">Refresh</button></div>` +
-  (reserves.relay ? `<label class="pm-share"><input type="checkbox" id="pmShare"${shareOn() ? " checked" : ""}> ` +
-    `Share reserve sightings with my corporation</label><div class="pm-note">When on, your login is sent to the ` +
-    `Atlas relay to read your mining ledger for the four reserve ores. Only members of your corporation can see ` +
-    `the result (system, ore and time, never your name). The relay keeps no token.</div>` : "") +
-  `<div class="pm-note">${esc(note || (shareOn() ? "Tokens go only to CCP and, for reserve checks, the Atlas relay." : "Tokens stay in this browser and go only to CCP."))}</div>`;
-  const share = menu.querySelector("#pmShare");
-  if (share) share.onchange = () => {
-    try { localStorage.setItem("atlas.shareReserves", share.checked ? "1" : "0"); } catch { /* private mode */ }
-    if (share.checked) reportReserves();
-    renderPilotMenu();
-  };
+  (reserves.relay ? `<div class="pm-note">Sharing sends that pilot's login to the Atlas relay, which checks it ` +
+    `with CCP and keeps no token. Only members of the same corporation see shared reserves (no names) or ` +
+    `locations (name, system, ship).</div>` : "") +
+  `<div class="pm-note">${esc(note || "Tokens stay in this browser and go only to CCP, unless you share.")}</div>`;
+  menu.querySelectorAll(".pm-shares input").forEach(box => box.onchange = e => {
+    e.stopPropagation();
+    const id = +box.closest(".pm-shares").dataset.id;
+    setShare(id, { ...shares(id), [box.dataset.kind]: box.checked });
+    if (box.dataset.kind === "reserves" && box.checked) reportReserves();
+    if (box.dataset.kind === "location") reportPresence(box.checked ? null : id);
+  });
   menu.querySelectorAll(".pm-row").forEach(row => {
     const id = +row.dataset.id;
     row.onclick = e => {
@@ -368,7 +377,13 @@ function pilotTagBoxes() {
    the map never tells outsiders where miners are working. A signed-in
    pilot's own ledger adds to them locally even with sharing off. */
 const reserves = { relay: "", shared: {}, activeMinutes: 60, layer: L.layerGroup(), rings: [], at: null };
-const shareOn = () => { try { return localStorage.getItem("atlas.shareReserves") === "1"; } catch { return false; } };
+/* per-pilot sharing choices: {reserves: bool, location: bool}, absent until asked */
+const shares = id => { try { return JSON.parse(localStorage.getItem(`atlas.share.${id}`)) || {}; } catch { return {}; } };
+const shareDecided = id => { try { return localStorage.getItem(`atlas.share.${id}`) !== null; } catch { return true; } };
+const shareFor = (id, kind) => !!shares(id)[kind];
+function setShare(id, choice) {
+  try { localStorage.setItem(`atlas.share.${id}`, JSON.stringify(choice)); } catch { /* private mode */ }
+}
 
 /* corp-only: each signed-in pilot asks for their own corporation's
    sightings; a viewer with pilots in two corps sees both */
@@ -397,6 +412,7 @@ async function loadSightings() {
 async function reportReserves() {
   if (!reserves.relay) return;
   for (const p of EveSSO.pilots()) {
+    if (!shareFor(p.id, "reserves")) continue;
     try {
       const token = await EveSSO.token(p.id);
       await fetch(`${reserves.relay}/report`, { method: "POST",
@@ -458,30 +474,106 @@ function reserveLine(p) {
   return `Reserve last seen ${s.lastConfirmed}: ${esc(p.bulwark.ore)} in a corp mate's or your mining ledger`;
 }
 
-/* ask once, right after a sign-in, with neither answer preselected:
-   sharing tracks where a pilot mines, so it needs express consent */
-function shareChoice() {
-  try { return localStorage.getItem("atlas.shareReserves"); } catch { return "0"; }
-}
-function askToShare(name) {
+/* ask once per pilot, right after sign-in. Both boxes start unticked:
+   sharing tracks where a pilot is and mines, so it needs express consent */
+function askToShare(pilot) {
   const box = document.createElement("div");
   box.className = "consent";
   box.setAttribute("role", "dialog");
-  box.setAttribute("aria-label", "Share reserve sightings");
-  box.innerHTML = `<div class="c-card"><h3>Share Bulwark reserve sightings?</h3>
-    <p>If you mine a Bulwark reserve, ${esc(name)}'s mining ledger can light it up on the map for
-    <b>members of your corporation only</b>. To check, the Atlas relay reads your ledger for the four
-    reserve ores with your login. It shares only system, ore and time, never your name, and keeps no token.</p>
-    <p class="c-small">You can change this any time in the pilot menu.</p>
-    <div class="c-buttons"><button data-v="1">Share with my corp</button><button data-v="0">Not now</button></div></div>`;
+  box.setAttribute("aria-label", "Share with your corporation");
+  box.innerHTML = `<div class="c-card"><h3>Share with your corporation?</h3>
+    <p>${esc(pilot.name)} can share with <b>members of the same corporation only</b>. Nothing is shared
+    unless you tick it.</p>
+    <label class="c-opt"><input type="checkbox" data-kind="reserves"> <span><b>Bulwark reserve sightings</b>:
+      light up reserves you mine, from your mining ledger. Shows system, ore and time, never your name.</span></label>
+    <label class="c-opt"><input type="checkbox" data-kind="location"> <span><b>My location</b>: corp mates
+      see your name, system and ship while you have the Atlas open.</span></label>
+    <p class="c-small">To check, the Atlas relay reads that data from CCP with your login and keeps no token.
+      You can change either choice any time in the pilot menu.</p>
+    <div class="c-buttons"><button data-act="save">Save</button></div></div>`;
   document.body.appendChild(box);
-  box.querySelectorAll("button").forEach(b => b.onclick = () => {
-    try { localStorage.setItem("atlas.shareReserves", b.dataset.v); } catch { /* private mode */ }
+  box.querySelector("[data-act=save]").onclick = () => {
+    const choice = {};
+    box.querySelectorAll("input").forEach(i => { choice[i.dataset.kind] = i.checked; });
+    setShare(pilot.id, choice);
     box.remove();
-    if (b.dataset.v === "1") reportReserves();
+    reportReserves();
+    reportPresence();
     renderPilotMenu();
-  });
-  const card = box.querySelector(".c-card");     /* focus the question, not an answer */
+  };
+  const card = box.querySelector(".c-card");
   card.tabIndex = -1;
   card.focus();
+}
+
+/* ---- corp mates' locations -------------------------------------------------
+   Pilots who tick "location" report their system, ship and online status
+   every 2 minutes while the Atlas is open; the relay keeps them per
+   corporation and serves them only to verified members of that corp. */
+const corpmates = { list: new Map(), layer: L.layerGroup(), rings: [] };
+
+async function reportPresence(stopId = null) {
+  if (!reserves.relay) return;
+  for (const p of EveSSO.pilots()) {
+    const share = shareFor(p.id, "location");
+    if (!share && p.id !== stopId) continue;
+    try {
+      await fetch(`${reserves.relay}/presence`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: await EveSSO.token(p.id), share }) });
+    } catch { /* try again next round */ }
+  }
+  if (stopId) loadCorpmates();
+}
+async function loadCorpmates() {
+  const pilots = EveSSO.pilots();
+  if (!reserves.relay || !pilots.length) { corpmates.list.clear(); drawCorpmates(); return; }
+  const own = new Set(pilots.map(p => p.id)), corps = new Set(), list = new Map();
+  for (const p of pilots) {
+    try {
+      const r = await fetch(`${reserves.relay}/corpmates`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: await EveSSO.token(p.id) }) }).then(x => x.json());
+      if (!r.pilots || corps.has(r.corporation)) continue;
+      corps.add(r.corporation);
+      for (const [id, rec] of Object.entries(r.pilots)) if (!own.has(+id)) list.set(+id, rec);
+    } catch { /* relay down */ }
+  }
+  corpmates.list = list;
+  const missing = [...list.values()].map(r => r.ship).filter(t => t && !pilotState.names.has(t));
+  if (missing.length) {
+    try { (await EveSSO.esiPublic("/universe/names", [...new Set(missing)])).forEach(r => pilotState.names.set(r.id, r.name)); }
+    catch { /* ship names fall back to type ids */ }
+  }
+  drawCorpmates();
+}
+function drawCorpmates() {
+  corpmates.layer.clearLayers();
+  corpmates.rings = [];
+  const bySys = new Map();
+  for (const [id, r] of corpmates.list) (bySys.get(r.system) || bySys.set(r.system, []).get(r.system)).push(r);
+  for (const [sys, mates] of bySys) {
+    const p = state.byId.get(sys);
+    if (!p) continue;
+    const m = L.circleMarker(p.ll, { renderer: canvas, interactive: false, fill: false,
+      color: "#7ef0c8", weight: 2, opacity: .95, dashArray: "2 3" });
+    m.bindTooltip(esc(mates.length > 1 ? `${mates[0].name} +${mates.length - 1}` : mates[0].name),
+      { permanent: true, direction: "bottom", offset: [0, 14], className: "pilot-tag corp-tag" });
+    corpmates.layer.addLayer(m);
+    corpmates.rings.push({ m, extra: 9 });
+  }
+  const r = radiusFor(map.getZoom());
+  for (const { m, extra } of corpmates.rings) m.setRadius(r + extra);
+  const box = document.getElementById("tPilots");
+  if (box.checked && corpmates.list.size) corpmates.layer.addTo(map); else corpmates.layer.remove();
+  if (!corpmates.wired) {
+    corpmates.wired = true;
+    map.on("zoomend", () => { const r2 = radiusFor(map.getZoom()); for (const { m, extra } of corpmates.rings) m.setRadius(r2 + extra); });
+    box.addEventListener("change", drawCorpmates);
+  }
+  if (state.selected) renderPilotHere(state.byId.get(state.selected));
+}
+function corpmatesLine(p) {
+  const here = [...corpmates.list.values()].filter(r => r.system === p.id);
+  if (!here.length) return "";
+  return here.map(r => `${esc(r.name)}${r.ship ? ` (${esc(typeName(r.ship))})` : ""}` +
+    `${r.online ? "" : ", offline"}`).join("; ");
 }

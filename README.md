@@ -228,6 +228,18 @@ stores no token, remembers each pilot only as a salted hash, and never
 records a name. Corp mates see a filled violet ring where a reserve is
 being mined now, and a dashed one where it was seen in the last 30 days.
 
+### Corp mates on the map
+
+The same relay shares locations, also within a corporation only. Each
+pilot chooses separately (the sign-in prompt has two boxes, both
+unticked; either can be changed in the pilot menu). A pilot who shares
+location reports their system, ship and online status every 2 minutes
+while the Atlas is open; corp mates see a dashed green ring with their
+name, and the system panel lists who is there and in what ship. The relay
+writes a record only when it changes or every 15 minutes (Cloudflare's
+free storage allows few writes a day), drops records older than 30
+minutes, and removes a pilot at once when they stop sharing.
+
 ### Live data
 
 Live inputs refresh hourly: a scheduled GitHub Action runs

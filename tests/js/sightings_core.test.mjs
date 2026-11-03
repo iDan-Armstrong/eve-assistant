@@ -38,3 +38,15 @@ test("prune forgets sightings older than the window", () => {
   const out = prune({ 1: { lastConfirmed: "2026-09-01" }, 2: { lastConfirmed: "2026-11-01" } }, "2026-11-03");
   assert.deepEqual(Object.keys(out), ["2"]);
 });
+
+import { freshPresence, presenceChanged } from "../../worker/sightings_core.js";
+
+test("presence writes only on change or heartbeat, and goes stale", () => {
+  const t0 = Date.parse("2026-11-03T22:00:00Z");
+  const old = { system: 1, ship: 2, online: true, at: "2026-11-03T22:00:00Z" };
+  assert.equal(presenceChanged(null, old, t0), true);
+  assert.equal(presenceChanged(old, { ...old }, t0 + 5 * 60e3), false);
+  assert.equal(presenceChanged(old, { ...old, system: 9 }, t0 + 60e3), true);
+  assert.equal(presenceChanged(old, { ...old }, t0 + 16 * 60e3), true);
+  assert.deepEqual(Object.keys(freshPresence({ a: old, b: { ...old, at: "2026-11-03T21:00:00Z" } }, t0 + 60e3)), ["a"]);
+});

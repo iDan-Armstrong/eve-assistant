@@ -55,3 +55,22 @@ export function prune(shared, today, days = 30) {
   const cutoff = new Date(Date.parse(today) - days * 864e5).toISOString().slice(0, 10);
   return Object.fromEntries(Object.entries(shared).filter(([, s]) => (s.lastConfirmed || "") >= cutoff));
 }
+
+/* ---- corp-mate presence ----------------------------------------------------
+   presence: {characterId: {name, system, ship, online, at}} per corporation.
+   KV allows few writes a day on the free plan, so a pilot's record is
+   written only when it changes or every HEARTBEAT_MINUTES, and readers
+   drop records older than STALE_MINUTES. */
+export const HEARTBEAT_MINUTES = 15;
+export const STALE_MINUTES = 30;
+
+export function presenceChanged(old, rec, nowMs) {
+  if (!old) return true;
+  if (old.system !== rec.system || old.ship !== rec.ship || old.online !== rec.online) return true;
+  return nowMs - Date.parse(old.at) >= HEARTBEAT_MINUTES * 60e3;
+}
+
+export function freshPresence(map, nowMs) {
+  return Object.fromEntries(Object.entries(map || {})
+    .filter(([, r]) => nowMs - Date.parse(r.at) < STALE_MINUTES * 60e3));
+}

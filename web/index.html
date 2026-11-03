@@ -226,6 +226,11 @@
     background: #121b2c; color: var(--ink); font: inherit; cursor: pointer; }
   .consent button:hover { background: #1b2a44; }
   .consent button:focus-visible { outline: 2px solid var(--focus); }
+  .consent .c-opt { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; cursor: pointer; }
+  .consent .c-opt input { margin-top: 3px; }
+  .pm-shares { padding: 0 10px 6px 50px; font-size: 11px; color: var(--ink-dim); display: flex; gap: 10px; align-items: center; }
+  .pm-shares label { display: flex; gap: 4px; align-items: center; cursor: pointer; color: var(--ink); }
+  .leaflet-tooltip.corp-tag { border-color: #7ef0c855; color: #bff7e2; }
   .pm-share { display: flex; gap: 6px; align-items: center; padding: 7px 10px 0; font-size: 12px; cursor: pointer; }
   .leaflet-tooltip.pilot-tag { background: rgba(6,10,18,.85); border: 1px solid #ffffff55; color: #fff;
     font: 600 11px "Chakra Petch", sans-serif; padding: 1px 6px; box-shadow: none; }
@@ -505,7 +510,7 @@
       <label><input type="checkbox" id="tBulwark" checked> bulwarks</label>
       <label><input type="checkbox" id="tIce"> <i class="sw" style="border-color:#8fe3ff"></i>ice fields</label>
       <label><input type="checkbox" id="tJove"> <i class="sw" style="border-color:#b48cff;border-style:dotted"></i>Jove observatories</label>
-      <label hidden><input type="checkbox" id="tPilots" checked> <i class="sw" style="border-color:#ffcf4a"></i>my pilots and assets</label>
+      <label hidden><input type="checkbox" id="tPilots" checked> <i class="sw" style="border-color:#ffcf4a"></i>my pilots, assets and corp mates</label>
       <label><input type="checkbox" id="tStrat"> <i class="sw" style="border-color:#ff6b3d"></i>entry systems, chokepoints</label>
       <label><input type="checkbox" id="tHoles"> <i class="sw" style="border-color:#ff8fd8"></i>Thera / Turnur holes</label>
     </div>
