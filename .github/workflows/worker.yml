@@ -1,0 +1,58 @@
+# Deploys the reserve-sightings relay (worker/) to Cloudflare Workers.
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN (template "Edit
+# Cloudflare Workers", plus Workers KV Storage edit) and
+# CLOUDFLARE_ACCOUNT_ID. Creates the KV namespace on first run, and sets
+# the relay's SALT secret once (it only hashes pilot IDs).
+name: Deploy reserve relay (Cloudflare)
+
+on:
+  push:
+    branches: [master, main]
+    paths: ["worker/**", ".github/workflows/worker.yml"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for Cloudflare secrets
+        id: gate
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Cloudflare secrets not set yet; skipping relay deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: "22"
+      - name: KV namespace (find or create)
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: worker
+        run: |
+          npm i -g wrangler@4 >/dev/null 2>&1
+          id=$(wrangler kv namespace list | node -e '
+            let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+              const n=JSON.parse(s).find(n=>n.title.endsWith("atlas-sightings-SIGHTINGS")||n.title==="atlas-sightings");
+              process.stdout.write(n?n.id:"")})')
+          if [ -z "$id" ]; then
+            id=$(wrangler kv namespace create atlas-sightings | grep -oE '[0-9a-f]{32}' | head -1)
+          fi
+          sed -i "s/KV_NAMESPACE_ID/$id/" wrangler.toml
+          echo "KV namespace $id"
+      - name: Deploy
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: worker
+        run: |
+          wrangler deploy | tee deploy.log
+          if ! wrangler secret list | grep -q '"SALT"'; then
+            head -c 32 /dev/urandom | base64 | wrangler secret put SALT
+          fi
+          grep -oE 'https://[a-z0-9.-]+workers\.dev' deploy.log | head -1 > url.txt
+          echo "Relay URL: $(cat url.txt)"

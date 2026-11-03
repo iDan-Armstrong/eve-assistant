@@ -35,6 +35,10 @@ const stationName = id => {
 async function startPilots() {
   const cfg = await fetch("data/sso.json").then(r => r.ok ? r.json() : {}).catch(() => ({}));
   EveSSO.clientId = cfg.clientId || "";
+  reserves.relay = (cfg.relay || "").replace(/\/$/, "");
+  loadSightings();
+  setInterval(loadSightings, 5 * 60e3);
+  setInterval(() => { if (shareOn()) reportReserves(); }, 10 * 60e3);
   let note = "";
   try {
     const p = await EveSSO.init();
@@ -61,6 +65,7 @@ async function refreshPilots() {
   })));
   await resolveNames();
   drawPilots();
+  if (shareOn()) reportReserves();
   renderPilotMenu();
   if (state.selected) renderPilotHere(state.byId.get(state.selected));
 }
@@ -163,12 +168,6 @@ function drawPilots() {
     for (const c of d.clones || []) if (c.system) add(c.system, PILOT_COLORS.clone, 3, { weight: 1.5, dashArray: "2 2" });
     if (d.home && d.home.system) add(d.home.system, PILOT_COLORS.clone, 3, { weight: 2 });
     for (const pl of d.planets || []) add(pl.solar_system_id, PILOT_COLORS.pi, 9, { weight: 1.4 });
-    /* Bulwark reserves this pilot has mined: the ledger is the only CCP
-       record of where those limited-time sites have actually appeared */
-    for (const [sys, m] of d.mining || []) {
-      const p = state.byId.get(sys);
-      if (p && p.bulwark && m.types.has(p.bulwark.oreTypeId)) add(sys, PILOT_COLORS.mined, 12, { weight: 2.2 });
-    }
   }
   for (const [sys, v] of value) {
     add(sys, PILOT_COLORS.assets, 5 + Math.max(0, Math.log10(Math.max(v, 1)) - 6) * 1.5,
@@ -181,6 +180,7 @@ function drawPilots() {
                                         className: "pilot-tag" });
   }
   sizePilotRings();
+  drawReserves();
   map.fire("moveend");                       /* re-place labels around the name tags */
   document.getElementById("rPilot").hidden = !pilotState.data.size;
   const box = document.getElementById("tPilots");
@@ -197,6 +197,9 @@ function renderPilotHere(p) {
   const box = document.getElementById("pPilot");
   if (!box) return;
   const blocks = [];
+  const rl = reserveLine(p);
+  if (rl) blocks.push(`<div class="rb-head"><span class="rb-level" style="color:${PILOT_COLORS.mined}">Bulwark reserve</span></div>` +
+                      `<div class="rb-line">${rl}</div>`);
   for (const d of pilotState.data.values()) {
     const lines = [];
     if (d.loc && d.loc.system === p.id) {
@@ -291,7 +294,17 @@ function renderPilotMenu(note = "") {
       <button data-act="out" title="Sign out this pilot">✕</button></div>`;
   }).join("") +
   `<div class="pm-foot"><button data-act="add">Add a character</button><button data-act="refresh">Refresh</button></div>` +
-  `<div class="pm-note">${esc(note || "Tokens stay in this browser and go only to CCP.")}</div>`;
+  (reserves.relay ? `<label class="pm-share"><input type="checkbox" id="pmShare"${shareOn() ? " checked" : ""}> ` +
+    `Share Bulwark reserve sightings</label><div class="pm-note">When on, your login is sent to the Atlas relay ` +
+    `to read your mining ledger for the four reserve ores. The relay checks it with CCP, keeps no token and ` +
+    `publishes only system, ore and time, never your name.</div>` : "") +
+  `<div class="pm-note">${esc(note || (shareOn() ? "Tokens go only to CCP and, for reserve checks, the Atlas relay." : "Tokens stay in this browser and go only to CCP."))}</div>`;
+  const share = menu.querySelector("#pmShare");
+  if (share) share.onchange = () => {
+    try { localStorage.setItem("atlas.shareReserves", share.checked ? "1" : "0"); } catch { /* private mode */ }
+    if (share.checked) reportReserves();
+    renderPilotMenu();
+  };
   menu.querySelectorAll(".pm-row").forEach(row => {
     const id = +row.dataset.id;
     row.onclick = e => {
@@ -340,4 +353,89 @@ function pilotTagBoxes() {
     out.push({ x: pt.x - w / 2, y: pt.y - 16 - 22, w, h: 22 });
   }
   return out;
+}
+
+/* ---- Bulwark reserves: shared sightings ------------------------------------
+   CCP publishes no record of the limited-time reserve sites. The one CCP
+   record that shows them is a pilot's mining ledger, so the Atlas relay
+   (worker/) collects verified ledger reads from pilots who opt in and
+   publishes, per system: the reserve ore, the last day it was mined, and
+   the last time anyone's ledger grew there (mined within the hour).
+   Everyone sees the shared sightings, signed in or not; a signed-in
+   pilot's own ledger adds to them locally even with sharing off. */
+const reserves = { relay: "", shared: {}, activeMinutes: 60, layer: L.layerGroup(), rings: [], at: null };
+const shareOn = () => { try { return localStorage.getItem("atlas.shareReserves") === "1"; } catch { return false; } };
+
+async function loadSightings() {
+  if (!reserves.relay) { drawReserves(); return; }
+  try {
+    const r = await fetch(`${reserves.relay}/sightings`).then(x => x.json());
+    reserves.shared = r.systems || {};
+    reserves.activeMinutes = r.activeMinutes || 60;
+    reserves.at = r.updated;
+  } catch { /* relay down: local sightings still show */ }
+  drawReserves();
+}
+async function reportReserves() {
+  if (!reserves.relay) return;
+  for (const p of EveSSO.pilots()) {
+    try {
+      const token = await EveSSO.token(p.id);
+      await fetch(`${reserves.relay}/report`, { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+    } catch { /* one pilot failing must not stop the rest */ }
+  }
+  loadSightings();
+}
+/* shared sightings plus this browser's own ledgers: {systemId: {ore, lastActive, lastConfirmed}} */
+function reserveSightings() {
+  const out = {};
+  for (const [id, s] of Object.entries(reserves.shared)) out[id] = { ...s };
+  for (const d of pilotState.data.values()) {
+    for (const [sys, m] of d.mining || []) {
+      const p = state.byId.get(sys);
+      const ore = p && p.bulwark && p.bulwark.oreTypeId;
+      if (!ore || !m.types.has(ore)) continue;
+      const s = out[sys] = out[sys] || { ore };
+      const day = m.last.get(ore);
+      if (!s.lastConfirmed || day > s.lastConfirmed) s.lastConfirmed = day;
+    }
+  }
+  return out;
+}
+const reserveActive = s => s.lastActive && Date.now() - Date.parse(s.lastActive) < reserves.activeMinutes * 60e3;
+
+function drawReserves() {
+  reserves.layer.clearLayers();
+  reserves.rings = [];
+  for (const [id, s] of Object.entries(reserveSightings())) {
+    const p = state.byId.get(+id);
+    if (!p) continue;
+    const active = reserveActive(s);
+    const m = L.circleMarker(p.ll, { renderer: canvas, interactive: false,
+      fill: active, fillColor: PILOT_COLORS.mined, fillOpacity: .25,
+      color: PILOT_COLORS.mined, weight: active ? 3 : 1.6, opacity: active ? 1 : .75,
+      dashArray: active ? null : "4 3" });
+    reserves.layer.addLayer(m);
+    reserves.rings.push({ m, extra: active ? 13 : 11 });
+  }
+  const r = radiusFor(map.getZoom());
+  for (const { m, extra } of reserves.rings) m.setRadius(r + extra);
+  const box = document.getElementById("tBulwark");
+  if (!box.checked) reserves.layer.remove(); else reserves.layer.addTo(map);
+  if (!reserves.wired) {
+    reserves.wired = true;
+    map.on("zoomend", () => { const r2 = radiusFor(map.getZoom()); for (const { m, extra } of reserves.rings) m.setRadius(r2 + extra); });
+    box.addEventListener("change", () => box.checked ? reserves.layer.addTo(map) : reserves.layer.remove());
+  }
+  if (state.selected) renderPilotHere(state.byId.get(state.selected));
+}
+function reserveLine(p) {
+  const s = reserveSightings()[p.id];
+  if (!s || !p.bulwark) return "";
+  if (reserveActive(s)) {
+    const min = Math.max(1, Math.round((Date.now() - Date.parse(s.lastActive)) / 60e3));
+    return `<b>Reserve active</b>: ${esc(p.bulwark.ore)} mined here ${min} min ago`;
+  }
+  return `Reserve last confirmed ${s.lastConfirmed}: ${esc(p.bulwark.ore)} in a pilot's mining ledger`;
 }

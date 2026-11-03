@@ -1,0 +1,14 @@
+# Cloudflare Worker: reserve-sightings relay for the New Eden Atlas.
+# Deployed by .github/workflows/worker.yml, which also creates the KV
+# namespace on first run and fills in its id below.
+name = "atlas-sightings"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+CLIENT_ID = "38a2c041bdfd428ebd8cb580b750efdd"
+ALLOWED_ORIGINS = "https://idan-armstrong.github.io,http://localhost:8765"
+
+[[kv_namespaces]]
+binding = "SIGHTINGS"
+id = "KV_NAMESPACE_ID"

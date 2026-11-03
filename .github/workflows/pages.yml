@@ -35,7 +35,7 @@ jobs:
           python-version: "3.12"
       - run: pip install pyyaml pytest
       - run: pytest -q
-      - run: node --test tests/js/*.test.js
+      - run: node --test tests/js/*.test.js tests/js/*.test.mjs
 
   deploy:
     needs: test

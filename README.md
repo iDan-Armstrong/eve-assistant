@@ -192,7 +192,8 @@ character's data onto the map by system ID:
   ship holds to its station, structure or system before the join;
 - home and jump clones, PI colonies, active industry jobs, and 30 days of
   the mining ledger, all listed in the system panel;
-- Bulwark reserves confirmed by the mining ledger (violet ring). The
+- Bulwark reserves seen in the mining ledger (violet ring; see Bulwark
+  reserve sightings below). The
   limited-time reserve sites ("Republic Kangite Reserve" and the like)
   are not in any CCP data feed: ESI lists only each system's permanent
   belts. A pilot's ledger is the one CCP record that shows the campaign
@@ -202,6 +203,22 @@ character's data onto the map by system ID:
 The route planner gains **From my location** and **Send to autopilot**,
 which sets the in-game route jump by jump, so the game flies the safer
 route rather than its own.
+
+### Bulwark reserve sightings
+
+The limited-time reserve sites are in no CCP data feed, but a pilot's
+mining ledger records the reserve ore by system and day, and its daily
+total grows while they mine. Pilots who opt in ("Share Bulwark reserve
+sightings" in the pilot menu) have their browser send its login token to
+a small relay (`worker/`, a Cloudflare Worker). The relay checks the
+token's signature against CCP's published keys, reads that pilot's
+ledger from CCP itself, keeps only the four reserve ores, and compares
+with the pilot's previous read. Growth since then marks the reserve
+**active** for an hour; any row marks it **seen** on that day. It stores
+no token, remembers each pilot only as a salted hash, and publishes only
+system, ore and time. Everyone viewing the map sees the result, signed in
+or not: a filled violet ring where a reserve is being mined now, a dashed
+one where it was seen in the last 30 days.
 
 ### Live data
 
