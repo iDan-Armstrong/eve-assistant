@@ -85,8 +85,9 @@ survey data:
 ## Layers
 
 Layers are built per player role. For industry there are two risk
-layers (**Risk now** is the default); for PvP there are **PvP kills** and
-**Ratting**; and **Security** shows the classic in-game ramp.
+layers (**Risk now** is the default); for PvP there are **PvP kills**,
+**Ambush 30d** and **Ratting**; and **Security** shows the classic in-game
+ramp. A **Route** planner sits on top of all of them.
 
 | | **Risk now** ("should I undock?") | **Risk history** ("is this a bad neighborhood?") |
 |---|---|---|
@@ -120,13 +121,52 @@ k-space, so its holes draw as lines; Thera is wormhole space, so its holes
 mark their k-space end. Each system panel lists the last hour's activity
 and any wormhole touching that system, with type, ship size and time left.
 
+### Lowsec and nullsec strategy
+
+**Ambush 30d** finds where gate camps actually catch people. Every
+killmail records the victim's position in metres within its solar system,
+and CCP's static data gives every stargate's position in the same frame
+(`tools/extract_gates.py`). A kill within 400 km of a gate happened on that
+gate's grid, so `tools/ambush.py` counts kills per system and per gate
+over 30 days of EVE Ref archives (player attackers only, capsules left
+out). The layer colors systems by gate kills; the panel names the worst
+gates ("8-YNBE gate: 14 kills"), the share of kills on gates, and the
+average gang size, which says whether a system is a solo hunting ground or
+a fleet's camp.
+
+The **entry systems, chokepoints** overlay comes from the stargate graph
+alone (`tools/analyze_null.py`):
+
+- **Entry systems** (orange ring) are where space drops a band: lowsec
+  next to highsec, nullsec next to lowsec or highsec. Traffic into
+  dangerous space has to pass through them.
+- **Chokepoints** (gold dashed ring) are cut vertices of the network,
+  found with Tarjan's lowpoint algorithm: systems that are the only way in
+  or out of a pocket of space. The panel gives the pocket size; the
+  largest hold 20 to 30 systems behind a single system.
+- **Transit** is betweenness centrality inside lowsec and nullsec, the
+  share of shortest routes through each system: the pipes everyone flies.
+
+**Route** plans a trip between any two systems, shortest or safer.
+Safer runs Dijkstra with each system weighted by its security band,
+30-day kills and gate kills per day, kills in the last hour, and highsec
+ganks, on log scales so no single pipe dominates. Each jump lists what to
+expect: kills on the gate you arrive at and the one you leave by, kills per
+day and typical gang size, band changes and chokepoints. Pochven and
+Zarzakh gates are left out of routing. Use **Route from here** and
+**Route to here** on any system panel to set the ends.
+
+### Live data
+
 Live inputs refresh hourly: a scheduled GitHub Action runs
 `tools/fetch_live.py` (stdlib only, polite User-Agent, zKillboard request
-spacing, ESI compatibility date) and redeploys. History persists on the
-`live-data` branch as a rolling 30-day gank ledger and daily activity
-sums, force-pushed as a single commit so it never grows, along with a
-`status.json` for every run. A source outage never blocks a deploy; a
-layer with no data degrades to structural risk and says so.
+spacing, ESI compatibility date) and redeploys. The same run fetches any
+day of EVE Ref archives the history is missing, so the 30-day kill
+history trails real time by about a day. History persists on the
+`live-data` branch (a rolling gank ledger, daily activity sums and daily
+lowsec/nullsec kill aggregates), force-pushed as a single commit so it
+never grows, along with a `status.json` for every run. A source outage
+never blocks a deploy; a layer with no data degrades and says so.
 
 ## Data pipeline
 
@@ -173,8 +213,8 @@ export.
   fetched by the browser at view time and joined onto the basemap by system ID, like any
   live feature service over a basemap. Research notes in
   [docs/esi-research.md](docs/esi-research.md).
-- **Routing:** shortest-path over the jump graph with security preference
-  (safer vs shorter), drawn as a route layer.
+- **Routing:** avoid lists, waypoints, and live gate-camp detection from
+  the hourly kill feed.
 - **Dashboards** around the map, not instead of it.
 
 ## Architecture

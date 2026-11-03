@@ -34,6 +34,9 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ambush import summarize  # noqa: E402
+
 OUT = Path(__file__).resolve().parents[1] / "web" / "data" / "live"
 UA = "eve-assistant New Eden Atlas (+https://github.com/iDan-Armstrong/eve-assistant)"
 ESI = "https://esi.evetech.net"
@@ -317,8 +320,18 @@ def main() -> None:
                "ganks": aggregate_ganks(ledger, now - timedelta(days=HISTORY_DAYS)),
                "activity": {"schema": ["avgShipKillsPerHour", "avgJumpsPerHour"],
                             "systems": activity_averages(daily)}}
+    pvp_daily = load_json(hist_dir / "pvp_daily.json", {"days": {}})["days"] if hist_dir else {}
+    pvp = {"windowDays": len(pvp_daily),
+           "days": sorted(pvp_daily)[:1] + sorted(pvp_daily)[-1:],
+           "source": "EVE Ref daily killmail archives (raw CCP ESI killmails), "
+                     "victim position matched to SDE stargate positions",
+           "schema": {"k": "player ship kills", "g": "kills on a gate grid",
+                      "gang": "average player attackers per kill",
+                      "gates": "[[destination system id, kills on that gate]]"},
+           "systems": summarize(pvp_daily)}
+    status["pvpHistory"] = f"{len(pvp_daily)} days of low/null kill history"
     for name, doc in (("activity", activity), ("ganks", ganks_now), ("history", history),
-                      ("wormholes", wormholes)):
+                      ("wormholes", wormholes), ("pvp_history", pvp)):
         doc["generated"] = stamp
         (OUT / f"{name}.json").write_text(json.dumps(doc, separators=(",", ":")))
     (OUT / "status.json").write_text(json.dumps(status, indent=1))

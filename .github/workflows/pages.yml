@@ -62,6 +62,11 @@ jobs:
         run: python tools/backfill_everef.py --days "${{ inputs.backfill_days }}" --history ledger
         continue-on-error: true
 
+      - name: Fill missing low/null kill history days (EVE Ref)
+        run: python tools/backfill_everef.py --missing --history ledger
+        timeout-minutes: 45
+        continue-on-error: true
+
       - name: Fetch live risk data (ESI + zKillboard)
         run: |
           python tools/analyze_routes.py

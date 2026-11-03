@@ -136,6 +136,52 @@
   .risk-box .rb-line { padding-left: 2px; }
   .risk-box .rb-note { color: var(--ink-faint); font-size: 11px; margin-top: 2px; }
 
+  /* ---- route planner --------------------------------------------- */
+  .route-btn {
+    background: rgba(13,19,31,.85); border: 1px solid var(--panel-edge); border-radius: 3px;
+    color: var(--ink); font: inherit; font-size: 12.5px; padding: 6px 12px; cursor: pointer;
+  }
+  .route-btn[aria-expanded="true"] { background: #1b2a44; }
+  .route-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .route {
+    position: absolute; top: 56px; left: 14px; z-index: 1150; width: 320px;
+    max-width: calc(100vw - 28px); max-height: calc(100vh - 250px);
+    background: rgba(11,16,26,.97); border: 1px solid var(--panel-edge); border-radius: 3px;
+    display: flex; flex-direction: column; font-size: 12.5px;
+  }
+  .route[hidden] { display: none; }
+  .route .r-head { padding: 10px 12px 8px; border-bottom: 1px solid var(--panel-edge); display: grid; gap: 6px; }
+  .route .r-title { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; letter-spacing: .04em; }
+  .route .r-title button { background: none; border: 0; color: var(--ink-dim); cursor: pointer; font-size: 15px; }
+  .route .r-row { display: flex; gap: 6px; align-items: center; }
+  .route .r-row label { width: 34px; color: var(--ink-dim); }
+  .route input[type=text] {
+    flex: 1; min-width: 0; padding: 5px 8px; background: rgba(13,19,31,.85); color: var(--ink);
+    border: 1px solid var(--panel-edge); border-radius: 3px; font: inherit; font-size: 12.5px;
+  }
+  .route input[type=text]:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+  .route .r-modes { display: flex; border: 1px solid var(--panel-edge); border-radius: 3px; overflow: hidden; }
+  .route .r-modes button { flex: 1; background: none; border: 0; border-right: 1px solid var(--panel-edge);
+    color: var(--ink-dim); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
+  .route .r-modes button:last-child { border-right: 0; }
+  .route .r-modes button[aria-pressed="true"] { background: #1b2a44; color: #fff; }
+  .route .r-sum { color: var(--ink-dim); font-size: 11.5px; line-height: 1.4; }
+  .route .r-sum b { color: var(--ink); }
+  .route ol { margin: 0; padding: 6px 0; overflow-y: auto; list-style: none; counter-reset: hop -1; }
+  .route li { padding: 4px 12px 4px 34px; position: relative; cursor: pointer; counter-increment: hop; }
+  .route li::before { content: counter(hop); position: absolute; left: 10px; width: 18px; text-align: right;
+    color: var(--ink-faint); font-size: 11px; top: 5px; }
+  .route li:hover { background: #162032; }
+  .route li .r-sys { display: flex; gap: 8px; align-items: baseline; }
+  .route li .r-reg { color: var(--ink-dim); font-size: 11px; margin-left: auto; }
+  .route li .r-warn { font-size: 11px; color: #f0a35e; line-height: 1.35; }
+  .route li .r-warn.calm { color: var(--ink-faint); }
+  .route .r-note { padding: 6px 12px 9px; color: var(--ink-faint); font-size: 10.5px; border-top: 1px solid var(--panel-edge); }
+  .route-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .route-actions button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
+    color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
+  .route-actions button:hover { background: #1b2a44; }
+
   .bulwark-key { margin-top: 7px; font-size: 11px; color: var(--ink-dim); }
   .bulwark-key .bk-ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     border: 2px dashed #5fa8d3; vertical-align: -2px; margin-right: 3px; }
@@ -367,6 +413,7 @@
     <button data-layer="risk-now" aria-pressed="true" title="Industry: gank risk right now">Risk now <small>industry</small></button>
     <button data-layer="risk-history" aria-pressed="false" title="Industry: gank risk over the last 30 days">Risk 30d</button>
     <button data-layer="pvp-kills" aria-pressed="false" title="PvP: where ships died in the last hour">PvP kills <small>pvp</small></button>
+    <button data-layer="ambush" aria-pressed="false" title="PvP: kills on stargate grids over the last 30 days (gate camps)">Ambush 30d</button>
     <button data-layer="ratting" aria-pressed="false" title="PvP: where pilots are killing NPCs (targets)">Ratting</button>
     <button data-layer="status" aria-pressed="false" title="The in-game security status colors">Security</button>
   </div>
@@ -378,10 +425,29 @@
       <label><input type="checkbox" id="tBulwark" checked> bulwarks</label>
       <label><input type="checkbox" id="tIce"> <i class="sw" style="border-color:#8fe3ff"></i>ice fields</label>
       <label><input type="checkbox" id="tJove"> <i class="sw" style="border-color:#b48cff;border-style:dotted"></i>Jove observatories</label>
+      <label><input type="checkbox" id="tStrat"> <i class="sw" style="border-color:#ff6b3d"></i>entry systems, chokepoints</label>
       <label><input type="checkbox" id="tHoles"> <i class="sw" style="border-color:#ff8fd8"></i>Thera / Turnur holes</label>
     </div>
   </details>
+  <button class="route-btn" id="routeBtn" aria-expanded="false" aria-controls="route">Route</button>
 </header>
+
+<section class="route" id="route" hidden aria-label="Route planner">
+  <div class="r-head">
+    <div class="r-title"><span>ROUTE PLANNER</span><button id="routeClose" aria-label="Close route planner">✕</button></div>
+    <div class="r-row"><label for="rFrom">from</label><input type="text" id="rFrom" list="sysNames" autocomplete="off" placeholder="system"></div>
+    <div class="r-row"><label for="rTo">to</label><input type="text" id="rTo" list="sysNames" autocomplete="off" placeholder="system"></div>
+    <div class="r-modes" role="group" aria-label="Route preference">
+      <button data-mode="short" aria-pressed="false">Shortest</button>
+      <button data-mode="safe" aria-pressed="true">Safer</button>
+      <button data-mode="clear" aria-pressed="false" title="Clear the route">Clear</button>
+    </div>
+    <div class="r-sum" id="rSum">Pick two systems. Safer weighs 30 days of kills, gate camps, the last hour of kills and security band.</div>
+  </div>
+  <ol id="rList"></ol>
+  <div class="r-note">Estimates from public kill data, not a guarantee. Pochven and Zarzakh gates are left out.</div>
+</section>
+<datalist id="sysNames"></datalist>
 
 <div class="legend">
   <div id="secLegend" hidden>
@@ -416,6 +482,7 @@
     <div class="risk-box" id="pPvp"></div>
     <div class="star-line" id="pStar"></div>
     <button class="view3d" id="view3d" hidden>Enter system view (3D)</button>
+    <div class="route-actions"><button id="routeFromHere">Route from here</button><button id="routeToHere">Route to here</button></div>
     <div class="neighbors">
       <h3>Stargate connections</h3>
       <div id="pNeighbors"></div>
@@ -519,13 +586,22 @@ function markerRadius(p, z) {
    Straight readings of CCP's last-hour counts for every system, all
    security levels, so a hunter can see where things are happening:
      PvP kills  ship + pod kills (where fights and ganks are happening)
-     Ratting    NPC kills (where PvE pilots are farming: targets)          */
+     Ratting    NPC kills (where PvE pilots are farming: targets)
+   and one 30-day reading from raw killmails (tools/ambush.py):
+     Ambush     kills on a stargate grid (victim within 400 km of a gate):
+                where gate camps actually catch people                    */
 const PVP_LEVELS = {
   "pvp-kills": [
     { key: "quiet",  label: "quiet",       min: 0,  color: "#26334a", boost: 0 },
     { key: "active", label: "1-2 kills",   min: 1,  color: "#c9a23a", boost: 1 },
     { key: "hot",    label: "3-9 kills",   min: 3,  color: "#ff7a29", boost: 2.2 },
     { key: "brawl",  label: "10+ kills",   min: 10, color: "#ff2b4a", boost: 3.8 },
+  ],
+  "ambush": [
+    { key: "none",   label: "no gate kills", min: 0,  color: "#26334a", boost: 0 },
+    { key: "some",   label: "1-9",          min: 1,  color: "#9a6fc4", boost: .8 },
+    { key: "camped", label: "10-49",        min: 10, color: "#e0569a", boost: 2.2 },
+    { key: "trap",   label: "50+ gate kills", min: 50, color: "#ff3b3b", boost: 3.8 },
   ],
   "ratting": [
     { key: "none",   label: "no ratting",  min: 0,   color: "#26334a", boost: 0 },
@@ -538,11 +614,18 @@ const isPvpLayer = l => l in PVP_LEVELS;
 function pvpFor(p, layer) {
   const [ship = 0, pod = 0, npc = 0, jumps = 0] =
     (riskData.activity && riskData.activity.systems[p.id]) || [];
-  const value = layer === "ratting" ? npc : ship + pod;
+  const hist = pvpHist(p);
+  const value = layer === "ratting" ? npc : layer === "ambush" ? hist.g : ship + pod;
   const levels = PVP_LEVELS[layer];
   const level = [...levels].reverse().find(l => value >= l.min);
-  return { level, ship, pod, npc, jumps, live: !!riskData.activity };
+  return { level, ship, pod, npc, jumps, live: !!riskData.activity, hist };
 }
+/* 30-day low/null kill history for one system: {k, g, gang, gates} */
+function pvpHist(p) {
+  return (riskData.pvp && riskData.pvp.systems[p.id]) || { k: 0, g: 0, gang: 0 };
+}
+const stratFor = p => (riskData.strat && riskData.strat.systems[p.id]) || {};
+const bandRank = sec => sec >= 0.5 ? 2 : sec > 0 ? 1 : 0;
 
 const fmtIsk = v => v >= 1e9 ? (v / 1e9).toFixed(1) + "B" : v >= 1e6 ? Math.round(v / 1e6) + "M"
                   : Math.round(v / 1e3) + "K";
@@ -570,7 +653,7 @@ map.attributionControl.addAttribution(
   'Map data © <a href="https://developers.eveonline.com/docs/guides/staticdata/">CCP hf. (EVE SDE)</a>, not affiliated with CCP');
 
 const canvas = L.canvas({ padding: .3 });
-const state = { byId: new Map(), adj: new Map(), markers: new Map(),
+const state = { byId: new Map(), adj: new Map(), routeAdj: new Map(), markers: new Map(),
                 stations: new Map(),
                 selected: null, selRing: null, sysLabels: L.layerGroup() };
 
@@ -652,6 +735,11 @@ async function boot() {
     const { from, to } = f.properties;
     (state.adj.get(from) || state.adj.set(from, []).get(from)).push(to);
     (state.adj.get(to) || state.adj.set(to, []).get(to)).push(from);
+    /* routing graph: Pochven (triglavian) and Zarzakh (jovian) links are
+       not ordinary travel, so routes never use them */
+    if (f.properties.class === "triglavian" || f.properties.class === "jovian") continue;
+    (state.routeAdj.get(from) || state.routeAdj.set(from, []).get(from)).push(to);
+    (state.routeAdj.get(to) || state.routeAdj.set(to, []).get(to)).push(from);
   }
 
   /* Bulwark rings: dashed faction-colored ring per system, a second ring
@@ -717,6 +805,36 @@ async function boot() {
     getJson("data/risk_static.json"), getJson("data/live/activity.json"),
     getJson("data/live/ganks.json"), getJson("data/live/history.json")]);
   riskData.wormholes = await getJson("data/live/wormholes.json");
+  [riskData.pvp, riskData.strat] = await Promise.all([
+    getJson("data/live/pvp_history.json"), getJson("data/pvp_static.json")]);
+  if (riskData.pvp && !riskData.pvp.windowDays) riskData.pvp = null;
+
+  /* strategic overlay (tools/analyze_null.py): orange ring on systems
+     where space drops a band (the doors into lowsec and nullsec), gold
+     dashed ring on chokepoints that alone hold a pocket of 8+ systems */
+  const stratLayer = L.layerGroup(), stratRings = [];
+  for (const [id, st] of Object.entries((riskData.strat && riskData.strat.systems) || {})) {
+    const p = state.byId.get(+id);
+    if (!p) continue;
+    if (st.entry) {
+      const m = L.circleMarker(p.ll, { renderer: canvas, interactive: false, fill: false,
+        color: "#ff6b3d", weight: 1.8, opacity: .95 });
+      stratLayer.addLayer(m); stratRings.push({ m, extra: 3.5 });
+    }
+    if (st.pocket >= 8) {
+      const m = L.circleMarker(p.ll, { renderer: canvas, interactive: false, fill: false,
+        color: "#ffd34d", weight: st.pocket >= 20 ? 2.4 : 1.5, opacity: .9, dashArray: "2 3" });
+      stratLayer.addLayer(m); stratRings.push({ m, extra: 7 });
+    }
+  }
+  const tStrat = document.getElementById("tStrat");
+  tStrat.onchange = () => tStrat.checked ? stratLayer.addTo(map) : stratLayer.remove();
+  const sizeStrat = () => {
+    const r = radiusFor(map.getZoom());
+    for (const { m, extra } of stratRings) m.setRadius(r + extra);
+  };
+  sizeStrat();
+  map.on("zoomend", sizeStrat);
 
   /* Thera / Turnur connections (EVE-Scout): Turnur is k-space, so its
      holes draw as lines out of Turnur; Thera is wormhole space and not on
@@ -856,9 +974,10 @@ async function boot() {
   try { saved = localStorage.getItem("atlas.layer"); } catch { /* ignore */ }
   document.querySelectorAll(".layers button:not(:disabled)").forEach(b =>
     b.onclick = () => applyLayer(b.dataset.layer));
-  applyLayer(["status", "risk-history", "pvp-kills", "ratting"].includes(saved)
+  applyLayer(["status", "risk-history", "pvp-kills", "ambush", "ratting"].includes(saved)
     ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
+  wireRoute();
 
   const want = decodeURIComponent((location.hash.match(/^#s=(.+)/) || [])[1] || "");
   if (want) {
@@ -902,9 +1021,17 @@ const hhmm = iso => new Date(iso).toUTCString().slice(17, 22) + " UTC";
 function updatePvpLegend(layer) {
   document.getElementById("pvpTitle").textContent = layer === "ratting"
     ? "Ratting, last hour: NPC kills (where PvE pilots are)"
+    : layer === "ambush" ? "Ambush sites, last 30 days: kills on stargate grids"
     : "PvP kills, last hour: ship and pod kills";
   document.getElementById("pvpRamp").innerHTML = PVP_LEVELS[layer]
     .map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join("");
+  if (layer === "ambush") {
+    const h = riskData.pvp;
+    document.getElementById("pvpLive").textContent = h
+      ? `${h.windowDays} days of killmails (EVE Ref), ${h.days[0]} to ${h.days[h.days.length - 1]}; open a system for its worst gates`
+      : "kill history not collected yet here";
+    return;
+  }
   const stamp = riskData.activity && riskData.activity.generated;
   document.getElementById("pvpLive").textContent = stamp
     ? `live: CCP ESI, all security levels, updated ${hhmm(stamp)}`
@@ -924,6 +1051,28 @@ function renderPvp(p) {
   if (r.live) {
     lines.push(`Last hour: ${r.ship} ship kills, ${r.pod} pod kills, ${r.npc} NPC kills, ${r.jumps} jumps`);
   }
+  if (riskData.pvp && p.sec < 0.5) {
+    const h = r.hist, days = riskData.pvp.windowDays;
+    if (h.k) {
+      lines.push(`Last ${days} days: <b>${h.k}</b> ship kills, ${h.g} on gates ` +
+                 `(${Math.round(100 * h.g / h.k)}%), average gang ${h.gang}`);
+      for (const [dest, n] of (h.gates || []).slice(0, 4)) {
+        const d = state.byId.get(dest);
+        lines.push(`&nbsp;&nbsp;${d ? d.name : dest} gate: ${n} kill${n === 1 ? "" : "s"}`);
+      }
+    } else {
+      lines.push(`Last ${days} days: no player ship kills`);
+    }
+  }
+  const st = stratFor(p);
+  if (st.entry) {
+    const from = (state.adj.get(p.id) || []).map(n => state.byId.get(n))
+      .filter(n => n && bandRank(n.sec) > bandRank(p.sec));
+    lines.push(`Entry system: a door ${p.sec <= 0 ? "into nullsec" : "into lowsec"}` +
+               (from.length ? ` from ${from.map(n => n.name).join(", ")}` : ""));
+  }
+  if (st.pocket) lines.push(`Chokepoint: the only way in or out for ${st.pocket} system${st.pocket === 1 ? "" : "s"} behind it`);
+  if (st.transit >= .05) lines.push(`Transit pipe: carries ${Math.round(st.transit * 100)}% as many low/null shortest routes as the busiest system`);
   for (const c of holesFor(p)) {
     const far = c.to === p.id ? c.hub : (c.toName || "a k-space system");
     const bits = [c.type, c.maxShip && `${c.maxShip} ships`,
@@ -931,7 +1080,7 @@ function renderPvp(p) {
     lines.push(`Wormhole to ${far}${bits ? ` (${bits})` : ""}`);
   }
   box.innerHTML = lines.length
-    ? `<div class="rb-head"><span class="rb-level" style="color:#ff9b6a">Activity</span></div>` +
+    ? `<div class="rb-head"><span class="rb-level" style="color:#ff9b6a">PvP intel</span></div>` +
       lines.map(l => `<div class="rb-line">${l}</div>`).join("")
     : "";
 }
@@ -990,6 +1139,161 @@ function renderRisk(p) {
     lines.map(l => `<div class="rb-line">${l}</div>`).join("") +
     (now.live || hist.live ? "" :
       `<div class="rb-note">Live gank and kill data unavailable: structural risk only.</div>`);
+}
+
+/* ---- route planner -----------------------------------------------------
+   Dijkstra over the stargate graph. "Shortest" counts jumps. "Safer" makes
+   each system cost 1 + 3 x danger, where danger blends (tools/ambush.py
+   and the live feeds):
+     security band                 lowsec .25, nullsec .4
+     30-day kills per day          .5 x ln(1 + k)
+     30-day gate kills per day     .7 x ln(1 + g)    (camps weigh more)
+     ship + pod kills, last hour   .6 x ln(1 + n)
+     highsec ganks per day, 30d    .8 x ln(1 + n)
+   Log scales keep one infamous pipe from dwarfing everything else; the
+   panel lists each term per jump so the pick can be checked. */
+function danger(p) {
+  const h = pvpHist(p), days = (riskData.pvp && riskData.pvp.windowDays) || 1;
+  const [ship = 0, pod = 0] = (riskData.activity && riskData.activity.systems[p.id]) || [];
+  const gk = riskData.history && riskData.history.ganks[p.id];
+  const band = p.sec >= 0.5 ? 0 : p.sec > 0 ? .25 : .4;
+  return band + .5 * Math.log1p(h.k / days) + .7 * Math.log1p(h.g / days)
+       + .6 * Math.log1p(ship + pod) + (gk ? .8 * Math.log1p(gk.n / 30) : 0);
+}
+function findRoute(from, to, safe) {
+  const cost = id => safe ? 1 + 3 * danger(state.byId.get(id)) : 1;
+  const dist = new Map([[from, 0]]), prev = new Map();
+  const heap = [[0, from]];
+  const push = item => {
+    heap.push(item);
+    for (let i = heap.length - 1; i > 0;) {
+      const j = (i - 1) >> 1;
+      if (heap[j][0] <= heap[i][0]) break;
+      [heap[i], heap[j]] = [heap[j], heap[i]]; i = j;
+    }
+  };
+  const pop = () => {
+    const top = heap[0], last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      for (let i = 0;;) {
+        const l = 2 * i + 1, r = l + 1;
+        let m = i;
+        if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+        if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+        if (m === i) break;
+        [heap[i], heap[m]] = [heap[m], heap[i]]; i = m;
+      }
+    }
+    return top;
+  };
+  while (heap.length) {
+    const [d, v] = pop();
+    if (v === to) break;
+    if (d > dist.get(v)) continue;
+    for (const w of state.routeAdj.get(v) || []) {
+      const nd = d + cost(w);
+      if (nd < (dist.has(w) ? dist.get(w) : Infinity)) { dist.set(w, nd); prev.set(w, v); push([nd, w]); }
+    }
+  }
+  if (!dist.has(to)) return null;
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev.get(path[0]));
+  return path;
+}
+const gateKills = (p, dest) => ((pvpHist(p).gates || []).find(([d]) => d === dest) || [, 0])[1];
+
+const route = { mode: "safe", layer: null };
+function drawRoute() {
+  const sum = document.getElementById("rSum"), list = document.getElementById("rList");
+  if (route.layer) { route.layer.remove(); route.layer = null; }
+  list.innerHTML = "";
+  const byName = n => [...state.byId.values()].find(p => p.name.toLowerCase() === n.trim().toLowerCase());
+  const a = byName(document.getElementById("rFrom").value), b = byName(document.getElementById("rTo").value);
+  if (!a || !b || a === b) {
+    sum.textContent = "Pick two systems. Safer weighs 30 days of kills, gate camps, the last hour of kills and security band.";
+    return;
+  }
+  const shortest = findRoute(a.id, b.id, false);
+  const path = route.mode === "safe" ? findRoute(a.id, b.id, true) : shortest;
+  if (!path) { sum.textContent = `No stargate route from ${a.name} to ${b.name}.`; return; }
+  const ps = path.map(id => state.byId.get(id));
+  const total = ps.slice(1).reduce((t, p) => t + danger(p), 0);
+  const shortTotal = shortest.slice(1).reduce((t, id) => t + danger(state.byId.get(id)), 0);
+  const counts = [0, 0, 0];
+  ps.forEach(p => counts[bandRank(p.sec)]++);
+  sum.innerHTML = `<b>${path.length - 1} jumps</b>` +
+    (route.mode === "safe" && shortest.length !== path.length
+      ? ` (shortest is ${shortest.length - 1}; danger ${total.toFixed(1)} vs ${shortTotal.toFixed(1)})`
+      : `, danger score ${total.toFixed(1)}`) +
+    `<br>${counts[2]} highsec, ${counts[1]} lowsec, ${counts[0]} nullsec systems` +
+    (riskData.pvp ? "" : "<br>kill history not loaded here: weighting uses security and live kills only");
+
+  route.layer = L.layerGroup().addTo(map);
+  route.layer.addLayer(L.polyline(ps.map(p => p.ll), { renderer: canvas, interactive: false,
+    color: "#ffffff", weight: 4.5, opacity: .25 }));
+  route.layer.addLayer(L.polyline(ps.map(p => p.ll), { renderer: canvas, interactive: false,
+    color: route.mode === "safe" ? "#7fe0ff" : "#ffd34d", weight: 2, opacity: .95 }));
+
+  list.innerHTML = ps.map((p, i) => {
+    const prevId = path[i - 1], nextId = path[i + 1], warn = [];
+    const h = pvpHist(p), st = stratFor(p);
+    const days = (riskData.pvp && riskData.pvp.windowDays) || 0;
+    const [ship = 0, pod = 0] = (riskData.activity && riskData.activity.systems[p.id]) || [];
+    if (ship + pod) warn.push(`${ship + pod} kill${ship + pod === 1 ? "" : "s"} in the last hour`);
+    const inG = prevId ? gateKills(p, prevId) : 0, outG = nextId ? gateKills(p, nextId) : 0;
+    if (inG) warn.push(`arrival gate: ${inG} kills in ${days}d`);
+    if (outG) warn.push(`${state.byId.get(nextId).name} gate: ${outG} kills in ${days}d`);
+    if (h.k && days) warn.push(`${(h.k / days).toFixed(1)} kills/day, gang ~${h.gang}`);
+    if (p.sec >= 0.5) {
+      const gk = riskData.history && riskData.history.ganks[p.id];
+      if (gk && gk.n >= 5) warn.push(`gank hotspot: ${gk.n} ganks in 30d`);
+    }
+    if (st.entry && prevId && bandRank(state.byId.get(prevId).sec) > bandRank(p.sec)) {
+      warn.push(p.sec > 0 ? "entering lowsec" : "entering nullsec");
+    }
+    if (st.pocket) warn.push(`chokepoint (${st.pocket} systems behind it)`);
+    const d = danger(p);
+    const tone = d < .3 && !inG && !outG ? " calm" : "";
+    return `<li data-id="${p.id}"><div class="r-sys"><span style="color:${secColor(p.sec)}">${p.sec.toFixed(1)}</span>` +
+      `<span>${p.name}</span><span class="r-reg">${p.region}</span></div>` +
+      (warn.length ? `<div class="r-warn${tone}">${warn.join("; ")}</div>` : "") + `</li>`;
+  }).join("");
+  list.querySelectorAll("li").forEach(li => li.onclick = () => {
+    const id = +li.dataset.id; select(id); flyTo(state.byId.get(id).ll, Math.max(map.getZoom(), 6));
+  });
+  map.fitBounds(L.latLngBounds(ps.map(p => p.ll)).pad(.25), { maxZoom: 7 });
+}
+function openRoute(open) {
+  document.getElementById("route").hidden = !open;
+  document.getElementById("routeBtn").setAttribute("aria-expanded", String(open));
+}
+function wireRoute() {
+  document.getElementById("sysNames").innerHTML = [...state.byId.values()]
+    .map(p => `<option value="${p.name}">`).join("");
+  document.getElementById("routeBtn").onclick = () =>
+    openRoute(document.getElementById("route").hidden);
+  document.getElementById("routeClose").onclick = () => openRoute(false);
+  for (const id of ["rFrom", "rTo"]) document.getElementById(id).onchange = drawRoute;
+  document.querySelectorAll(".r-modes button").forEach(b => b.onclick = () => {
+    if (b.dataset.mode === "clear") {
+      document.getElementById("rFrom").value = document.getElementById("rTo").value = "";
+    } else {
+      route.mode = b.dataset.mode;
+      document.querySelectorAll(".r-modes button").forEach(x =>
+        x.setAttribute("aria-pressed", String(x.dataset.mode === route.mode)));
+    }
+    drawRoute();
+  });
+  const here = field => () => {
+    const p = state.byId.get(state.selected);
+    if (!p) return;
+    document.getElementById(field).value = p.name;
+    openRoute(true);
+    drawRoute();
+  };
+  document.getElementById("routeFromHere").onclick = here("rFrom");
+  document.getElementById("routeToHere").onclick = here("rTo");
 }
 
 /* ---- label placement ------------------------------------------------- */
