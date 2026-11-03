@@ -25,8 +25,9 @@ def test_aggregate_day_counts_gate_kills_and_skips_pods_and_npc():
     mails = [km(1, 10e3), km(1, 20e3, pilots=5), km(1, 5e8),
              km(1, 10e3, ship=670),                  # capsule
              km(1, 10e3, pilots=0),                  # NPC-only attackers
+             km(1, 10e3, ship=35832),                # a citadel, not a ship
              km(9, 0.0)]                             # not a tracked system
-    out = aggregate_day(mails, {1}, GATES)
+    out = aggregate_day(mails, {1}, GATES, ships={587})
     assert out == {"1": [3, 2, 11, {"2": 2}]}
 
 

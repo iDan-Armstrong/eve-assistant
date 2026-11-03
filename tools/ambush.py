@@ -12,7 +12,8 @@ see far more kills than highsec ganks), keyed by UTC day:
 
     {day: {systemId: [kills, gateKills, attackerTotal, {destId: n}]}}
 
-    kills          player ship losses (capsules excluded, they double count)
+    kills          player ship losses: ships only (structures, deployables
+                   and capsules are left out; pods double count)
     gateKills      of those, how many died on a gate grid
     attackerTotal  sum of player attackers, for average gang size
     destId: n      gate kills per gate, named by the system it leads to
@@ -25,6 +26,7 @@ import math
 from pathlib import Path
 
 GATES_FILE = Path(__file__).resolve().parent / "data" / "stargates.json"
+SHIPS_FILE = Path(__file__).resolve().parent / "data" / "ship_types.json"   # SDE category 6
 ON_GATE_KM = 400.0
 CAPSULES = {670, 33328}
 WINDOW_DAYS = 30
@@ -55,13 +57,18 @@ def player_attackers(km: dict) -> int:
     return sum(1 for a in km.get("attackers", []) if a.get("character_id"))
 
 
-def aggregate_day(killmails, systems: set[int], gates: dict) -> dict:
+def load_ships(path: Path = SHIPS_FILE) -> set[int]:
+    return set(json.loads(path.read_text())) - CAPSULES
+
+
+def aggregate_day(killmails, systems: set[int], gates: dict, ships: set[int] | None = None) -> dict:
     """One day's killmails -> {systemId: [kills, gateKills, attackers, {dest: n}]}."""
+    ships = load_ships() if ships is None else ships
     out: dict[str, list] = {}
     for km in killmails:
         sid = km.get("solar_system_id")
         victim = km.get("victim", {})
-        if sid not in systems or victim.get("ship_type_id") in CAPSULES:
+        if sid not in systems or victim.get("ship_type_id") not in ships:
             continue
         attackers = player_attackers(km)
         if not attackers:                       # NPC kill, not PvP
