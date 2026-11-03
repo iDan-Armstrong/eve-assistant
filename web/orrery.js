@@ -1,11 +1,11 @@
-/* New Eden Atlas — 3D system view (the orrery).
+/* New Eden Atlas: 3D system view (the orrery).
  *
  * Renders a selected solar system from its real SDE geometry: every body
  * sits at its true position (directions and relative layout preserved);
  * radial distances are log-compressed so a 2,000 AU outer planet and a
  * 0.1 AU inner one share a screen, and body sizes are exaggerated to be
- * visible at all. The footer states exactly that — a map that distorts
- * honestly, and says so, is still a true map.
+ * visible at all. The footer states these distortions on screen so the
+ * viewer knows what is scaled and what is true.
  *
  * Loaded lazily (dynamic import) the first time a 3D view opens.
  */
@@ -21,7 +21,7 @@ export const STAR_SERVICES = ["Compression", "Refinery"];
 
 /* station symbology by service capability (classified at build time) */
 export const STATION_CLASS_COLORS = {
-  cloning: 0xe8828c,    // has a clone bay — a med station
+  cloning: 0xe8828c,    // has a clone bay (a med station)
   industry: 0xe0a84f,   // factory or laboratory
   market: 0x74c476,     // market hub without industry
   basic: 0x9fd9ff,      // docking, repair, the everyday services
@@ -289,7 +289,7 @@ export function openOrrery(host, data, onClose) {
 
   /* stations: cyan structures. A station's true position coincides with
      its host planet or moon, so raw radial compression would bury it
-     inside the enlarged planet sphere — place it the way moons are
+     inside the enlarged planet sphere; instead, place it the way moons are
      placed (parent-relative), nudged outward so it reads beside its
      moon rather than inside it. */
   for (const st of stations) {
@@ -357,7 +357,7 @@ export function openOrrery(host, data, onClose) {
     if (hit) {
       const u = hit.object.userData;
       tip.hidden = false;
-      tip.innerHTML = `<b>${u.name}</b><br>${u.kind}${u.sub ? " — " + u.sub : ""}`;
+      tip.innerHTML = `<b>${u.name}</b><br>${u.kind}${u.sub ? ", " + u.sub : ""}`;
       tip.style.left = (e.clientX - r.left + 14) + "px";
       tip.style.top = (e.clientY - r.top + 10) + "px";
       renderer.domElement.style.cursor = "pointer";

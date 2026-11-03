@@ -1,10 +1,10 @@
-# eve-assistant — New Eden Atlas
+# eve-assistant: New Eden Atlas
 
 ![Status](https://img.shields.io/badge/status-in%20development-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-> **In development.** Live preview: https://idan-armstrong.github.io/eve-assistant/
-> — feedback welcome via [Issues](https://github.com/iDan-Armstrong/eve-assistant/issues).
+> **In development.** Live preview: <https://idan-armstrong.github.io/eve-assistant/>.
+> Feedback is welcome via [Issues](https://github.com/iDan-Armstrong/eve-assistant/issues).
 > Geography is current (Cradle of War era, incl. the new Exordium region);
 > moons, belts and stations still come from CCP's June 2024 export until the
 > next full SDE refresh.
@@ -15,8 +15,8 @@ full attribute data, **6,989 stargate connections** as a line network,
 **5,150 stations** joined to their systems by foreign key, the full celestial
 hierarchy (**46,172 planets, 234,651 moons, 40,928 asteroid belts**, every
 star), **820 ice-field systems**, **1,028 Jove Observatories**, and
-**70 regions**
-— a spatial / attribute / relational dataset rendered with the same tooling
+**70 regions**.
+It is a spatial / attribute / relational dataset rendered with the same tooling
 (Leaflet, GeoJSON) used in production web GIS.
 
 ```
@@ -24,7 +24,7 @@ python serve.py        →  http://localhost:8800
 ```
 
 Select any system and **enter it in 3D**: the orrery view renders the
-system's real SDE geometry — star colored by its temperature, planets,
+system's real SDE geometry: star colored by its temperature, planets,
 moons, belts, stargates and stations each at their true position
 (directions preserved; radial distances log-compressed and bodies
 enlarged, and the view says so). Jita's four stacked gates really do sit
@@ -43,17 +43,17 @@ trade-hub and border flags), and relationships (the stargate graph, the
 region ‹ constellation ‹ system hierarchy). The Atlas treats it exactly like
 survey data:
 
-- **Spatial** — systems are GeoJSON `Point` features in a light-year CRS;
+- **Spatial:** systems are GeoJSON `Point` features in a light-year CRS;
   stargate links are `LineString` features classified Dotlan-style
-  (local / constellation / regional) by whether they cross a boundary —
+  (local / constellation / regional) by whether they cross a boundary,
   plus three special classes read from the SDE's own gate types and drawn
   distinctly: 48 smuggler routes, Pochven's 30 Triglavian conduits, and
   the 4 Jovian spokes that all converge on Zarzakh. The gate graph itself
-  audits clean: 13,776 gates, none dangling, none one-way — and the
+  audits clean: 13,776 gates, none dangling, none one-way. The
   symbology is ready for the day that changes: a one-way link stores its
   geometry in travel order and renders with directional arrow markers
   (chevrons in a caution color) instead of a plain line.
-- **Attribute** — click any system for its full record; security coloring
+- **Attribute:** click any system for its full record; security coloring
   uses the game's own 11-step ramp, so the map reads like the in-game one.
   In the 3D view every body opens a profile window with its complete
   attribute record, and stations are symbolized by service capability
@@ -65,19 +65,19 @@ survey data:
   wiki) and typical belt ores per system, computed from security band,
   empire quarter and the SDE's security class using EVE University's
   ore-distribution table, which its own editors flag as pre-Catalyst.
-- **Relational** — the jump network is an edge list keyed by system ID;
+- **Relational:** the jump network is an edge list keyed by system ID;
   stations live in their own table (`stations.json`) with `systemId` as the
   foreign key; and the celestial hierarchy (region › system › star/planet ›
   moon) is sharded into one file per region, fetched lazily when a system
-  in that region is first selected and joined client-side — the access
+  in that region is first selected and joined client-side. That is the access
   pattern of a feature-service query, without a server. The info panel
   walks all of it: every neighbor one click away, stations listed per
   system (Jita shows all 15, 4-4 included), planets expandable to their
   moons and named asteroid belts with star class and temperature up top.
   Ice belts and gas clouds are deliberately absent: the static export
   confirms zero ice fields remain in the map (they became dynamic
-  anomalies in 2013's Odyssey), and gas sites are scanner signatures —
-  both are runtime content, which is exactly the line between a basemap
+  anomalies in 2013's Odyssey), and gas sites are scanner signatures.
+  Both are runtime content, which is exactly the line between a basemap
   and a live layer. The sources cross-check:
   station counts derived from the universe tree match the station table in
   5,431 of 5,432 systems.
@@ -88,7 +88,7 @@ Layers are built per player role. For industry there are two risk
 layers (**Risk now** is the default) next to the classic **Security
 Status** ramp; PvP layers are next.
 
-| | **Risk now** — "should I undock?" | **Risk history** — "is this a bad neighborhood?" |
+| | **Risk now** ("should I undock?") | **Risk history** ("is this a bad neighborhood?") |
 |---|---|---|
 | Ganks (50%) | last 6 hours | last 30 days |
 | Kills per traffic (25%) | last hour, CCP ESI | average hour over the collected days |
@@ -134,8 +134,8 @@ and run `python tools/build_map_data.py <sde>/universe/eve`. The builder is
 pure Python + PyYAML; canonical display names come from `bsd/invNames.yaml`
 ("TheForge" folders become "The Forge").
 
-`tools/audit_universe.py` then audits what was built — referential
-integrity, stargate-graph topology, attribute outliers — and writes
+`tools/audit_universe.py` then audits what was built (referential
+integrity, stargate-graph topology, attribute outliers) and writes
 [docs/universe-audit.md](docs/universe-audit.md). It classifies, a human
 judges: the 27-system Pochven island and 217 gateless Jove systems are by
 design; Zarzakh's station missing from the universe tree is a genuine SDE
@@ -159,8 +159,8 @@ export.
 ## Roadmap
 
 - **Live layers (ESI):** CCP's public API serves sovereignty, faction-warfare
-  fronts, kills/jumps activity and market data with CORS enabled — fetched by
-  the browser at view time and joined onto the basemap by system ID, like any
+  fronts, kills/jumps activity and market data with CORS enabled. These are
+  fetched by the browser at view time and joined onto the basemap by system ID, like any
   live feature service over a basemap. Research notes in
   [docs/esi-research.md](docs/esi-research.md).
 - **Routing:** shortest-path over the jump graph with security preference

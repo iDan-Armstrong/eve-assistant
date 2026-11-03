@@ -18,8 +18,8 @@ Usage:
     python tools/build_map_data.py <path-to-sde>/universe/eve [out_dir]
 
 If ``bsd/invNames.yaml`` exists two levels up from the universe tree (the
-standard SDE layout), canonical display names are taken from it — folder
-names drop spaces ("TheForge"), invNames carries the real "The Forge".
+standard SDE layout), canonical display names are taken from it; folder
+names drop spaces ("TheForge"), but invNames carries the real "The Forge".
 
 The SDE is CCP's bulk static data download (developers.eveonline.com →
 Static Data Export). Only the ``universe/eve`` k-space tree is needed.
@@ -57,7 +57,7 @@ def to_ly(meters: float) -> float:
 
 def sec_round(security: float) -> float:
     """EVE's displayed security: round to one decimal (0.45 shows as 0.5,
-    but anything below true 0.05 that is still positive shows 0.1 — the
+    but anything below true 0.05 that is still positive shows 0.1: the
     classic 'lowsec rounds up' rule)."""
     if 0.0 < security < 0.05:
         return 0.1
@@ -129,7 +129,7 @@ def load_names(root: Path) -> dict[int, str]:
     """itemID -> display name from bsd/invNames.yaml, when available."""
     path = root.parent.parent / "bsd" / "invNames.yaml"
     if not path.is_file():
-        print("  (no bsd/invNames.yaml — using folder names)")
+        print("  (no bsd/invNames.yaml; using folder names)")
         return {}
     rows = yaml.load(path.read_text(), Loader)
     return {r["itemID"]: r["itemName"] for r in rows}
@@ -142,7 +142,7 @@ def load_operation_services(root: Path) -> dict[int, list[str]]:
     fsd = root.parent.parent / "fsd"
     ops_path, svc_path = fsd / "stationOperations.yaml", fsd / "stationServices.yaml"
     if not (ops_path.is_file() and svc_path.is_file()):
-        print("  (no station operations/services tables — skipping services)")
+        print("  (no station operations/services tables; skipping services)")
         return {}
     svc_names = {sid: s.get("serviceNameID", {}).get("en", "")
                  for sid, s in yaml.load(svc_path.read_text(), Loader).items()}
@@ -171,7 +171,7 @@ def load_stations(root: Path, names: dict[int, str],
     station type, reprocessing efficiency, docking and office terms."""
     path = root.parent.parent / "bsd" / "staStations.yaml"
     if not path.is_file():
-        print("  (no bsd/staStations.yaml — skipping stations)")
+        print("  (no bsd/staStations.yaml; skipping stations)")
         return []
     rows = yaml.load(path.read_text(), Loader)
     op_services = load_operation_services(root)
@@ -200,7 +200,7 @@ def load_type_names(root: Path) -> dict[int, str]:
     YAML parse."""
     path = root.parent.parent / "fsd" / "types.yaml"
     if not path.is_file():
-        print("  (no fsd/types.yaml — celestial type names unavailable)")
+        print("  (no fsd/types.yaml; celestial type names unavailable)")
         return {}
     names: dict[int, str] = {}
     type_id, group, in_name = None, None, False
@@ -297,7 +297,7 @@ def planet_kind(type_name: str) -> str:
 
 
 # Typical belt ores. Source: EVE University wiki, "Asteroid"
-# (wiki.eveuniversity.org/Asteroid) — which its own editors flag as
+# (wiki.eveuniversity.org/Asteroid), which its own editors flag as
 # needing an update for the Catalyst expansion, so the viewer labels this
 # as a reference, not survey data. Highsec/lowsec vary by empire quarter;
 # nullsec keys on the SDE's securityClass plus true security.
@@ -410,7 +410,7 @@ def load_universe(root: Path, names: dict[int, str], types: dict[int, str]):
             "id": rid,
             "name": region_name,
             # faction IDs are items too, so invNames is the source of truth
-            # (a hardcoded lookup here once mislabeled Pochven — never again)
+            # (a hardcoded lookup here once mislabeled Pochven; never again)
             "faction": names.get(rmeta.get("factionID"), ""),
             "center": [to_ly(rmeta["center"][0]), to_ly(rmeta["center"][2])],
             "systems": 0,

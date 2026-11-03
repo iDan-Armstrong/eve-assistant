@@ -61,3 +61,10 @@ def test_activity_merges_kills_and_jumps(monkeypatch):
     out = fetch_live.fetch_activity(status)
     assert out["systems"]["1"] == [4, 1, 9, 300]
     assert out["systems"]["2"] == [0, 0, 0, 7]
+
+
+def test_capsules_are_not_counted_as_ganks():
+    kills = [{"id": 1, "sys": 9, "time": iso(1), "ship": 17476, "shipName": "Retriever"},
+             {"id": 2, "sys": 9, "time": iso(1), "ship": 670, "shipName": "Capsule"}]
+    out = fetch_live.aggregate_ganks(kills, NOW - timedelta(days=30))
+    assert out["9"]["n"] == 1 and out["9"]["top"] == [("Retriever", 1)]

@@ -2,7 +2,7 @@
 
     python serve.py        # http://localhost:8800 and opens your browser
 
-A plain static file server (the map is a static site — the same files
+A plain static file server (the map is a static site; the same files
 deploy unchanged to GitHub Pages). No dependencies.
 """
 

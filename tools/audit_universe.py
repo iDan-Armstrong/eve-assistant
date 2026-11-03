@@ -1,8 +1,8 @@
 """Audit the built universe dataset for anomalies.
 
 Referential integrity, network topology, and attribute outliers over the
-GeoJSON/JSON the map actually serves — the same audit discipline demoforge
-applies to client data: the report *finds and classifies*, a human judges.
+GeoJSON/JSON the map actually serves. This is the same audit discipline
+demoforge applies to client data: the report *finds and classifies*, a human judges.
 
     python tools/audit_universe.py            # writes docs/universe-audit.md
 
@@ -75,7 +75,7 @@ def main() -> None:
     for sid, tree, table in mismatch:
         p = systems[sid]
         L.append(f"  - {p['name']} ({p['region']}): tree says {tree}, table says "
-                 f"{table} — the station exists in `staStations` but not as an "
+                 f"{table}; the station exists in `staStations` but not as an "
                  f"`npcStations` entry in the universe files (SDE inconsistency, "
                  f"not a build defect)")
 
@@ -85,7 +85,7 @@ def main() -> None:
     gateless = [p for p in systems.values() if p["gates"] == 0]
     by_reg = Counter(p["region"] for p in gateless)
     L.append(f"- Connected components in the stargate graph: **{len(comps)}**")
-    L.append(f"  - Main cluster: **{len(comps[0]):,} systems** — flyable New Eden")
+    L.append(f"  - Main cluster: **{len(comps[0]):,} systems** (flyable New Eden)")
     for c in comps[1:]:
         if len(c) == 1:
             continue
@@ -93,10 +93,10 @@ def main() -> None:
         sample = sorted(systems[s]["name"] for s in c)[:3]
         L.append(f"  - Island of {len(c)} systems in {', '.join(regs)} "
                  f"(e.g. {', '.join(sample)})")
-    L.append(f"- Gateless systems: **{len(gateless)}** — "
+    L.append(f"- Gateless systems: **{len(gateless)}**, in "
              + ", ".join(f"{r} ({n})" for r, n in sorted(by_reg.items())))
     L.append("  - All in the three Jove regions: charted in the data, "
-             "unreachable in game — by design, not a defect")
+             "unreachable in game; this is by design, not a defect")
     poch = [c for c in comps if len(c) > 1 and
             {systems[s]["region"] for s in c} == {"Pochven"}]
     if poch:
@@ -109,7 +109,7 @@ def main() -> None:
     L.append(f"- {meta.get('gates', 0):,} gates in the universe tree; "
              f"**{meta.get('danglingGates', 0)} dangling** (destination gate "
              f"missing) and **{meta.get('nonMutualGates', 0)} non-mutual** "
-             f"(A\u2192B without B\u2192A) \u2014 every gate pair is intact "
+             f"(A\u2192B without B\u2192A); every gate pair is intact "
              f"and symmetric")
     jump_cls = Counter(j["properties"]["class"] for j in jumps)
     special = {k: v for k, v in jump_cls.items()
@@ -165,12 +165,12 @@ def main() -> None:
     for r in one_sys:
         L.append(f"- Region **{r['name']}** contains exactly one system"
                  + (f" (faction: {r['faction']})" if r["faction"] else "")
-                 + " — Zarzakh, the Deathless hub, a region of one")
+                 + ": Zarzakh, the Deathless hub, making it a region of one")
     no_faction = [r for r in regions if not r["faction"]]
     L.append(f"- {len(no_faction)} of {len(regions)} regions carry no NPC "
-             "faction — sovereign nullsec plus the Jove regions")
+             "faction: sovereign nullsec plus the Jove regions")
     L.append("- Thera's 4 Sanctuary stations sit in wormhole space "
-             "(system 31000005), outside this k-space dataset — excluded by "
+             "(system 31000005), outside this k-space dataset. They are excluded by "
              "the system-ID join, which is the join doing its job")
 
     report = "\n".join(L) + "\n"

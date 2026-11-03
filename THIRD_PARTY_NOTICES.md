@@ -1,6 +1,6 @@
 # Third-party notices
 
-## HISA — Haakario Interstellar Survey Authority
+## HISA (Haakario Interstellar Survey Authority)
 
 Source: https://github.com/Crytopox/HISA
 

@@ -178,10 +178,15 @@ def merge_ledger(ledger: list[dict], new: list[dict], now: datetime,
                   key=lambda k: k["time"], reverse=True)
 
 
+# Pod kills after a gank stay in the ledger but are not counted as ganks:
+# one gank is one lost ship, so the victim's capsule is not a second gank.
+CAPSULES = {670, 33328}
+
+
 def aggregate_ganks(kills: list[dict], since: datetime) -> dict:
     per_sys: dict[str, dict] = {}
     for k in kills:
-        if parse_time(k["time"]) < since:
+        if k.get("ship") in CAPSULES or parse_time(k["time"]) < since:
             continue
         s = per_sys.setdefault(str(k["sys"]), {"n": 0, "isk": 0, "ships": {}})
         s["n"] += 1

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>New Eden Atlas</title>
-<meta name="description" content="Interactive star atlas of the EVE Online universe — 5,432 solar systems, every stargate connection, full attribute data.">
+<meta name="description" content="Interactive star atlas of the EVE Online universe: 5,432 solar systems, every stargate connection, full attribute data.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600&display=swap">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
@@ -444,12 +444,12 @@ const secColor = s => SEC_COLORS[Math.max(0, s).toFixed(1)] || SEC_COLORS["0.0"]
 /* ---- Security Risk (industry): now and history -------------------------
    Two transparent blends, so every score can be explained in the panel.
    RISK NOW ("should I undock?")
-     ganks, last 6h                          50%  — saturates at 2 ganks
-     ship kills per traffic, last hour (ESI) 25%  — 1 kill per 15 jumps = max
+     ganks, last 6h                          50%  (saturates at 2 ganks)
+     ship kills per traffic, last hour (ESI) 25%  (1 kill per 15 jumps = max)
      structural exposure                     25%
    RISK HISTORY ("is this a bad neighborhood?")
-     ganks, last 30 days                     50%  — saturates at 20 ganks
-     average hourly kills per traffic        25%  — same scale as now
+     ganks, last 30 days                     50%  (saturates at 20 ganks)
+     average hourly kills per traffic        25%  (same scale as now)
      structural exposure                     25%
    Structural exposure = trade-route chokepoint load x CONCORD response
    (tools/analyze_routes.py). With no data for a mode, the structural term
@@ -513,7 +513,7 @@ const JUMP_STYLE = {
   local:        { color: "#3b4b6b", opacity: .34, weight: .7 },
   constellation:{ color: "#4e6f9e", opacity: .42, weight: .8 },
   regional:     { color: "#8a5fb0", opacity: .55, weight: .9 },
-  /* special gate types from the SDE — these links are not ordinary travel */
+  /* special gate types from the SDE: these links are not ordinary travel */
   smuggler:     { color: "#c98a2c", opacity: .65, weight: 1.0, dashArray: "4 4" },
   triglavian:   { color: "#d1352f", opacity: .45, weight: 1.0, dashArray: "3 5" },
   jovian:       { color: "#e8d26a", opacity: .85, weight: 1.3, dashArray: "6 5" },
@@ -529,7 +529,7 @@ const map = L.map("map", {
 map.setView([0, 0], 3); // real view comes from fitBounds once data is in
 map.attributionControl.setPrefix(false);
 map.attributionControl.addAttribution(
-  'Map data © <a href="https://developers.eveonline.com/docs/guides/staticdata/">CCP hf. — EVE SDE</a>, not affiliated with CCP');
+  'Map data © <a href="https://developers.eveonline.com/docs/guides/staticdata/">CCP hf. (EVE SDE)</a>, not affiliated with CCP');
 
 const canvas = L.canvas({ padding: .3 });
 const state = { byId: new Map(), adj: new Map(), markers: new Map(),
@@ -827,7 +827,7 @@ function updateRiskLegend(layer) {
     title.textContent = "Risk history for industry: last 30 days";
     const h = riskData.history;
     if (h && (h.oldestGank || h.activityDays)) {
-      const since = h.oldestGank ? new Date(h.oldestGank).toISOString().slice(0, 10) : "—";
+      const since = h.oldestGank ? new Date(h.oldestGank).toISOString().slice(0, 10) : "unknown";
       el.textContent = `ganks since ${since}, ${h.activityDays} day${h.activityDays === 1 ? "" : "s"} ` +
         `of hourly kill averages; updated ${hhmm(h.generated)}`;
     } else {
@@ -846,7 +846,7 @@ function ganksLine(gk, label) {
   if (!gk) return `${label}: none recorded`;
   const isk = gk.isk > 0 ? ` (${fmtIsk(gk.isk)} ISK where priced)` : "";
   const top = gk.top && gk.top.length
-    ? ` — ${gk.top.map(([s, n]) => n > 1 ? `${s} ×${n}` : s).join(", ")}` : "";
+    ? `; most hit: ${gk.top.map(([s, n]) => n > 1 ? `${s} ×${n}` : s).join(", ")}` : "";
   return `${label}: <b>${gk.n}</b>${isk}${top}`;
 }
 
@@ -945,9 +945,9 @@ function select(id) {
   if (p.partial) flags.push("new system: moons, belts and stations arrive with the next full data refresh");
   renderRisk(p);
   document.getElementById("pFlags").textContent = flags.join(", ") +
-    (p.ores && p.ores.length ? `${flags.length ? " — " : ""}belt ores: ${p.ores.join(", ")}` : "") +
+    (p.ores && p.ores.length ? `${flags.length ? "; " : ""}belt ores: ${p.ores.join(", ")}` : "") +
     (p.bulwark && p.bulwark.ore
-      ? ` — campaign ore: ${p.bulwark.ore}, ${p.bulwark.oresNote}` : "");
+      ? `; campaign ore: ${p.bulwark.ore}, ${p.bulwark.oresNote}` : "");
 
   const neighbors = (state.adj.get(id) || []).map(nid => state.byId.get(nid))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -984,7 +984,7 @@ function select(id) {
   document.getElementById("panel").classList.add("open");
   history.replaceState(null, "", `#s=${encodeURIComponent(p.name)}`);
 }
-/* celestial hierarchy: lazy-fetched per region, cached — the join runs
+/* celestial hierarchy: lazy-fetched per region and cached; the join runs
    region -> system -> planet -> moon entirely client-side */
 const celCache = new Map();
 async function loadCelestials(p) {
@@ -1112,7 +1112,7 @@ document.getElementById("ramp").innerHTML =
 
 const tLabels = document.getElementById("tLabels");
 boot().catch(err => {
-  document.getElementById("boot").textContent = "Could not load map data — run tools/build_map_data.py first. " + err;
+  document.getElementById("boot").textContent = "Could not load map data. Run tools/build_map_data.py first. " + err;
 });
 </script>
 </body>

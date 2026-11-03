@@ -11,7 +11,7 @@
   └──────────────────────────────────────────────────────────┘
                  view time (the player's browser)
   ┌──────────────────────────────────────────────────────────┐
-  │  web/index.html  — Leaflet, CRS.Simple, canvas renderer  │
+  │  web/index.html (Leaflet, CRS.Simple, canvas renderer)   │
   │     ├─ basemap layers: systems, jumps, region labels     │
   │     └─ live layers (planned): ESI fetches from the       │
   │        browser, joined onto systems by ID                │
@@ -23,7 +23,7 @@ Two kinds of data, two lifecycles:
 1. **The basemap is static.** Systems, coordinates, stargates and the
    region hierarchy change a few times a year (CCP expansions). They ship
    as GeoJSON built once from the SDE, so the map loads instantly and the
-   site needs no backend — it's deployable on GitHub Pages.
+   site needs no backend; it's deployable on GitHub Pages.
 2. **The overlay is live.** Sovereignty, faction warfare, kill/jump
    activity and market stats change by the minute. ESI (CCP's public API)
    serves all of it with CORS enabled, so the *viewer's* browser fetches
@@ -40,7 +40,7 @@ EVE positions are meters in a 3D frame where **Y is up**; every 2D map of
 New Eden (the in-game star map, Dotlan) projects onto the **X/Z plane**.
 The builder converts meters → light years (9.4607 × 10¹⁵ m) and emits
 `[x_ly, z_ly]` GeoJSON coordinates. In Leaflet's `CRS.Simple`,
-`latLng = [z, x]` — verified against known geography (Branch/Tenal north,
+`latLng = [z, x]`, verified against known geography (Branch/Tenal north,
 Esoteria/Period Basis south, Cache east). The vertical `y_ly` rides along
 as a property so a 3D view stays possible.
 
@@ -61,7 +61,7 @@ rounding (true security 0.0–0.05 displays as 0.1).
 ## Testing
 
 The builder's pure parts (edge dedup, jump classification, security
-rounding, unit conversion) have unit tests — `pytest` in `tests/`.
+rounding, unit conversion) have unit tests (`pytest` in `tests/`).
 Rendering is verified with headless-Chromium screenshot passes during
 development.
 
