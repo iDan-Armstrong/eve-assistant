@@ -52,6 +52,8 @@
   }
 
   .search { position: relative; flex: 0 1 300px; min-width: 120px; }
+  @media (max-width: 1240px) { .wordmark span { display: none; } .wordmark { letter-spacing: .2em; } .search { flex-basis: 200px; } }
+  @media (max-width: 980px) { .wordmark { display: none; } }
   .search input {
     width: 100%; padding: 7px 12px;
     background: rgba(13,19,31,.85); color: var(--ink);
@@ -108,7 +110,9 @@
   .legend .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-dim); }
   /* ---- layer switch -------------------------------------------------- */
   .layers { display: flex; border: 1px solid var(--panel-edge); border-radius: 3px;
-    overflow: hidden; background: rgba(13,19,31,.85); }
+    overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 0 1 auto;
+    background: rgba(13,19,31,.85); }
+  .layers::-webkit-scrollbar { display: none; }
   .layers button {
     background: none; border: 0; border-right: 1px solid var(--panel-edge);
     color: var(--ink-dim); font: inherit; font-size: 12.5px; padding: 6px 11px; cursor: pointer;
@@ -150,6 +154,7 @@
     display: flex; flex-direction: column; font-size: 12.5px;
   }
   .route[hidden] { display: none; }
+  body.route-open .leaflet-top.leaflet-left { left: 340px; }
   .route .r-head { padding: 10px 12px 8px; border-bottom: 1px solid var(--panel-edge); display: grid; gap: 6px; }
   .route .r-title { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; letter-spacing: .04em; }
   .route .r-title button { background: none; border: 0; color: var(--ink-dim); cursor: pointer; font-size: 15px; }
@@ -643,9 +648,10 @@ const PVP_LEVELS = {
   ],
   "ambush": [
     { key: "none",   label: "no gate kills", min: 0,  color: "#26334a", boost: 0 },
-    { key: "some",   label: "1-9",          min: 1,  color: "#9a6fc4", boost: .8 },
-    { key: "camped", label: "10-49",        min: 10, color: "#e0569a", boost: 2.2 },
-    { key: "trap",   label: "50+ gate kills", min: 50, color: "#ff3b3b", boost: 3.8 },
+    { key: "some",   label: "1-19",         min: 1,   color: "#5a4a7e", boost: 0 },
+    { key: "active", label: "20-99",        min: 20,  color: "#9a6fc4", boost: .8 },
+    { key: "camped", label: "100-299",      min: 100, color: "#e0569a", boost: 2.2 },
+    { key: "trap",   label: "300+ gate kills", min: 300, color: "#ff3b3b", boost: 3.8 },
   ],
   "ratting": [
     { key: "none",   label: "no ratting",  min: 0,   color: "#26334a", boost: 0 },
@@ -1093,8 +1099,10 @@ function renderPvp(p) {
   const box = document.getElementById("pPvp");
   const r = pvpFor(p, "pvp-kills");
   const lines = [];
-  if (r.live) {
+  if (r.live && p.sec < 0.5) {     /* highsec shows this line under Risk */
     lines.push(`Last hour: ${r.ship} ship kills, ${r.pod} pod kills, ${r.npc} NPC kills, ${r.jumps} jumps`);
+  } else if (r.live && r.npc) {
+    lines.push(`Last hour: ${r.npc} NPC kills`);
   }
   if (riskData.pvp && p.sec < 0.5) {
     const h = r.hist, days = riskData.pvp.windowDays;
@@ -1188,25 +1196,26 @@ function renderRisk(p) {
 
 /* ---- route planner -----------------------------------------------------
    Dijkstra over the stargate graph. "Shortest" counts jumps. "Safer" makes
-   each system cost 1 + 3 x danger, where danger blends (tools/ambush.py
-   and the live feeds):
+   each system cost 1 + 3d + 2d² for danger d, where d blends
+   (tools/ambush.py and the live feeds):
      security band                 lowsec .25, nullsec .4
      30-day kills per day          .5 x ln(1 + k)
      30-day gate kills per day     .7 x ln(1 + g)    (camps weigh more)
      ship + pod kills, last hour   .6 x ln(1 + n)
-     highsec ganks per day, 30d    .8 x ln(1 + n)
-   Log scales keep one infamous pipe from dwarfing everything else; the
-   panel lists each term per jump so the pick can be checked. */
+     highsec ganks per day, 30d    1.2 x ln(1 + n)
+   Log scales keep counts comparable; the squared term makes notorious
+   systems (Ahbazon, Uedama) worth a long detour while quiet space stays
+   close to one jump each. The panel lists each term per jump. */
 function danger(p) {
   const h = pvpHist(p), days = (riskData.pvp && riskData.pvp.windowDays) || 1;
   const [ship = 0, pod = 0] = (riskData.activity && riskData.activity.systems[p.id]) || [];
   const gk = riskData.history && riskData.history.ganks[p.id];
   const band = p.sec >= 0.5 ? 0 : p.sec > 0 ? .25 : .4;
   return band + .5 * Math.log1p(h.k / days) + .7 * Math.log1p(h.g / days)
-       + .6 * Math.log1p(ship + pod) + (gk ? .8 * Math.log1p(gk.n / 30) : 0);
+       + .6 * Math.log1p(ship + pod) + (gk ? 1.2 * Math.log1p(gk.n / 30) : 0);
 }
 function findRoute(from, to, safe) {
-  const cost = id => safe ? 1 + 3 * danger(state.byId.get(id)) : 1;
+  const cost = id => { if (!safe) return 1; const d = danger(state.byId.get(id)); return 1 + 3 * d + 2 * d * d; };
   const dist = new Map([[from, 0]]), prev = new Map();
   const heap = [[0, from]];
   const push = item => {
@@ -1314,6 +1323,7 @@ function drawRoute() {
 }
 function openRoute(open) {
   document.getElementById("route").hidden = !open;
+  document.body.classList.toggle("route-open", open);
   document.getElementById("routeBtn").setAttribute("aria-expanded", String(open));
 }
 function wireRoute() {

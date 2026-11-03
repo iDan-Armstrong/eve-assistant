@@ -277,7 +277,7 @@ export function openOrrery(host, data, onClose) {
         rows: [["Gate type", gexit.type || ""],
                ["Leads to", gexit.to || ""],
                ["Distance from star", F.au(Math.hypot(...gexit.pos))]] },
-      gexit.name.replace(/^Stargate \(|\)$/g, ""), "gate", stacked * 13);
+      gexit.name.replace(/^Stargate \(|\)$/g, ""), "gate", stacked * 16);
     mesh.position.copy(p);
     const gg = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowTexture(), color: 0xe8d26a,
@@ -342,8 +342,13 @@ export function openOrrery(host, data, onClose) {
     }
   }
 
-  camera.position.set(maxR * .9, maxR * .55, maxR * .9);
-  controls.maxDistance = maxR * 3.2;
+  /* frame the whole system: fit a sphere of radius maxR inside the
+     narrower of the two fields of view, from the usual oblique angle */
+  const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+  const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+  const fitD = maxR * .92 / Math.sin(Math.min(vHalf, hHalf));
+  camera.position.set(.9, .55, .9).normalize().multiplyScalar(fitD);
+  controls.maxDistance = Math.max(maxR * 3.2, fitD * 1.5);
   controls.minDistance = 4;
 
   /* picking */
