@@ -1344,7 +1344,12 @@ function drawRoute() {
   list.querySelectorAll("li").forEach(li => li.onclick = () => {
     const id = +li.dataset.id; select(id); flyTo(state.byId.get(id).ll, Math.max(map.getZoom(), 6));
   });
-  map.fitBounds(L.latLngBounds(ps.map(p => p.ll)).pad(.25), { maxZoom: 7 });
+  /* keep the route clear of the planner: beside it on desktop, above it on phones */
+  const box = document.getElementById("route").getBoundingClientRect();
+  const phone = innerWidth <= 720;
+  map.fitBounds(L.latLngBounds(ps.map(p => p.ll)), { maxZoom: 7,
+    paddingTopLeft: phone ? [20, 130] : [box.right + 20, 70],
+    paddingBottomRight: phone ? [20, innerHeight - box.top + 20] : [20, 20] });
 }
 function openRoute(open) {
   document.getElementById("route").hidden = !open;
