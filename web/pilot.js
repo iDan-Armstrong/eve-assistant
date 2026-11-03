@@ -476,7 +476,9 @@ function reserveLine(p) {
 
 /* every signed-in pilot who has not chosen yet is asked, one at a time */
 function askUndecided() {
-  if (!reserves.relay || document.querySelector(".consent")) return;
+  if (document.querySelector(".consent")) return;
+  if (EveSSO.pilots().length && !devNoticeSeen()) { showDevNotice(); return; }   /* notice comes first */
+  if (!reserves.relay) return;
   const next = EveSSO.pilots().find(p => !shareDecided(p.id));
   if (next) askToShare(next);
 }
@@ -584,4 +586,35 @@ function corpmatesLine(p) {
   if (!here.length) return "";
   return here.map(r => `${esc(r.name)}${r.ship ? ` (${esc(typeName(r.ship))})` : ""}` +
     `${r.online ? "" : ", offline"}`).join("; ");
+}
+
+/* ---- in-development notice ------------------------------------------------
+   Shown to signed-in pilots until they acknowledge it; bump the version
+   to show it again after a big change. */
+const DEV_NOTICE = "atlas.devNotice.v1";
+const devNoticeSeen = () => { try { return localStorage.getItem(DEV_NOTICE) === "1"; } catch { return true; } };
+function showDevNotice() {
+  const box = document.createElement("div");
+  box.className = "consent";
+  box.setAttribute("role", "alertdialog");
+  box.setAttribute("aria-label", "New Eden Atlas is in development");
+  box.innerHTML = `<div class="c-card dev-card"><h3>In development</h3>
+    <p>The New Eden Atlas is a work in progress and strictly in development. It changes often, sometimes
+    several times a day, and features may move, break, or go down without notice while we build.</p>
+    <p>Feedback is very much appreciated: bugs, ideas, or anything that looks off.
+    Email <a href="mailto:NewEdenAtlas@gmail.com?subject=New%20Eden%20Atlas%20feedback">NewEdenAtlas@gmail.com</a>.</p>
+    <label class="c-opt"><input type="checkbox" id="devAck"> <span>I understand this is in development
+      and may change or be down at any time.</span></label>
+    <div class="c-buttons"><button data-act="ok" disabled>Continue</button></div></div>`;
+  document.body.appendChild(box);
+  const ack = box.querySelector("#devAck"), ok = box.querySelector("[data-act=ok]");
+  ack.onchange = () => { ok.disabled = !ack.checked; };
+  ok.onclick = () => {
+    try { localStorage.setItem(DEV_NOTICE, "1"); } catch { /* private mode */ }
+    box.remove();
+    askUndecided();
+  };
+  const card = box.querySelector(".c-card");
+  card.tabIndex = -1;
+  card.focus();
 }
