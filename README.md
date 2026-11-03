@@ -48,7 +48,13 @@ survey data:
   In the 3D view every body opens a profile window with its complete
   attribute record, and stations are symbolized by service capability
   (clone bay, factory/lab, market, basic) resolved through the SDE's
-  operation → services join.
+  operation → services join. Planets carry their sovereignty power and
+  workforce straight from the SDE's `planetResources` table. Two
+  attributes are *not* in the SDE and are labeled as references: PI raw
+  resources per planet type (stable game rules, from the EVE University
+  wiki) and typical belt ores per system, computed from security band,
+  empire quarter and the SDE's security class using EVE University's
+  ore-distribution table, which its own editors flag as pre-Catalyst.
 - **Relational** — the jump network is an edge list keyed by system ID;
   stations live in their own table (`stations.json`) with `systemId` as the
   foreign key; and the celestial hierarchy (region › system › star/planet ›

@@ -94,3 +94,32 @@ def test_station_service_classes_rank_by_distinctiveness():
     assert classify_services(["Market", "Fitting"]) == "market"
     assert classify_services(["Repair Facilities"]) == "basic"
     assert classify_services([]) == "basic"
+
+
+def test_planet_kind_and_pi_table():
+    from build_map_data import PI_RESOURCES, planet_kind
+    assert planet_kind("Planet (Gas)") == "Gas"
+    assert "Reactive Gas" in PI_RESOURCES["Gas"]
+    assert planet_kind("Planet (Shattered)") not in PI_RESOURCES  # no PI
+    assert all(len(v) == 5 for v in PI_RESOURCES.values())
+
+
+def test_typical_ores_by_band_quarter_and_class():
+    from build_map_data import typical_ores
+    # highsec 1.0: common ores only, no 0.9-band extras
+    assert typical_ores(1.0, 0.95, "B", "Caldari State") == ["Veldspar", "Scordite"]
+    # caldari 0.7 picks up plagioclase
+    assert "Plagioclase" in typical_ores(0.7, 0.7, "C", "Caldari State")
+    # deep lowsec adds the quarter's rare ore
+    assert "Hemorphite" in typical_ores(0.1, 0.1, "E", "Gallente Federation")
+    # nullsec class F at -0.8: bistot, arkonor, pyroxeres, mercoxit
+    assert set(typical_ores(-0.8, -0.8, "F", "")) == {
+        "Bistot", "Arkonor", "Pyroxeres", "Mercoxit"}
+    # Drone regions (class K)
+    assert typical_ores(-0.3, -0.3, "K", "") == ["Arkonor", "Bistot", "Mercoxit"]
+
+
+def test_typical_ores_reads_sde_subclass_suffix():
+    from build_map_data import typical_ores
+    # SDE securityClass values carry a numeric suffix (D4R-H7 is "H7")
+    assert "Bistot" in typical_ores(-1.0, -1.0, "H7", "")

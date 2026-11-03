@@ -198,7 +198,11 @@ export function openOrrery(host, data, onClose) {
              + (pl.belts.length ? `, ${pl.belts.length} belts` : ""),
         rows: [["Type", kindName], ...statRows(pl.st),
                ["Moons", pl.moons.length || ""],
-               ["Asteroid belts", pl.belts.length || ""]] },
+               ["Asteroid belts", pl.belts.length || ""],
+               ["PI resources", (pl.pi && pl.pi.length) ? pl.pi.join(", ")
+                  : (kindName === "Shattered" ? "none (cannot be colonized)" : "")],
+               ["Sov power", pl.power ? pl.power.toLocaleString() : ""],
+               ["Sov workforce", pl.workforce ? pl.workforce.toLocaleString() : ""]] },
       short, "pl");
     mesh.position.copy(p);
 
@@ -244,7 +248,12 @@ export function openOrrery(host, data, onClose) {
         new THREE.SphereGeometry(.9, 8, 8),
         new THREE.MeshBasicMaterial({ visible: false })),
         { kind: "Asteroid belt", name: b.name, sub: `near ${short}`,
-          rows: [["Near", pl.name], ...statRows(b.st)] }, null);
+          rows: [["Near", pl.name],
+                 ["Typical ores", (system.ores || []).length ? system.ores.join(", ")
+                    : "not covered by the reference table"],
+                 ["Ore source", (system.ores || []).length
+                    ? "EVE University reference (flagged pre-Catalyst)" : ""],
+                 ...statRows(b.st)] }, null);
       hit.position.copy(centre);
     }
   }
@@ -386,12 +395,35 @@ export function openOrrery(host, data, onClose) {
   const v = new THREE.Vector3();
   function placeLabels() {
     const r = renderer.domElement.getBoundingClientRect();
-    for (const { el, obj, dy } of labels) {
-      v.copy(obj.position).project(camera);
-      if (v.z > 1) { el.style.display = "none"; continue; }
-      el.style.display = "";
-      el.style.left = ((v.x * .5 + .5) * r.width) + "px";
-      el.style.top = ((-v.y * .5 + .5) * r.height - dy) + "px";
+    /* greedy collision placement each frame: a label takes the first of
+       four slots around its object that is clear of labels already
+       placed; stacked objects (Jita's four gates) fan into the slots */
+    const boxes = [], pad = 3;
+    const hit = b => boxes.some(o => b.x < o.x + o.w + pad && o.x < b.x + b.w + pad &&
+                                     b.y < o.y + o.h + pad && o.y < b.y + b.h + pad);
+    for (const L of labels) {
+      v.copy(L.obj.position).project(camera);
+      if (v.z > 1) { L.el.style.display = "none"; continue; }
+      if (!L.w) { L.el.style.display = ""; L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; }
+      const sx = (v.x * .5 + .5) * r.width, sy = (-v.y * .5 + .5) * r.height;
+      const g = 12;
+      const slots = [[-L.w / 2, -L.h - g], [g, -L.h / 2],
+                     [-L.w / 2, g], [-L.w - g, -L.h / 2],
+                     [g + 6, -L.h * 1.5 - g], [g + 6, L.h * .5 + g],
+                     [-L.w - g - 6, L.h * .5 + g], [-L.w - g - 6, -L.h * 1.5 - g]];
+      let placed = false;
+      for (const [dx, dy] of slots) {
+        const b = { x: sx + dx, y: sy + dy, w: L.w, h: L.h };
+        if (!hit(b)) {
+          boxes.push(b);
+          L.el.style.display = "";
+          L.el.style.left = b.x + "px";
+          L.el.style.top = b.y + "px";
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) L.el.style.display = "none";
     }
   }
 

@@ -195,11 +195,11 @@
                 radial-gradient(circle at 55% 75%, #c9a86a 1.5px, transparent 2px); }
   .k-moon { width: 7px; height: 7px; border-radius: 50%; background: #9aa4b5; }
   .orr-label {
-    position: absolute; z-index: 2; transform: translate(-50%, -160%);
-    font-size: 11px; color: #aeb9cc; pointer-events: none;
-    text-shadow: 0 1px 4px #05080f, 0 0 2px #05080f;
+    position: absolute; z-index: 3; white-space: nowrap;
+    font-size: 12.5px; font-weight: 600; color: #eef3fa; pointer-events: none;
+    text-shadow: 0 0 2px #05080f, 0 0 5px #05080f, 0 1px 3px #000, 0 0 9px #05080f;
   }
-  .orr-label.gate { color: #d8c470; }
+  .orr-label.gate { color: #f2dc72; }
   .orr-tip {
     position: absolute; z-index: 3; pointer-events: none;
     background: rgba(13,19,31,.95); border: 1px solid var(--panel-edge);
@@ -247,17 +247,18 @@
 
   /* ---- map labels --------------------------------------------------- */
   .region-label, .sys-label { background: none; border: 0; }
+  /* labels: absolutely placed by the collision pass (left/top inline) */
+  .region-label div, .sys-label div { position: absolute; white-space: nowrap; }
   .region-label div {
-    color: #5e7194; font-size: 13px; font-weight: 600; letter-spacing: .28em;
-    white-space: nowrap; transform: translate(-50%, -50%);
-    text-shadow: 0 0 6px var(--bg), 0 0 2px var(--bg);
-    opacity: .85;
+    color: #ffffff; font-size: 15px; font-weight: 700; letter-spacing: .2em;
+    line-height: 18px;
+    text-shadow: 0 0 3px #060a12, 0 0 6px #060a12, 0 0 10px #060a12, 0 1px 2px #000;
   }
   .sys-label div {
-    color: #93a3ba; font-size: 11px; white-space: nowrap;
-    transform: translate(7px, -50%);
-    text-shadow: 0 1px 3px var(--bg), 0 0 2px var(--bg);
+    color: #e3eaf4; font-size: 12px; font-weight: 600; line-height: 14px;
+    text-shadow: 0 0 2px #060a12, 0 0 4px #060a12, 0 1px 3px #000, 0 0 8px #060a12;
   }
+  .sys-label div.hub { color: #ffffff; }
   .hide-region-labels .region-label, .hide-sys-labels .sys-label { display: none; }
 
   .leaflet-control-attribution {
@@ -269,7 +270,6 @@
     border-color: var(--panel-edge) !important;
   }
   .leaflet-top.leaflet-left { top: 50px; }
-  .far-out .region-label div { font-size: 10.5px; letter-spacing: .2em; opacity: .7; }
   .leaflet-tooltip.sys-tip {
     background: var(--panel); border: 1px solid var(--panel-edge); color: var(--ink);
     border-radius: 3px; font: inherit; font-size: 12px; padding: 3px 8px;
@@ -354,12 +354,14 @@
 <script>
 "use strict";
 
-/* EVE's in-game security color set — the data carries the color. */
+/* The in-game star-map security ramp: deep blue core highsec, through
+   cyan and green to the 0.5 yellow edge, orange-red lowsec, and the
+   purple of nullsec (everything at or below 0.0). */
 const SEC_COLORS = {
-  "1.0":"#2fefef","0.9":"#48f0c0","0.8":"#00ef47","0.7":"#00f000","0.6":"#8fef2f",
-  "0.5":"#efef00","0.4":"#d77700","0.3":"#f06000","0.2":"#f04800","0.1":"#d73000","0.0":"#f00000",
+  "1.0":"#2c75e1","0.9":"#399aeb","0.8":"#4ecef8","0.7":"#60d9a3","0.6":"#71e452",
+  "0.5":"#eeff83","0.4":"#de6a0c","0.3":"#ce4611","0.2":"#bb1014","0.1":"#6d221d","0.0":"#8f2f69",
 };
-const secColor = s => SEC_COLORS[Math.max(0, s).toFixed(1)] || "#f00000";
+const secColor = s => SEC_COLORS[Math.max(0, s).toFixed(1)] || SEC_COLORS["0.0"];
 
 const JUMP_STYLE = {
   local:        { color: "#3b4b6b", opacity: .34, weight: .7 },
@@ -465,14 +467,33 @@ async function boot() {
     (state.adj.get(to) || state.adj.set(to, []).get(to)).push(from);
   }
 
-  /* region labels */
-  const regionLayer = L.layerGroup(regions.regions
-    .filter(r => r.systems > 0)
-    .map(r => L.marker([r.center[1], r.center[0]], {
-      interactive: false, keyboard: false,
-      icon: L.divIcon({ className: "region-label", html: `<div>${r.name.toUpperCase()}</div>` }),
-    }))).addTo(map);
+  /* labels live on their own pane, above lines, markers and arrows */
+  map.createPane("labels");
+  map.getPane("labels").style.zIndex = 650;
+  map.getPane("labels").style.pointerEvents = "none";
+  const regionLayer = L.layerGroup().addTo(map);
   state.sysLabels.addTo(map);
+  const regionList = regions.regions.filter(r => r.systems > 0)
+    .sort((a, b) => b.systems - a.systems);   // big regions win collisions
+
+  function refreshRegionLabels() {
+    regionLayer.clearLayers();
+    const font = '700 15px "Chakra Petch", sans-serif';
+    const placed = placeLabels(regionList.map(r => {
+      const text = r.name.toUpperCase();
+      const w = textWidth(text, font) + text.length * 15 * .2;  // + letter-spacing
+      const h = 18;
+      return { r, text, ll: [r.center[1], r.center[0]], w, h,
+               offsets: [[-w / 2, -h / 2], [-w / 2, -h / 2 - 18], [-w / 2, -h / 2 + 18]] };
+    }), [], 10);
+    for (const c of placed) {
+      regionLayer.addLayer(L.marker(c.ll, {
+        pane: "labels", interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "region-label", iconSize: [0, 0],
+          html: `<div style="left:${c.at[0]}px;top:${c.at[1]}px">${c.text}</div>` }),
+      }));
+    }
+  }
 
   map.fitBounds(L.latLngBounds(bounds).pad(.05));
   const meta = sysFC.meta;
@@ -489,20 +510,35 @@ async function boot() {
     const z = map.getZoom(), r = radiusFor(z);
     state.markers.forEach((m, id) => m.setRadius(state.byId.get(id).hub ? r + 1.3 : r));
     document.body.classList.toggle("hide-region-labels", z > REGION_LABEL_MAX_ZOOM || !tLabels.checked);
-    document.body.classList.toggle("far-out", z < 3.5);
+    refreshRegionLabels();
     refreshSysLabels();
   }
   function refreshSysLabels() {
     state.sysLabels.clearLayers();
     if (map.getZoom() < SYS_LABEL_ZOOM || !tLabels.checked) return;
     const vb = map.getBounds().pad(.1);
-    let n = 0;
-    for (const [id, p] of state.byId) {
-      if (!vb.contains(p.ll)) continue;
-      if (++n > 500) break;
-      state.sysLabels.addLayer(L.marker(p.ll, {
-        interactive: false, keyboard: false,
-        icon: L.divIcon({ className: "sys-label", html: `<div>${p.name}</div>` }),
+    const font = '600 12px "Chakra Petch", sans-serif';
+    const gap = radiusFor(map.getZoom()) + 4, h = 14;
+    /* every visible system dot is an obstacle, so labels never sit on a
+       neighbor's marker */
+    const visible = [...state.byId.values()].filter(p => vb.contains(p.ll));
+    const dots = visible.map(p => {
+      const pt = map.latLngToContainerPoint(p.ll), r = radiusFor(map.getZoom()) + 1;
+      return { x: pt.x - r, y: pt.y - r, w: 2 * r, h: 2 * r };
+    });
+    const rank = p => (p.id === state.selected ? 1e7 : 0) + (p.hub ? 1e5 : 0)
+                      + p.stations * 100 + p.gates;
+    const placed = placeLabels(visible.sort((a, b) => rank(b) - rank(a)).map(p => {
+      const w = textWidth(p.name, font);
+      return { p, text: p.name, ll: p.ll, w, h,
+               offsets: [[gap, -h / 2], [-gap - w, -h / 2],
+                         [-w / 2, -h - gap - 2], [-w / 2, gap + 2]] };
+    }), dots);
+    for (const c of placed) {
+      state.sysLabels.addLayer(L.marker(c.ll, {
+        pane: "labels", interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "sys-label", iconSize: [0, 0],
+          html: `<div class="${c.p.hub ? "hub" : ""}" style="left:${c.at[0]}px;top:${c.at[1]}px">${c.text}</div>` }),
       }));
     }
   }
@@ -532,6 +568,40 @@ async function boot() {
   }
 }
 
+/* ---- label placement ------------------------------------------------- */
+const _measure = document.createElement("canvas").getContext("2d");
+function textWidth(text, font) { _measure.font = font; return _measure.measureText(text).width; }
+
+/* Greedy label placement: candidates arrive best-first; each takes the
+   first offset whose box clears every box already placed (and the fixed
+   obstacles). Labels with no clear slot are dropped rather than drawn
+   on top of each other. Returns [{...candidate, at:[dx,dy]}]. */
+/* on-screen chrome (header pieces, legend, open panel, zoom buttons)
+   becomes obstacles, so map labels never slide underneath it */
+function uiObstacles() {
+  const c = map.getContainer().getBoundingClientRect();
+  return [".wordmark", ".search", ".toggles", ".legend", ".panel.open",
+          ".leaflet-control-zoom", ".leaflet-control-attribution"]
+    .flatMap(sel => [...document.querySelectorAll(sel)])
+    .map(el => el.getBoundingClientRect())
+    .filter(r => r.width && r.height)
+    .map(r => ({ x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height }));
+}
+
+function placeLabels(cands, obstacles, pad = 2) {
+  const boxes = obstacles.concat(uiObstacles()), out = [];
+  const hit = b => boxes.some(o => b.x < o.x + o.w + pad && o.x < b.x + b.w + pad &&
+                                   b.y < o.y + o.h + pad && o.y < b.y + b.h + pad);
+  for (const c of cands) {
+    const pt = map.latLngToContainerPoint(c.ll);
+    for (const [dx, dy] of c.offsets) {
+      const b = { x: pt.x + dx, y: pt.y + dy, w: c.w, h: c.h };
+      if (!hit(b)) { boxes.push(b); out.push({ ...c, at: [dx, dy] }); break; }
+    }
+  }
+  return out;
+}
+
 function flyTo(ll, z) {
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   reduced ? map.setView(ll, z) : map.flyTo(ll, z, { duration: .9 });
@@ -559,7 +629,8 @@ function select(id) {
      ["stations", p.stations], ["gates", p.gates]]
     .map(([k, v]) => `<div><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
   const flags = [p.hub && "trade-lane hub", p.border && "border system"].filter(Boolean);
-  document.getElementById("pFlags").textContent = flags.join(", ");
+  document.getElementById("pFlags").textContent = flags.join(", ") +
+    (p.ores && p.ores.length ? `${flags.length ? " — " : ""}belt ores: ${p.ores.join(", ")}` : "");
 
   const neighbors = (state.adj.get(id) || []).map(nid => state.byId.get(nid))
     .sort((a, b) => a.name.localeCompare(b.name));

@@ -265,19 +265,117 @@ def trailing_number(name: str) -> int:
     return int(tail) if tail.isdigit() else 0
 
 
-def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list[dict]:
+# --- reference tables NOT in the SDE ---------------------------------------
+# Planetary Industry raw (P0) resources per planet type. Source: EVE
+# University wiki, "Planet" (wiki.eveuniversity.org/Planet). Stable game
+# rules; shattered planets cannot be colonized.
+PI_RESOURCES = {
+    "Barren": ["Aqueous Liquids", "Base Metals", "Carbon Compounds",
+               "Micro Organisms", "Noble Metals"],
+    "Gas": ["Aqueous Liquids", "Base Metals", "Ionic Solutions",
+            "Noble Gas", "Reactive Gas"],
+    "Ice": ["Aqueous Liquids", "Heavy Metals", "Micro Organisms",
+            "Noble Gas", "Planktic Colonies"],
+    "Lava": ["Base Metals", "Felsic Magma", "Heavy Metals",
+             "Non-CS Crystals", "Suspended Plasma"],
+    "Oceanic": ["Aqueous Liquids", "Carbon Compounds", "Complex Organisms",
+                "Micro Organisms", "Planktic Colonies"],
+    "Plasma": ["Base Metals", "Heavy Metals", "Noble Metals",
+               "Non-CS Crystals", "Suspended Plasma"],
+    "Storm": ["Aqueous Liquids", "Base Metals", "Ionic Solutions",
+              "Noble Gas", "Suspended Plasma"],
+    "Temperate": ["Aqueous Liquids", "Autotrophs", "Carbon Compounds",
+                  "Complex Organisms", "Micro Organisms"],
+}
+
+
+def planet_kind(type_name: str) -> str:
+    """'Planet (Gas)' -> 'Gas'."""
+    if "(" in type_name and type_name.endswith(")"):
+        return type_name[type_name.index("(") + 1:-1]
+    return type_name
+
+
+# Typical belt ores. Source: EVE University wiki, "Asteroid"
+# (wiki.eveuniversity.org/Asteroid) — which its own editors flag as
+# needing an update for the Catalyst expansion, so the viewer labels this
+# as a reference, not survey data. Highsec/lowsec vary by empire quarter;
+# nullsec keys on the SDE's securityClass plus true security.
+QUARTER = {"Amarr Empire": "amarr", "Ammatar Mandate": "amarr",
+           "Khanid Kingdom": "amarr", "Caldari State": "caldari",
+           "Gallente Federation": "gallente", "Minmatar Republic": "minmatar"}
+HISEC_09 = {"amarr": ["Pyroxeres"], "caldari": ["Pyroxeres"],
+            "gallente": ["Plagioclase"], "minmatar": ["Plagioclase"]}
+LOWSEC = {"amarr": ["Pyroxeres", "Kernite", "Jaspet"],
+          "caldari": ["Kernite", "Pyroxeres"],
+          "gallente": ["Omber", "Jaspet"], "minmatar": ["Kernite", "Omber"]}
+LOWSEC_DEEP = {"amarr": ["Hemorphite"], "caldari": ["Hedbergite"],
+               "gallente": ["Hemorphite"], "minmatar": ["Hedbergite"]}
+NULLSEC = [  # (true-sec threshold, security class, ore)
+    (0.0, "G", "Kernite"), (0.0, "H", "Pyroxeres"), (0.0, "J", "Pyroxeres"),
+    (-0.4, "G", "Pyroxeres"),
+    (-0.5, "F", "Bistot"), (-0.5, "H", "Kernite"), (-0.5, "J", "Bistot"),
+    (-0.6, "F", "Arkonor"), (-0.6, "G", "Bistot"),
+    (-0.7, "F", "Pyroxeres"), (-0.7, "I", "Arkonor"),
+    (-0.8, "F", "Mercoxit"),
+    (-0.9, "H", "Bistot"), (-0.9, "I", "Kernite"), (-0.9, "J", "Arkonor"),
+]
+
+
+def typical_ores(sec: float, sec_true: float, sec_class: str, faction: str) -> list[str]:
+    """Reference ore list for a system's belts (see NULLSEC/QUARTER notes)."""
+    ores: list[str] = []
+    q = QUARTER.get(faction)
+    sec_class = (sec_class or "")[:1]   # SDE writes subclasses: "H7" -> "H"
+    if sec >= 0.5:
+        ores += ["Veldspar", "Scordite"]
+        if sec <= 0.9 and q:
+            ores += HISEC_09[q]
+            if q == "caldari" and sec <= 0.7:
+                ores.append("Plagioclase")
+    elif sec > 0.0:
+        if q:
+            ores += LOWSEC[q]
+            if sec <= 0.2:
+                ores += LOWSEC_DEEP[q]
+    else:
+        if sec_class == "K":
+            ores += ["Arkonor", "Bistot", "Mercoxit"]
+        else:
+            ores += [o for thr, cls, o in NULLSEC
+                     if cls == sec_class and sec_true <= thr]
+    return list(dict.fromkeys(ores))   # de-dupe, keep order
+
+
+def load_planet_resources(root: Path) -> dict[int, dict]:
+    """fsd/planetResources.yaml: per-planet sovereignty power/workforce
+    (the Equinox-era upgrade economy). Keyed by planet item ID."""
+    path = root.parent.parent / "fsd" / "planetResources.yaml"
+    if not path.is_file():
+        return {}
+    return yaml.load(path.read_text(), Loader) or {}
+
+
+def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str],
+                planet_res: dict[int, dict] | None = None) -> list[dict]:
+    planet_res = planet_res or {}
     rows = []
     for pid, p in (doc.get("planets") or {}).items():
         if not isinstance(p, dict):
             continue
+        tname = types.get(p.get("typeID"), "")
+        res = planet_res.get(pid) or {}
         rows.append({
             "id": pid,
             "name": names.get(pid, ""),
             "idx": p.get("celestialIndex", 0),
-            "type": types.get(p.get("typeID"), ""),
+            "type": tname,
             "radiusKm": round(p.get("radius", 0) / 1000),
             "pos": au3(p.get("position", (0, 0, 0))),
             "st": stats_row(p),
+            "pi": PI_RESOURCES.get(planet_kind(tname), []),
+            "power": res.get("power", 0),
+            "workforce": res.get("workforce", 0),
             "belts": sorted(({"id": bid, "name": names.get(bid, ""),
                               "pos": au3(b.get("position", (0, 0, 0))),
                               "st": stats_row(b)}
@@ -295,6 +393,7 @@ def planet_rows(doc: dict, names: dict[int, str], types: dict[int, str]) -> list
 
 def load_universe(root: Path, names: dict[int, str], types: dict[int, str]):
     """Walk universe/eve/<Region>/<Constellation>/<System>/solarsystem.yaml."""
+    planet_res = load_planet_resources(root)
     systems: dict[int, dict] = {}
     regions: dict[int, dict] = {}
     celestials: dict[int, dict] = {}  # region id -> {system id -> hierarchy}
@@ -354,10 +453,14 @@ def load_universe(root: Path, names: dict[int, str], types: dict[int, str]):
                     "hub": bool(doc.get("hub")),
                     "border": bool(doc.get("border")),
                 }
+                if belts:
+                    systems[sid]["ores"] = typical_ores(
+                        sec_round(doc["security"]), doc["security"],
+                        doc.get("securityClass", ""), regions[rid]["faction"])
                 regions[rid]["systems"] += 1
                 celestials[rid][sid] = {
                     "star": star_row(doc, names, types),
-                    "planets": planet_rows(doc, names, types),
+                    "planets": planet_rows(doc, names, types, planet_res),
                     "gates": [{"id": gid, "name": names.get(gid, ""),
                                "type": types.get(g.get("typeID"), ""),
                                "pos": au3(g.get("position", (0, 0, 0)))}
