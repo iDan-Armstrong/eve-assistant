@@ -51,7 +51,7 @@
     padding: 1px 6px; font-weight: 600; letter-spacing: .08em; font-size: 10.5px;
   }
 
-  .search { position: relative; flex: 0 1 340px; }
+  .search { position: relative; flex: 0 1 300px; min-width: 120px; }
   .search input {
     width: 100%; padding: 7px 12px;
     background: rgba(13,19,31,.85); color: var(--ink);
@@ -76,7 +76,7 @@
 
   .toggles { margin-left: auto; position: relative; }
   .toggles summary {
-    list-style: none; cursor: pointer; user-select: none;
+    white-space: nowrap; list-style: none; cursor: pointer; user-select: none;
     background: rgba(13,19,31,.85); border: 1px solid var(--panel-edge); border-radius: 3px;
     color: var(--ink); font-size: 12.5px; padding: 6px 12px;
   }
@@ -181,6 +181,40 @@
   .route-actions button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
     color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .route-actions button:hover { background: #1b2a44; }
+
+  /* ---- pilot login ------------------------------------------------- */
+  .pilot { position: relative; }
+  .pilot-btn { display: flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+  .route-btn { white-space: nowrap; }
+  @media (max-width: 1640px) { .layers button small { display: none; } .layers button { padding: 6px 9px; } header { gap: 12px; } }
+  .pilot-btn img { border-radius: 2px; }
+  .pilot-btn:disabled { opacity: .5; cursor: default; }
+  .pilot-menu {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 1200; width: 290px;
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 3px; padding: 6px 0;
+  }
+  .pilot-menu[hidden] { display: none; }
+  .pm-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; }
+  .pm-row:hover { background: #162032; }
+  .pm-row.active { box-shadow: inset 3px 0 0 #ffcf4a; }
+  .pm-row img { border-radius: 2px; }
+  .pm-who { flex: 1; min-width: 0; font-size: 13px; }
+  .pm-where { font-size: 11px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pm-on { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #5be37b; margin-right: 5px; }
+  .pm-row button { background: none; border: 0; color: var(--ink-dim); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+  .pm-row button:hover { color: var(--ink); }
+  .pm-foot { display: flex; gap: 6px; padding: 6px 10px 2px; border-top: 1px solid var(--panel-edge); margin-top: 4px; }
+  .pm-foot button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
+    color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
+  .pm-note { padding: 5px 10px 2px; font-size: 10.5px; color: var(--ink-faint); }
+  .leaflet-tooltip.pilot-tag { background: rgba(6,10,18,.85); border: 1px solid #ffffff55; color: #fff;
+    font: 600 11px "Chakra Petch", sans-serif; padding: 1px 6px; box-shadow: none; }
+  .leaflet-tooltip.pilot-tag::before { display: none; }
+  .route .r-pilot { display: flex; gap: 6px; }
+  .route .r-pilot[hidden] { display: none; }
+  .route .r-pilot button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
+    color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
+  .route .r-pilot button:hover { background: #1b2a44; }
 
   .bulwark-key { margin-top: 7px; font-size: 11px; color: var(--ink-dim); }
   .bulwark-key .bk-ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
@@ -425,11 +459,16 @@
       <label><input type="checkbox" id="tBulwark" checked> bulwarks</label>
       <label><input type="checkbox" id="tIce"> <i class="sw" style="border-color:#8fe3ff"></i>ice fields</label>
       <label><input type="checkbox" id="tJove"> <i class="sw" style="border-color:#b48cff;border-style:dotted"></i>Jove observatories</label>
+      <label hidden><input type="checkbox" id="tPilots" checked> <i class="sw" style="border-color:#ffcf4a"></i>my pilots and assets</label>
       <label><input type="checkbox" id="tStrat"> <i class="sw" style="border-color:#ff6b3d"></i>entry systems, chokepoints</label>
       <label><input type="checkbox" id="tHoles"> <i class="sw" style="border-color:#ff8fd8"></i>Thera / Turnur holes</label>
     </div>
   </details>
   <button class="route-btn" id="routeBtn" aria-expanded="false" aria-controls="route">Route</button>
+  <div class="pilot">
+    <button class="route-btn pilot-btn" id="pilotBtn" aria-expanded="false" aria-controls="pilotMenu" disabled>Pilot login</button>
+    <div class="pilot-menu" id="pilotMenu" hidden></div>
+  </div>
 </header>
 
 <section class="route" id="route" hidden aria-label="Route planner">
@@ -441,6 +480,10 @@
       <button data-mode="short" aria-pressed="false">Shortest</button>
       <button data-mode="safe" aria-pressed="true">Safer</button>
       <button data-mode="clear" aria-pressed="false" title="Clear the route">Clear</button>
+    </div>
+    <div class="r-pilot" id="rPilot" hidden>
+      <button id="rFromMe">From my location</button>
+      <button id="rAutopilot">Send to autopilot</button>
     </div>
     <div class="r-sum" id="rSum">Pick two systems. Safer weighs 30 days of kills, gate camps, the last hour of kills and security band.</div>
   </div>
@@ -478,6 +521,7 @@
   <div class="panel-body">
     <div class="attr-grid" id="pAttrs"></div>
     <div class="flags" id="pFlags"></div>
+    <div class="risk-box" id="pPilot"></div>
     <div class="risk-box" id="pRisk"></div>
     <div class="risk-box" id="pPvp"></div>
     <div class="star-line" id="pStar"></div>
@@ -978,6 +1022,7 @@ async function boot() {
     ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
   wireRoute();
+  if (typeof startPilots === "function") startPilots();
 
   const want = decodeURIComponent((location.hash.match(/^#s=(.+)/) || [])[1] || "");
   if (want) {
@@ -1208,6 +1253,8 @@ function drawRoute() {
   const sum = document.getElementById("rSum"), list = document.getElementById("rList");
   if (route.layer) { route.layer.remove(); route.layer = null; }
   list.innerHTML = "";
+  route.path = null;
+  document.getElementById("rPilot").hidden = !(typeof pilotState !== "undefined" && pilotState.data.size);
   const byName = n => [...state.byId.values()].find(p => p.name.toLowerCase() === n.trim().toLowerCase());
   const a = byName(document.getElementById("rFrom").value), b = byName(document.getElementById("rTo").value);
   if (!a || !b || a === b) {
@@ -1216,6 +1263,7 @@ function drawRoute() {
   }
   const shortest = findRoute(a.id, b.id, false);
   const path = route.mode === "safe" ? findRoute(a.id, b.id, true) : shortest;
+  route.path = path;
   if (!path) { sum.textContent = `No stargate route from ${a.name} to ${b.name}.`; return; }
   const ps = path.map(id => state.byId.get(id));
   const total = ps.slice(1).reduce((t, p) => t + danger(p), 0);
@@ -1293,6 +1341,16 @@ function wireRoute() {
     drawRoute();
   };
   document.getElementById("routeFromHere").onclick = here("rFrom");
+  document.getElementById("rFromMe").onclick = () => {
+    const name = typeof pilotLocationName === "function" && pilotLocationName();
+    if (name) { document.getElementById("rFrom").value = name; drawRoute(); }
+  };
+  document.getElementById("rAutopilot").onclick = async () => {
+    document.getElementById("rSum").textContent = "Sending waypoints…";
+    const msg = await sendToAutopilot(route.path);
+    drawRoute();
+    document.getElementById("rSum").insertAdjacentHTML("afterbegin", `<b>${msg}</b><br>`);
+  };
   document.getElementById("routeToHere").onclick = here("rTo");
 }
 
@@ -1363,6 +1421,7 @@ function select(id) {
   if (p.partial) flags.push("new system: moons, belts and stations arrive with the next full data refresh");
   renderRisk(p);
   renderPvp(p);
+  if (typeof renderPilotHere === "function") renderPilotHere(p);
   document.getElementById("pFlags").textContent = flags.join(", ") +
     (p.ores && p.ores.length ? `${flags.length ? "; " : ""}belt ores: ${p.ores.join(", ")}` : "") +
     (p.bulwark && p.bulwark.ore
@@ -1534,5 +1593,8 @@ boot().catch(err => {
   document.getElementById("boot").textContent = "Could not load map data. Run tools/build_map_data.py first. " + err;
 });
 </script>
+<script src="sso.js"></script>
+<script src="pilot_core.js"></script>
+<script src="pilot.js"></script>
 </body>
 </html>

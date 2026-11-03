@@ -156,6 +156,31 @@ day and typical gang size, band changes and chokepoints. Pochven and
 Zarzakh gates are left out of routing. Use **Route from here** and
 **Route to here** on any system panel to set the ends.
 
+### Pilot login (EVE SSO)
+
+**Pilot login** signs characters in with CCP's single sign-on, using the
+OAuth 2 PKCE flow made for clients that cannot keep a secret. There is no
+server: the browser makes a one-time verifier, trades CCP's code for
+tokens, keeps them in its own storage, and sends them only to CCP. Several
+characters can be signed in at once, and signing one out also revokes its
+token with CCP. Scopes are read-only apart from setting autopilot
+waypoints.
+
+Once signed in, the **my pilots and assets** overlay joins each
+character's data onto the map by system ID:
+
+- current location (a dashed white ring with the pilot's name) and ship;
+- assets per system, valued at CCP's average market prices (gold, sized
+  by value). ESI returns assets as a flat table whose parent can be another
+  item, so `web/pilot_core.js` walks each item up through containers and
+  ship holds to its station, structure or system before the join;
+- home and jump clones, PI colonies, active industry jobs, and 30 days of
+  the mining ledger, all listed in the system panel.
+
+The route planner gains **From my location** and **Send to autopilot**,
+which sets the in-game route jump by jump, so the game flies the safer
+route rather than its own.
+
 ### Live data
 
 Live inputs refresh hourly: a scheduled GitHub Action runs
