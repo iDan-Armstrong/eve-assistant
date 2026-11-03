@@ -1,5 +1,13 @@
 # eve-assistant — New Eden Atlas
 
+![Status](https://img.shields.io/badge/status-in%20development-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+> **In development.** Live preview: https://idan-armstrong.github.io/eve-assistant/
+> — feedback welcome via [Issues](https://github.com/iDan-Armstrong/eve-assistant/issues).
+> The basemap is currently built from a 2024 static data export; a refresh
+> to current data (Cradle of War era) is in progress.
+
 An interactive star atlas of the EVE Online universe, built the way a GIS
 professional builds a map: **5,432 real solar systems** as point features with
 full attribute data, **6,888 stargate connections** as a line network,

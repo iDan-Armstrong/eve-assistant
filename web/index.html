@@ -46,6 +46,10 @@
     color: var(--ink); white-space: nowrap; user-select: none;
   }
   .wordmark span { color: var(--ink-dim); font-weight: 300; letter-spacing: .1em; font-size: 11px; margin-left: 10px; }
+  .wordmark .preview-tag {
+    color: #e8a13c; border: 1px solid #6b4a1c; border-radius: 3px;
+    padding: 1px 6px; font-weight: 600; letter-spacing: .08em; font-size: 10.5px;
+  }
 
   .search { position: relative; flex: 0 1 340px; }
   .search input {
@@ -307,7 +311,8 @@
 <div id="map" role="application" aria-label="Map of New Eden"></div>
 
 <header>
-  <div class="wordmark">NEW EDEN ATLAS<span>eve-assistant</span></div>
+  <div class="wordmark">NEW EDEN ATLAS<span>eve-assistant</span><span class="preview-tag"
+    title="In development: built on a 2024 static data export, refresh in progress">preview</span></div>
   <div class="search">
     <input id="q" type="search" placeholder="Find a system or region  ( / )" autocomplete="off"
            aria-label="Find a system or region">
