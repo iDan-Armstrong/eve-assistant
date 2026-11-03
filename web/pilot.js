@@ -72,6 +72,7 @@ async function refreshPilots() {
   reportReserves();
   reportPresence();
   loadCorpmates();
+  renderCorpMenu();
   renderPilotMenu();
   if (state.selected) renderPilotHere(state.byId.get(state.selected));
 }
@@ -520,7 +521,7 @@ function askToShare(pilot) {
    Pilots who tick "location" report their system, ship and online status
    every 2 minutes while the Atlas is open; the relay keeps them per
    corporation and serves them only to verified members of that corp. */
-const corpmates = { list: new Map(), layer: L.layerGroup(), rings: [] };
+const corpmates = { list: new Map(), layer: L.layerGroup(), rings: [], corps: [], names: new Map(), focus: false };
 
 async function reportPresence(stopId = null) {
   if (!reserves.relay) return;
@@ -544,10 +545,16 @@ async function loadCorpmates() {
         body: JSON.stringify({ token: await EveSSO.token(p.id) }) }).then(x => x.json());
       if (!r.pilots || corps.has(r.corporation)) continue;
       corps.add(r.corporation);
-      for (const [id, rec] of Object.entries(r.pilots)) if (!own.has(+id)) list.set(+id, rec);
+      for (const [id, rec] of Object.entries(r.pilots)) if (!own.has(+id)) list.set(+id, { ...rec, corp: r.corporation });
     } catch { /* relay down */ }
   }
   corpmates.list = list;
+  corpmates.corps = [...corps];
+  for (const c of corps) {
+    if (corpmates.names.has(c)) continue;
+    try { const info = await EveSSO.esiPublic(`/corporations/${c}`); corpmates.names.set(c, `${info.name} [${info.ticker}]`); }
+    catch { corpmates.names.set(c, `corporation ${c}`); }
+  }
   const missing = [...list.values()].map(r => r.ship).filter(t => t && !pilotState.names.has(t));
   if (missing.length) {
     try { (await EveSSO.esiPublic("/universe/names", [...new Set(missing)])).forEach(r => pilotState.names.set(r.id, r.name)); }
@@ -580,6 +587,8 @@ function drawCorpmates() {
     box.addEventListener("change", drawCorpmates);
   }
   if (state.selected) renderPilotHere(state.byId.get(state.selected));
+  renderCorpMenu();
+  applyCorpFocus();
 }
 function corpmatesLine(p) {
   const here = [...corpmates.list.values()].filter(r => r.system === p.id);
@@ -617,4 +626,76 @@ function showDevNotice() {
   const card = box.querySelector(".c-card");
   card.tabIndex = -1;
   card.focus();
+}
+
+/* ---- Corp button: who is on the Atlas, and a corp-only map view ------------ */
+const ago = iso => { const m = Math.round((Date.now() - Date.parse(iso)) / 60e3); return m < 1 ? "just now" : `${m} min ago`; };
+function renderCorpMenu() {
+  const wrap = document.getElementById("corpWrap"), btn = document.getElementById("corpBtn"), menu = document.getElementById("corpMenu");
+  wrap.hidden = !(reserves.relay && EveSSO.pilots().length);
+  if (wrap.hidden) return;
+  const mates = [...corpmates.list.entries()].sort((a, b) => (b[1].online - a[1].online) || a[1].name.localeCompare(b[1].name));
+  btn.innerHTML = `Corp${mates.length ? `<span class="cm-badge">${mates.length}</span>` : ""}`;
+  btn.classList.toggle("focus-on", corpmates.focus);
+  btn.title = "Corp mates sharing their location on the Atlas";
+  const head = corpmates.corps.map(c => esc(corpmates.names.get(c) || `corporation ${c}`)).join(", ");
+  menu.innerHTML = `<div class="cm-head"><b>${head || "Your corporation"}</b><br><span>On the Atlas and sharing location</span></div>` +
+    (mates.length ? mates.map(([id, r]) => `<div class="pm-row" data-sys="${r.system}">
+        <img src="https://images.evetech.net/characters/${id}/portrait?size=64" alt="" width="32" height="32">
+        <div class="pm-who"><div>${r.online ? '<i class="pm-on" title="online in game"></i>' : ""}${esc(r.name)}</div>
+          <div class="pm-where">${esc(sysName(r.system))}${r.ship ? `, ${esc(typeName(r.ship))}` : ""} · ${ago(r.at)}</div></div>
+        <button data-act="go" title="Show on map">◎</button></div>`).join("")
+      : `<div class="cm-empty">No corp mates are sharing right now. Corp mates appear here while they have the Atlas
+         open with "location" ticked in their pilot menu.</div>`) +
+    `<label class="cm-focus"><input type="checkbox" id="cmFocus"${corpmates.focus ? " checked" : ""}> Corp view: show only
+       corp mates, your pilots and your corp's reserves</label>`;
+  menu.querySelectorAll(".pm-row").forEach(row => row.onclick = () => {
+    const sys = +row.dataset.sys, p = state.byId.get(sys);
+    if (p) { select(sys); flyTo(p.ll, 7); }
+    menu.hidden = true; btn.setAttribute("aria-expanded", "false");
+  });
+  menu.querySelector("#cmFocus").onchange = e => {
+    corpmates.focus = e.target.checked;
+    try { localStorage.setItem("atlas.corpFocus", corpmates.focus ? "1" : "0"); } catch { /* private mode */ }
+    applyLayer(currentLayer);            /* re-colors the map, then applyCorpFocus dims it */
+    renderCorpMenu();
+  };
+  if (!corpmates.menuWired) {
+    corpmates.menuWired = true;
+    try { corpmates.focus = localStorage.getItem("atlas.corpFocus") === "1"; } catch { /* default off */ }
+    btn.onclick = () => { menu.hidden = !menu.hidden; btn.setAttribute("aria-expanded", String(!menu.hidden)); };
+    document.addEventListener("click", e => {
+      if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.hidden = true; btn.setAttribute("aria-expanded", "false");
+      }
+    });
+    setInterval(renderCorpMenu, 60e3);   /* keep "n min ago" honest */
+  }
+}
+
+/* Corp view: every system fades except where the corp has something going
+   on (corp mates, your own pilots and their assets, corp reserve sightings),
+   which keep their layer color and grow a little. */
+function applyCorpFocus() {
+  if (typeof state === "undefined" || !state.markers) return;
+  const keep = new Set();
+  if (corpmates.focus) {
+    for (const r of corpmates.list.values()) keep.add(r.system);
+    for (const d of pilotState.data.values()) {
+      if (d.loc) keep.add(d.loc.system);
+      if (d.assets) for (const s of d.assets.bySystem.keys()) keep.add(s);
+    }
+    for (const id of Object.keys(reserveSightings())) keep.add(+id);
+  }
+  state.markers.forEach((m, id) => {
+    const on = !corpmates.focus || keep.has(id);
+    m.setStyle({ fillOpacity: on ? .95 : .12, opacity: on ? .9 : .15 });
+    if (corpmates.focus && on) m.bringToFront();
+  });
+  for (const [layer, box] of state.overlays || []) {
+    if (corpmates.focus) layer.remove();
+    else if (document.getElementById(box).checked) layer.addTo(map);
+  }
+  document.body.classList.toggle("corp-focus", corpmates.focus);
+  document.getElementById("corpBtn").classList.toggle("focus-on", corpmates.focus);
 }

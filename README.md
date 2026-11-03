@@ -240,6 +240,13 @@ writes a record only when it changes or every 15 minutes (Cloudflare's
 free storage allows few writes a day), drops records older than 30
 minutes, and removes a pilot at once when they stop sharing.
 
+The **Corp** button (shown once a pilot is signed in) lists the corp mates
+sharing right now, with portrait, system, ship, whether they are online
+in game, and when they last reported; clicking one flies the map there.
+Its **Corp view** option fades every system where the corporation has
+nothing going on and tucks the other overlays away, leaving corp mates,
+your own pilots and assets, and the corp's reserve sightings.
+
 ### Live data
 
 Live inputs refresh hourly: a scheduled GitHub Action runs
