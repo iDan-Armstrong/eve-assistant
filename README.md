@@ -197,7 +197,7 @@ character's data onto the map by system ID:
   are not in any CCP data feed: ESI lists only each system's permanent
   belts. A pilot's ledger is the one CCP record that shows the campaign
   ore (Kangite, Raspite, Moissanite or Polycrase X-Grade) being mined in a
-  given system, and on which day.
+  given system, and on which day. All four ores are confirmed in game.
 
 The route planner gains **From my location** and **Send to autopilot**,
 which sets the in-game route jump by jump, so the game flies the safer

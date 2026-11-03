@@ -201,5 +201,5 @@
    "oreTypeId": 92568
   }
  },
- "oreSource": "per-faction ore from the site names in CCP's Cradle of War notes; confirmed in game 2026-11-02: Odatrik (Minmatar Bulwark) has an asteroid belt named 'Republic Kangite Reserve'; ore names and type IDs from CCP ESI. A pilot's mining ledger confirmed Kangite, Raspite and Moissanite X-Grade mined in Bulwark systems (2026-11-03). ESI lists only the permanent asteroid belts, so the Reserve sites themselves are not in any CCP data feed"
+ "oreSource": "per-faction ore from the site names in CCP's Cradle of War notes; confirmed in game 2026-11-02: Odatrik (Minmatar Bulwark) has an asteroid belt named 'Republic Kangite Reserve'; ore names and type IDs from CCP ESI. A pilot's mining ledger confirmed Kangite, Raspite and Moissanite X-Grade mined in Bulwark systems (2026-11-03); Polycrase X-Grade for Caldari confirmed in game by the project owner (2026-11-03). ESI lists only the permanent asteroid belts, so the Reserve sites themselves are not in any CCP data feed"
 }
