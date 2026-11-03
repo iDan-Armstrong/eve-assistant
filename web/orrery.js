@@ -346,7 +346,7 @@ export function openOrrery(host, data, onClose) {
      narrower of the two fields of view, from the usual oblique angle */
   const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
   const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
-  const fitD = maxR * .92 / Math.sin(Math.min(vHalf, hHalf));
+  const fitD = maxR * 1.12 / Math.sin(Math.min(vHalf, hHalf));
   camera.position.set(.9, .55, .9).normalize().multiplyScalar(fitD);
   controls.maxDistance = Math.max(maxR * 3.2, fitD * 1.5);
   controls.minDistance = 4;
