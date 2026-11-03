@@ -42,7 +42,10 @@ async function startPilots() {
   let note = "";
   try {
     const p = await EveSSO.init();
-    if (p) { pilotState.active = p.id; note = `Signed in as ${p.name}`; }
+    if (p) {
+      pilotState.active = p.id; note = `Signed in as ${p.name}`;
+      if (reserves.relay && shareChoice() === null) askToShare(p.name);
+    }
   } catch (e) { note = e.message; }
   wirePilotMenu();
   renderPilotMenu(note);
@@ -65,7 +68,7 @@ async function refreshPilots() {
   })));
   await resolveNames();
   drawPilots();
-  if (shareOn()) reportReserves();
+  if (shareOn()) reportReserves(); else loadSightings();
   renderPilotMenu();
   if (state.selected) renderPilotHere(state.byId.get(state.selected));
 }
@@ -295,9 +298,9 @@ function renderPilotMenu(note = "") {
   }).join("") +
   `<div class="pm-foot"><button data-act="add">Add a character</button><button data-act="refresh">Refresh</button></div>` +
   (reserves.relay ? `<label class="pm-share"><input type="checkbox" id="pmShare"${shareOn() ? " checked" : ""}> ` +
-    `Share Bulwark reserve sightings</label><div class="pm-note">When on, your login is sent to the Atlas relay ` +
-    `to read your mining ledger for the four reserve ores. The relay checks it with CCP, keeps no token and ` +
-    `publishes only system, ore and time, never your name.</div>` : "") +
+    `Share reserve sightings with my corporation</label><div class="pm-note">When on, your login is sent to the ` +
+    `Atlas relay to read your mining ledger for the four reserve ores. Only members of your corporation can see ` +
+    `the result (system, ore and time, never your name). The relay keeps no token.</div>` : "") +
   `<div class="pm-note">${esc(note || (shareOn() ? "Tokens go only to CCP and, for reserve checks, the Atlas relay." : "Tokens stay in this browser and go only to CCP."))}</div>`;
   const share = menu.querySelector("#pmShare");
   if (share) share.onchange = () => {
@@ -359,21 +362,36 @@ function pilotTagBoxes() {
    CCP publishes no record of the limited-time reserve sites. The one CCP
    record that shows them is a pilot's mining ledger, so the Atlas relay
    (worker/) collects verified ledger reads from pilots who opt in and
-   publishes, per system: the reserve ore, the last day it was mined, and
-   the last time anyone's ledger grew there (mined within the hour).
-   Everyone sees the shared sightings, signed in or not; a signed-in
+   keeps, per corporation and system: the reserve ore, the last day it
+   was mined, and the last time a member's ledger grew there (mined within
+   the hour). Only verified members of that corporation can read them, so
+   the map never tells outsiders where miners are working. A signed-in
    pilot's own ledger adds to them locally even with sharing off. */
 const reserves = { relay: "", shared: {}, activeMinutes: 60, layer: L.layerGroup(), rings: [], at: null };
 const shareOn = () => { try { return localStorage.getItem("atlas.shareReserves") === "1"; } catch { return false; } };
 
+/* corp-only: each signed-in pilot asks for their own corporation's
+   sightings; a viewer with pilots in two corps sees both */
 async function loadSightings() {
-  if (!reserves.relay) { drawReserves(); return; }
-  try {
-    const r = await fetch(`${reserves.relay}/sightings`).then(x => x.json());
-    reserves.shared = r.systems || {};
-    reserves.activeMinutes = r.activeMinutes || 60;
-    reserves.at = r.updated;
-  } catch { /* relay down: local sightings still show */ }
+  const pilots = EveSSO.pilots();
+  if (!reserves.relay || !pilots.length) { reserves.shared = {}; drawReserves(); return; }
+  const merged = {}, corps = new Set();
+  for (const p of pilots) {
+    try {
+      const r = await fetch(`${reserves.relay}/sightings`, { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: await EveSSO.token(p.id) }) }).then(x => x.json());
+      if (!r.systems || corps.has(r.corporation)) continue;
+      corps.add(r.corporation);
+      reserves.activeMinutes = r.activeMinutes || 60;
+      for (const [sys, s] of Object.entries(r.systems)) {
+        const m = merged[sys] = merged[sys] || { ...s };
+        if ((s.lastActive || "") > (m.lastActive || "")) m.lastActive = s.lastActive;
+        if ((s.lastConfirmed || "") > (m.lastConfirmed || "")) m.lastConfirmed = s.lastConfirmed;
+      }
+    } catch { /* relay down: local sightings still show */ }
+  }
+  reserves.shared = merged;
   drawReserves();
 }
 async function reportReserves() {
@@ -435,7 +453,35 @@ function reserveLine(p) {
   if (!s || !p.bulwark) return "";
   if (reserveActive(s)) {
     const min = Math.max(1, Math.round((Date.now() - Date.parse(s.lastActive)) / 60e3));
-    return `<b>Reserve active</b>: ${esc(p.bulwark.ore)} mined here ${min} min ago`;
+    return `<b>Reserve active</b>: ${esc(p.bulwark.ore)} mined here ${min} min ago (your corporation)`;
   }
-  return `Reserve last confirmed ${s.lastConfirmed}: ${esc(p.bulwark.ore)} in a pilot's mining ledger`;
+  return `Reserve last seen ${s.lastConfirmed}: ${esc(p.bulwark.ore)} in a corp mate's or your mining ledger`;
+}
+
+/* ask once, right after a sign-in, with neither answer preselected:
+   sharing tracks where a pilot mines, so it needs express consent */
+function shareChoice() {
+  try { return localStorage.getItem("atlas.shareReserves"); } catch { return "0"; }
+}
+function askToShare(name) {
+  const box = document.createElement("div");
+  box.className = "consent";
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-label", "Share reserve sightings");
+  box.innerHTML = `<div class="c-card"><h3>Share Bulwark reserve sightings?</h3>
+    <p>If you mine a Bulwark reserve, ${esc(name)}'s mining ledger can light it up on the map for
+    <b>members of your corporation only</b>. To check, the Atlas relay reads your ledger for the four
+    reserve ores with your login. It shares only system, ore and time, never your name, and keeps no token.</p>
+    <p class="c-small">You can change this any time in the pilot menu.</p>
+    <div class="c-buttons"><button data-v="1">Share with my corp</button><button data-v="0">Not now</button></div></div>`;
+  document.body.appendChild(box);
+  box.querySelectorAll("button").forEach(b => b.onclick = () => {
+    try { localStorage.setItem("atlas.shareReserves", b.dataset.v); } catch { /* private mode */ }
+    box.remove();
+    if (b.dataset.v === "1") reportReserves();
+    renderPilotMenu();
+  });
+  const card = box.querySelector(".c-card");     /* focus the question, not an answer */
+  card.tabIndex = -1;
+  card.focus();
 }

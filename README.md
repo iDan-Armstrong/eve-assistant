@@ -208,17 +208,25 @@ route rather than its own.
 
 The limited-time reserve sites are in no CCP data feed, but a pilot's
 mining ledger records the reserve ore by system and day, and its daily
-total grows while they mine. Pilots who opt in ("Share Bulwark reserve
-sightings" in the pilot menu) have their browser send its login token to
-a small relay (`worker/`, a Cloudflare Worker deployed from this repository by Cloudflare's Git integration). The relay checks the
-token's signature against CCP's published keys, reads that pilot's
-ledger from CCP itself, keeps only the four reserve ores, and compares
-with the pilot's previous read. Growth since then marks the reserve
-**active** for an hour; any row marks it **seen** on that day. It stores
-no token, remembers each pilot only as a salted hash, and publishes only
-system, ore and time. Everyone viewing the map sees the result, signed in
-or not: a filled violet ring where a reserve is being mined now, a dashed
-one where it was seen in the last 30 days.
+total grows while they mine. That makes it sensitive: a map of reserves
+being mined right now is a target list for gankers. So sightings are
+shared **within a corporation only**, and only with consent.
+
+Right after signing in, a pilot is asked once, with neither answer
+preselected, whether to share sightings with their corporation (CCP's
+developer license forbids tracking player activity without express
+consent). If they agree, their browser sends its login token to a small
+relay (`worker/`, a Cloudflare Worker deployed from this repository by
+Cloudflare's Git integration). The relay checks the token's signature
+against CCP's published keys, looks up the pilot's corporation from CCP's
+public record, reads the pilot's ledger from CCP, keeps only the four
+reserve ores, and compares with the pilot's previous read. Growth since
+then marks the reserve **active** for an hour; any row marks it **seen**
+on that day. Sightings are stored per corporation and returned only to a
+viewer whose own verified login belongs to that corporation. The relay
+stores no token, remembers each pilot only as a salted hash, and never
+records a name. Corp mates see a filled violet ring where a reserve is
+being mined now, and a dashed one where it was seen in the last 30 days.
 
 ### Live data
 

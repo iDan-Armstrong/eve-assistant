@@ -214,6 +214,18 @@
   .pm-foot button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
     color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .pm-note { padding: 5px 10px 2px; font-size: 10.5px; color: var(--ink-faint); }
+  .consent { position: fixed; inset: 0; z-index: 2000; background: rgba(3,6,12,.6);
+    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .consent .c-card { max-width: 420px; background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 4px; padding: 18px 20px; font-size: 13px; line-height: 1.5; }
+  .consent h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+  .consent p { margin: 0 0 8px; color: var(--ink); }
+  .consent .c-small { color: var(--ink-dim); font-size: 12px; }
+  .consent .c-buttons { display: flex; gap: 10px; margin-top: 12px; }
+  .consent button { flex: 1; padding: 8px; border-radius: 3px; border: 1px solid var(--panel-edge);
+    background: #121b2c; color: var(--ink); font: inherit; cursor: pointer; }
+  .consent button:hover { background: #1b2a44; }
+  .consent button:focus-visible { outline: 2px solid var(--focus); }
   .pm-share { display: flex; gap: 6px; align-items: center; padding: 7px 10px 0; font-size: 12px; cursor: pointer; }
   .leaflet-tooltip.pilot-tag { background: rgba(6,10,18,.85); border: 1px solid #ffffff55; color: #fff;
     font: 600 11px "Chakra Petch", sans-serif; padding: 1px 6px; box-shadow: none; }
@@ -954,7 +966,7 @@ async function boot() {
         f.split(" ")[0]}</span>`).join("") +
     `<span class="bk-item"><i class="bk-ring bk-hq"></i>War HQ</span>` +
     `<span class="bk-item"><i class="bk-ring" style="border:2px solid #c7a6ff;background:#c7a6ff40"></i>reserve active</span>` +
-    `<span class="bk-item"><i class="bk-ring" style="border-color:#c7a6ff"></i>reserve seen</span>` +
+    `<span class="bk-item"><i class="bk-ring" style="border-color:#c7a6ff"></i>reserve seen (your corp)</span>` +
     `<span class="bk-src">curated from the in-game map</span>`;
 
   /* labels live on their own pane, above lines, markers and arrows */
