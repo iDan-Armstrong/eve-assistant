@@ -210,7 +210,7 @@ The limited-time reserve sites are in no CCP data feed, but a pilot's
 mining ledger records the reserve ore by system and day, and its daily
 total grows while they mine. Pilots who opt in ("Share Bulwark reserve
 sightings" in the pilot menu) have their browser send its login token to
-a small relay (`worker/`, a Cloudflare Worker). The relay checks the
+a small relay (`worker/`, a Cloudflare Worker deployed from this repository by Cloudflare's Git integration). The relay checks the
 token's signature against CCP's published keys, reads that pilot's
 ledger from CCP itself, keeps only the four reserve ores, and compares
 with the pilot's previous read. Growth since then marks the reserve

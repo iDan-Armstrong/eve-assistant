@@ -5,3 +5,4 @@ sde/
 *.tgz
 shot-*.png
 web/data/live/
+node_modules/

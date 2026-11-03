@@ -11,7 +11,9 @@
 
    GET /sightings -> {"updated", "activeMinutes", "systems": {systemId: {ore, lastActive, lastConfirmed}}}
 
-   Bindings: SIGHTINGS (KV), CLIENT_ID and ALLOWED_ORIGINS (vars), SALT (secret). */
+   Bindings: SIGHTINGS (KV), CLIENT_ID and ALLOWED_ORIGINS (vars). The
+   salt for pilot hashes is made on first use and kept in KV, which is
+   private to the Worker; a SALT secret, if set, takes its place. */
 
 import { ACTIVE_MINUTES, diffLedger, mergeSightings, prune, reserveRows } from "./sightings_core.js";
 
@@ -54,8 +56,18 @@ async function verify(token, env) {
   return +String(claims.sub).split(":").pop();
 }
 
+async function salt(env) {
+  if (env.SALT) return env.SALT;
+  let s = await env.SIGHTINGS.get("salt");
+  if (!s) {
+    s = [...crypto.getRandomValues(new Uint8Array(24))].map(b => b.toString(16).padStart(2, "0")).join("");
+    await env.SIGHTINGS.put("salt", s);
+  }
+  return s;
+}
+
 async function pilotKey(id, env) {
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${env.SALT}:${id}`));
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${await salt(env)}:${id}`));
   return "pilot:" + [...new Uint8Array(d)].slice(0, 12).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
