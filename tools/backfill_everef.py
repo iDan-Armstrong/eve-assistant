@@ -136,7 +136,7 @@ def main() -> None:
     (hist / "pvp_daily.json").write_text(json.dumps(
         {"updated": now.isoformat(timespec="seconds"), "days": pvp_daily},
         separators=(",", ":")))
-    if report or not missing:
+    if any(": no archive" not in r for r in report) or not missing:   # keep a full run's report
         (hist / "backfill_status.json").write_text(json.dumps(
             {"ran": now.isoformat(timespec="seconds"), "days": days, "missingOnly": missing,
              "ganksFound": len(found), "ledgerSize": len(merged),
