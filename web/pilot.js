@@ -9,20 +9,27 @@ const pilotState = {
   data: new Map(),          // characterId -> loaded record
   active: null,             // characterId used by the route planner
   layer: L.layerGroup(), rings: [],
-  prices: null, names: new Map(), structures: new Map(),
+  prices: null, names: new Map(), structures: new Map(), newStations: new Map(),
 };
 const PILOT_COLORS = { assets: "#ffcf4a", here: "#ffffff", clone: "#5fd4ff", pi: "#7be37b", mined: "#c7a6ff" };
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const typeName = id => pilotState.names.get(id) || `type ${id}`;
 const sysName = id => (state.byId.get(id) || {}).name || `system ${id}`;
+/* NPC stations: the static table first, then any station newer than it,
+   looked up once from public ESI (pilotState.newStations) */
 const stationSystem = (() => {
   let m = null;
-  return () => m || (m = new Map([...state.stations.values()].flat().map(s => [s.id, s.systemId])));
+  return () => {
+    m = m || new Map([...state.stations.values()].flat().map(s => [s.id, s.systemId]));
+    for (const [id, st] of pilotState.newStations) if (st) m.set(id, st.system);
+    return m;
+  };
 })();
 const stationName = id => {
   for (const list of state.stations.values()) for (const s of list) if (s.id === id) return s.name;
-  return null;
+  const st = pilotState.newStations.get(id);
+  return st ? st.name : null;
 };
 
 async function startPilots() {
@@ -80,6 +87,18 @@ async function loadPilot(pilot) {
       .then(s => pilotState.structures.set(sid, { system: s.solar_system_id, name: s.name }))
       .catch(() => pilotState.structures.set(sid, null))));
   }
+  /* stations built after the static data export */
+  const known = stationSystem();
+  const stIds = new Set([...roots.values()].filter(l => PilotCore.isStation(l)));
+  for (const c of (clones && clones.jump_clones) || []) if (PilotCore.isStation(c.location_id)) stIds.add(c.location_id);
+  if (clones && clones.home_location && PilotCore.isStation(clones.home_location.location_id)) stIds.add(clones.home_location.location_id);
+  for (const j of jobs || []) if (PilotCore.isStation(j.station_id)) stIds.add(j.station_id);
+  if (loc && loc.station_id) stIds.add(loc.station_id);
+  await Promise.all([...stIds].filter(s => !known.has(s) && !pilotState.newStations.has(s)).map(sid =>
+    EveSSO.esiPublic(`/universe/stations/${sid}`)
+      .then(st => pilotState.newStations.set(sid, { system: st.system_id, name: st.name }))
+      .catch(() => pilotState.newStations.set(sid, null))));
+
   const structures = new Map([...pilotState.structures].filter(([, v]) => v));
   const roll = PilotCore.rollup(assets || [], roots, stationSystem(), structures, pilotState.prices);
 
@@ -89,7 +108,7 @@ async function loadPilot(pilot) {
   };
   const placeLabel = (lid) => stationName(lid) ||
     (pilotState.structures.get(lid) && pilotState.structures.get(lid).name) ||
-    (PilotCore.isSystem(lid) ? sysName(lid) : "a structure you can't see into");
+    (PilotCore.isSystem(lid) ? sysName(lid) : "a player structure you have no access to");
 
   pilotState.data.set(id, {
     id, name: pilot.name, errors,
