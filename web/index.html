@@ -1222,7 +1222,7 @@ function renderTraffic(p) {
     `<div class="t-line t-key"><i style="background:#3f7fd6"></i>jumps <i style="background:#ffcf4a"></i>typical day ` +
     `<i style="background:#ff4a4a;width:5px;height:5px;border-radius:50%;vertical-align:1px"></i>ship kills</div>` +
     `<div class="t-line">Latest hour: <b>${last ?? "n/a"}</b> jumps` +
-    (busy && busy[1] > 0 ? `. Busiest around ${hh(busy[0])} UTC (${Math.round(busy[1])}/h), quietest around ${hh(quiet[0])} (${Math.round(quiet[1])}/h)` : "") +
+    (busy && busy[1] > 0 && T.storedHours >= 6 ? `. Busiest around ${hh(busy[0])} UTC (${Math.round(busy[1])}/h), quietest around ${hh(quiet[0])} (${Math.round(quiet[1])}/h)` : "") +
     `.<br><span style="color:var(--ink-faint)">${T.sampled} of 24 hours sampled; typical day from ${T.storedHours} stored hours. ` +
     `CCP publishes jumps, not a head count: no public API counts pilots in a system or at a belt.</span></div>`;
 }
