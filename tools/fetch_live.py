@@ -3,6 +3,7 @@
 Writes, under web/data/live/:
     activity.json  CCP ESI: ship/pod/NPC kills and jumps per system, last hour
     ganks.json     "risk now": ganks per system over the last NOW_HOURS
+    wormholes.json EVE-Scout: current Thera and Turnur connections
     history.json   "risk history": ganks per system over the last
                    HISTORY_DAYS plus average hourly kills and jumps
     status.json    what each source returned this run
@@ -150,6 +151,49 @@ def fetch_recent_ganks(status: dict, known: set[int]) -> list[dict]:
     return out
 
 
+EVESCOUT = "https://api.eve-scout.com/v2/public/signatures"
+
+
+def normalize_evescout(rows: list[dict]) -> list[dict]:
+    """EVE-Scout signatures -> compact connection records. Field names are
+    read defensively (with fallbacks) since the public API's schema is not
+    published as a spec; rows without a known k-space end are skipped."""
+    out = []
+    for r in rows:
+        to = r.get("in_system_id") or r.get("system_id")
+        hub = r.get("out_system_name") or r.get("out_system") or ""
+        if not to or not hub:
+            continue
+        hours = r.get("remaining_hours")
+        out.append({
+            "hub": hub, "hubId": r.get("out_system_id"),
+            "to": to, "toName": r.get("in_system_name", ""),
+            "toClass": r.get("in_system_class", ""),
+            "region": r.get("in_region_name", ""),
+            "type": r.get("wh_type") or r.get("signature_type") or "",
+            "maxShip": r.get("max_ship_size", ""),
+            "expires": r.get("expires_at", ""),
+            "hoursLeft": round(hours, 1) if isinstance(hours, (int, float)) else None,
+        })
+    return out
+
+
+def fetch_evescout(status: dict) -> dict:
+    try:
+        rows = http(EVESCOUT)
+        if not isinstance(rows, list):
+            raise ValueError("unexpected response")
+        conns = normalize_evescout(rows)
+        keys = sorted(rows[0].keys()) if rows else []
+        status["evescout"] = (f"ok, {len(rows)} signatures, {len(conns)} connections; "
+                              f"fields: {', '.join(keys)}")
+    except Exception as exc:                         # noqa: BLE001
+        conns = []
+        status["evescout"] = f"error: {exc}"
+    return {"source": "EVE-Scout (Signal Cartel), api.eve-scout.com",
+            "connections": conns}
+
+
 def resolve_ship_names(kills: list[dict], status: dict) -> None:
     """Fill shipName for kills that lack one (ESI /universe/names, ≤1000/call)."""
     ids = sorted({k["ship"] for k in kills if k.get("ship") and not k.get("shipName")})
@@ -245,6 +289,7 @@ def main() -> None:
     status = {"generated": stamp}
 
     activity = fetch_activity(status)
+    wormholes = fetch_evescout(status)
     ledger = load_json(hist_dir / "ganks_ledger.json", {"ganks": []})["ganks"] if hist_dir else []
     new = fetch_recent_ganks(status, {k["id"] for k in ledger})
     ledger = merge_ledger(ledger, new, now)
@@ -272,7 +317,8 @@ def main() -> None:
                "ganks": aggregate_ganks(ledger, now - timedelta(days=HISTORY_DAYS)),
                "activity": {"schema": ["avgShipKillsPerHour", "avgJumpsPerHour"],
                             "systems": activity_averages(daily)}}
-    for name, doc in (("activity", activity), ("ganks", ganks_now), ("history", history)):
+    for name, doc in (("activity", activity), ("ganks", ganks_now), ("history", history),
+                      ("wormholes", wormholes)):
         doc["generated"] = stamp
         (OUT / f"{name}.json").write_text(json.dumps(doc, separators=(",", ":")))
     (OUT / "status.json").write_text(json.dumps(status, indent=1))

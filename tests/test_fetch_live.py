@@ -68,3 +68,17 @@ def test_capsules_are_not_counted_as_ganks():
              {"id": 2, "sys": 9, "time": iso(1), "ship": 670, "shipName": "Capsule"}]
     out = fetch_live.aggregate_ganks(kills, NOW - timedelta(days=30))
     assert out["9"]["n"] == 1 and out["9"]["top"] == [("Retriever", 1)]
+
+
+def test_evescout_rows_normalize_and_skip_unknown():
+    rows = [{"out_system_name": "Thera", "out_system_id": 31000005,
+             "in_system_id": 30002768, "in_system_name": "Uedama",
+             "in_system_class": "hs", "in_region_name": "The Citadel",
+             "wh_type": "Q063", "max_ship_size": "medium",
+             "expires_at": "2026-11-03T20:00:00Z", "remaining_hours": 14.25},
+            {"out_system_name": "Turnur"}]                     # no k-space end
+    out = fetch_live.normalize_evescout(rows)
+    assert len(out) == 1
+    c = out[0]
+    assert (c["hub"], c["to"], c["toName"], c["type"]) == ("Thera", 30002768, "Uedama", "Q063")
+    assert c["hoursLeft"] == 14.2 or c["hoursLeft"] == 14.3
