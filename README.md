@@ -85,8 +85,8 @@ survey data:
 ## Layers
 
 Layers are built per player role. For industry there are two risk
-layers (**Risk now** is the default) next to the classic **Security
-Status** ramp; PvP layers are next.
+layers (**Risk now** is the default); for PvP there are **PvP kills** and
+**Ratting**; and **Security** shows the classic in-game ramp.
 
 | | **Risk now** ("should I undock?") | **Risk history** ("is this a bad neighborhood?") |
 |---|---|---|
@@ -109,6 +109,16 @@ with **Balle** second and **Sivala** in the top tier, the systems players
 know as the classic gank pipes. (On the 2024 map Balle led; the current
 stargate network shortened Jita-Amarr from 45 to 34 jumps and moved the
 traffic.)
+
+**PvP layers** read CCP's last-hour counts for every system at every
+security level. **PvP kills** colors systems by ship and pod kills (quiet,
+1-2, 3-9, 10+); **Ratting** by NPC kills, which is where PvE pilots are
+farming and therefore where hunters look. The **Thera / Turnur holes**
+overlay draws the current wormhole connections from
+[EVE-Scout](https://www.eve-scout.com/) (Signal Cartel): Turnur is in
+k-space, so its holes draw as lines; Thera is wormhole space, so its holes
+mark their k-space end. Each system panel lists the last hour's activity
+and any wormhole touching that system, with type, ship size and time left.
 
 Live inputs refresh hourly: a scheduled GitHub Action runs
 `tools/fetch_live.py` (stdlib only, polite User-Agent, zKillboard request

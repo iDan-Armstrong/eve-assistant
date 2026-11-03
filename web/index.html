@@ -34,7 +34,7 @@
 
   /* ---- top bar ---------------------------------------------------- */
   header {
-    position: absolute; top: 0; left: 0; right: 0; z-index: 1100;
+    position: absolute; top: 0; left: 0; right: 0; z-index: 1300;
     display: flex; align-items: center; gap: 16px;
     padding: 10px 16px;
     background: linear-gradient(rgba(6,10,18,.92), rgba(6,10,18,.75) 70%, rgba(6,10,18,0));
@@ -364,11 +364,11 @@
     <div class="results" id="qResults" role="listbox"></div>
   </div>
   <div class="layers" role="group" aria-label="Map layer">
-    <button data-layer="risk-now" aria-pressed="true">Risk now <small>industry</small></button>
-    <button data-layer="risk-history" aria-pressed="false">Risk history <small>30 days</small></button>
-    <button data-layer="status" aria-pressed="false">Security status</button>
-    <button data-layer="pvp" aria-pressed="false" disabled
-            title="PvP layers are next on the roadmap">PvP <small>soon</small></button>
+    <button data-layer="risk-now" aria-pressed="true" title="Industry: gank risk right now">Risk now <small>industry</small></button>
+    <button data-layer="risk-history" aria-pressed="false" title="Industry: gank risk over the last 30 days">Risk 30d</button>
+    <button data-layer="pvp-kills" aria-pressed="false" title="PvP: where ships died in the last hour">PvP kills <small>pvp</small></button>
+    <button data-layer="ratting" aria-pressed="false" title="PvP: where pilots are killing NPCs (targets)">Ratting</button>
+    <button data-layer="status" aria-pressed="false" title="The in-game security status colors">Security</button>
   </div>
   <details class="toggles">
     <summary>Overlays</summary>
@@ -378,6 +378,7 @@
       <label><input type="checkbox" id="tBulwark" checked> bulwarks</label>
       <label><input type="checkbox" id="tIce"> <i class="sw" style="border-color:#8fe3ff"></i>ice fields</label>
       <label><input type="checkbox" id="tJove"> <i class="sw" style="border-color:#b48cff;border-style:dotted"></i>Jove observatories</label>
+      <label><input type="checkbox" id="tHoles"> <i class="sw" style="border-color:#ff8fd8"></i>Thera / Turnur holes</label>
     </div>
   </details>
 </header>
@@ -391,6 +392,11 @@
     <div class="risk-title" id="riskTitle">Risk now for industry</div>
     <div class="risk-ramp" id="riskRamp"></div>
     <div class="risk-live" id="riskLive">loading live data…</div>
+  </div>
+  <div id="pvpLegend" hidden>
+    <div class="risk-title" id="pvpTitle"></div>
+    <div class="risk-ramp" id="pvpRamp"></div>
+    <div class="risk-live" id="pvpLive"></div>
   </div>
   <div class="bulwark-key" id="bulwarkKey" hidden></div>
   <div class="stats" id="stats">loading…</div>
@@ -407,6 +413,7 @@
     <div class="attr-grid" id="pAttrs"></div>
     <div class="flags" id="pFlags"></div>
     <div class="risk-box" id="pRisk"></div>
+    <div class="risk-box" id="pPvp"></div>
     <div class="star-line" id="pStar"></div>
     <button class="view3d" id="view3d" hidden>Enter system view (3D)</button>
     <div class="neighbors">
@@ -502,8 +509,39 @@ function markerRadius(p, z) {
   if (isRiskLayer(currentLayer)) {
     const k = riskFor(p, currentLayer).level.key;
     r += k === "high" ? 3.5 : k === "elevated" ? 1.8 : 0;
+  } else if (isPvpLayer(currentLayer)) {
+    r += pvpFor(p, currentLayer).level.boost;
   }
   return r;
+}
+
+/* ---- PvP layers ---------------------------------------------------------
+   Straight readings of CCP's last-hour counts for every system, all
+   security levels, so a hunter can see where things are happening:
+     PvP kills  ship + pod kills (where fights and ganks are happening)
+     Ratting    NPC kills (where PvE pilots are farming: targets)          */
+const PVP_LEVELS = {
+  "pvp-kills": [
+    { key: "quiet",  label: "quiet",       min: 0,  color: "#26334a", boost: 0 },
+    { key: "active", label: "1-2 kills",   min: 1,  color: "#c9a23a", boost: 1 },
+    { key: "hot",    label: "3-9 kills",   min: 3,  color: "#ff7a29", boost: 2.2 },
+    { key: "brawl",  label: "10+ kills",   min: 10, color: "#ff2b4a", boost: 3.8 },
+  ],
+  "ratting": [
+    { key: "none",   label: "no ratting",  min: 0,   color: "#26334a", boost: 0 },
+    { key: "light",  label: "1-99 NPCs",   min: 1,   color: "#2f7f6e", boost: .6 },
+    { key: "busy",   label: "100-399",     min: 100, color: "#45c49a", boost: 1.6 },
+    { key: "farm",   label: "400+",        min: 400, color: "#a6f5d0", boost: 3 },
+  ],
+};
+const isPvpLayer = l => l in PVP_LEVELS;
+function pvpFor(p, layer) {
+  const [ship = 0, pod = 0, npc = 0, jumps = 0] =
+    (riskData.activity && riskData.activity.systems[p.id]) || [];
+  const value = layer === "ratting" ? npc : ship + pod;
+  const levels = PVP_LEVELS[layer];
+  const level = [...levels].reverse().find(l => value >= l.min);
+  return { level, ship, pod, npc, jumps, live: !!riskData.activity };
 }
 
 const fmtIsk = v => v >= 1e9 ? (v / 1e9).toFixed(1) + "B" : v >= 1e6 ? Math.round(v / 1e6) + "M"
@@ -678,6 +716,35 @@ async function boot() {
   [riskData.static, riskData.activity, riskData.ganks, riskData.history] = await Promise.all([
     getJson("data/risk_static.json"), getJson("data/live/activity.json"),
     getJson("data/live/ganks.json"), getJson("data/live/history.json")]);
+  riskData.wormholes = await getJson("data/live/wormholes.json");
+
+  /* Thera / Turnur connections (EVE-Scout): Turnur is k-space, so its
+     holes draw as lines out of Turnur; Thera is wormhole space and not on
+     this map, so its holes mark the k-space end with a ring. */
+  const holeLayer = L.layerGroup();
+  const holeRings = [];
+  const byName = new Map([...state.byId.values()].map(s => [s.name, s]));
+  for (const c of (riskData.wormholes && riskData.wormholes.connections) || []) {
+    const far = state.byId.get(c.to);
+    if (!far) continue;                                  // wormhole-space end
+    const hub = byName.get(c.hub);
+    if (hub) {
+      holeLayer.addLayer(L.polyline([hub.ll, far.ll], { renderer: canvas, interactive: false,
+        color: "#ffb05a", weight: 1.4, opacity: .85, dashArray: "2 5" }));
+    }
+    const ring = L.circleMarker(far.ll, { renderer: canvas, interactive: false, fill: false,
+      color: hub ? "#ffb05a" : "#ff8fd8", weight: 1.8, opacity: .95 });
+    holeLayer.addLayer(ring);
+    holeRings.push({ m: ring, extra: 5 });
+  }
+  const tHoles = document.getElementById("tHoles");
+  tHoles.onchange = () => tHoles.checked ? holeLayer.addTo(map) : holeLayer.remove();
+  const sizeHoleRings = () => {
+    const r = radiusFor(map.getZoom());
+    for (const { m, extra } of holeRings) m.setRadius(r + extra);
+  };
+  sizeHoleRings();
+  map.on("zoomend", sizeHoleRings);
   document.getElementById("riskRamp").innerHTML = [...RISK_LEVELS, RISK_OUTSIDE]
     .map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join("");
 
@@ -789,7 +856,8 @@ async function boot() {
   try { saved = localStorage.getItem("atlas.layer"); } catch { /* ignore */ }
   document.querySelectorAll(".layers button:not(:disabled)").forEach(b =>
     b.onclick = () => applyLayer(b.dataset.layer));
-  applyLayer(["status", "risk-history"].includes(saved) ? saved : "risk-now");   // risk now is the default
+  applyLayer(["status", "risk-history", "pvp-kills", "ratting"].includes(saved)
+    ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
 
   const want = decodeURIComponent((location.hash.match(/^#s=(.+)/) || [])[1] || "");
@@ -807,20 +875,66 @@ function applyLayer(layer) {
   document.querySelectorAll(".layers button").forEach(b =>
     b.setAttribute("aria-pressed", String(b.dataset.layer === layer)));
   document.getElementById("riskLegend").hidden = !isRiskLayer(layer);
+  document.getElementById("pvpLegend").hidden = !isPvpLayer(layer);
   document.getElementById("secLegend").hidden = layer !== "status";
   if (isRiskLayer(layer)) updateRiskLegend(layer);
+  if (isPvpLayer(layer)) updatePvpLegend(layer);
   const z = map.getZoom();
+  const hot = [];
   state.markers.forEach((m, id) => {
     const p = state.byId.get(id);
-    const r = isRiskLayer(layer) ? riskFor(p, layer) : null;
-    m.setStyle({ fillColor: r ? r.level.color : secColor(p.sec) });
+    let color = secColor(p.sec), top = false;
+    if (isRiskLayer(layer)) {
+      const r = riskFor(p, layer); color = r.level.color; top = r.level.key === "high";
+    } else if (isPvpLayer(layer)) {
+      const r = pvpFor(p, layer); color = r.level.color; top = r.level.boost >= 2;
+    }
+    m.setStyle({ fillColor: color });
     m.setRadius(markerRadius(p, z));
-    if (r && r.level.key === "high") m.bringToFront();
+    if (top) hot.push(m);
   });
-  if (state.selected) renderRisk(state.byId.get(state.selected));
+  hot.forEach(m => m.bringToFront());
+  if (state.selected) { renderRisk(state.byId.get(state.selected)); renderPvp(state.byId.get(state.selected)); }
 }
 
 const hhmm = iso => new Date(iso).toUTCString().slice(17, 22) + " UTC";
+
+function updatePvpLegend(layer) {
+  document.getElementById("pvpTitle").textContent = layer === "ratting"
+    ? "Ratting, last hour: NPC kills (where PvE pilots are)"
+    : "PvP kills, last hour: ship and pod kills";
+  document.getElementById("pvpRamp").innerHTML = PVP_LEVELS[layer]
+    .map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join("");
+  const stamp = riskData.activity && riskData.activity.generated;
+  document.getElementById("pvpLive").textContent = stamp
+    ? `live: CCP ESI, all security levels, updated ${hhmm(stamp)}`
+    : "live data unavailable here";
+}
+
+/* wormhole connections touching a system (EVE-Scout) */
+function holesFor(p) {
+  const conns = (riskData.wormholes && riskData.wormholes.connections) || [];
+  return conns.filter(c => c.to === p.id || (c.hub === p.name));
+}
+
+function renderPvp(p) {
+  const box = document.getElementById("pPvp");
+  const r = pvpFor(p, "pvp-kills");
+  const lines = [];
+  if (r.live) {
+    lines.push(`Last hour: ${r.ship} ship kills, ${r.pod} pod kills, ${r.npc} NPC kills, ${r.jumps} jumps`);
+  }
+  for (const c of holesFor(p)) {
+    const far = c.to === p.id ? c.hub : (c.toName || "a k-space system");
+    const bits = [c.type, c.maxShip && `${c.maxShip} ships`,
+                  c.hoursLeft != null && `~${c.hoursLeft}h left`].filter(Boolean).join(", ");
+    lines.push(`Wormhole to ${far}${bits ? ` (${bits})` : ""}`);
+  }
+  box.innerHTML = lines.length
+    ? `<div class="rb-head"><span class="rb-level" style="color:#ff9b6a">Activity</span></div>` +
+      lines.map(l => `<div class="rb-line">${l}</div>`).join("")
+    : "";
+}
 function updateRiskLegend(layer) {
   const title = document.getElementById("riskTitle"), el = document.getElementById("riskLive");
   if (layer === "risk-history") {
@@ -944,6 +1058,7 @@ function select(id) {
   if (p.jove) flags.push("Jove Observatory");
   if (p.partial) flags.push("new system: moons, belts and stations arrive with the next full data refresh");
   renderRisk(p);
+  renderPvp(p);
   document.getElementById("pFlags").textContent = flags.join(", ") +
     (p.ores && p.ores.length ? `${flags.length ? "; " : ""}belt ores: ${p.ores.join(", ")}` : "") +
     (p.bulwark && p.bulwark.ore
