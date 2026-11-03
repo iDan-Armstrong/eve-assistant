@@ -9,7 +9,7 @@ on:
   push:
     branches: [master, main]
   schedule:
-    - cron: "17 * * * *"     # hourly refresh of the live Security Risk data
+    - cron: "17,47 * * * *"  # twice an hour: GitHub often skips scheduled runs, and samples dedupe by ESI hour
   workflow_dispatch:
     inputs:
       backfill_days:

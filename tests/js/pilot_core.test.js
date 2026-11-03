@@ -38,9 +38,10 @@ test("rollup joins places to systems and values items", () => {
 
 test("mining ledger sums per system and ore", () => {
   const m = P.miningBySystem([
-    { solar_system_id: 1, type_id: 1230, quantity: 100 },
-    { solar_system_id: 1, type_id: 1230, quantity: 50 },
+    { solar_system_id: 1, type_id: 1230, quantity: 100, date: "2026-10-30" },
+    { solar_system_id: 1, type_id: 1230, quantity: 50, date: "2026-11-01" },
     { solar_system_id: 2, type_id: 1228, quantity: 9 }]);
   assert.equal(m.get(1).qty, 150);
   assert.equal(m.get(1).types.get(1230), 150);
+  assert.equal(m.get(1).last.get(1230), "2026-11-01");
 });

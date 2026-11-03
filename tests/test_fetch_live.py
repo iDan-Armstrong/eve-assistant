@@ -52,7 +52,7 @@ def test_activity_days_keep_only_the_window():
 
 
 def test_activity_merges_kills_and_jumps(monkeypatch):
-    def fake(path):
+    def fake(path, meta=None):
         if path.endswith("system_kills"):
             return [{"system_id": 1, "ship_kills": 4, "pod_kills": 1, "npc_kills": 9}]
         return [{"system_id": 1, "ship_jumps": 300}, {"system_id": 2, "ship_jumps": 7}]
@@ -82,3 +82,24 @@ def test_evescout_rows_normalize_and_skip_unknown():
     c = out[0]
     assert (c["hub"], c["to"], c["toName"], c["type"]) == ("Thera", 30002768, "Uedama", "Q063")
     assert c["hoursLeft"] == 14.2 or c["hoursLeft"] == 14.3
+
+
+def test_traffic_hours_dedupe_and_summarize():
+    import traffic
+    store = {}
+    act = {"systems": {"9": [2, 1, 30, 400], "10": [0, 0, 0, 0]}}
+    assert traffic.add_hour(store, "2026-11-03T11", act)
+    assert not traffic.add_hour(store, "2026-11-03T11", act)        # same ESI hour
+    assert traffic.add_hour(store, "2026-11-03T09", {"systems": {"9": [0, 0, 5, 100]}})
+    assert store["hours"]["2026-11-03T11"] == {"9": [400, 2, 1, 30]}  # zero rows dropped
+    out = traffic.summarize(store, NOW)                                 # NOW = 12:00
+    s = out["systems"]["9"]
+    assert s["j"][-2:] == [400, None] and s["j"][-4] == 100            # 10:00 never sampled
+    assert s["p"][11] == 400 and s["p"][9] == 100 and s["p"][3] is None
+    assert out["sampled"] == 2
+
+
+def test_esi_hour_from_last_modified():
+    import traffic
+    assert traffic.esi_hour("Tue, 03 Nov 2026 21:07:12 GMT", NOW) == "2026-11-03T21"
+    assert traffic.esi_hour(None, NOW) == "2026-11-03T12"

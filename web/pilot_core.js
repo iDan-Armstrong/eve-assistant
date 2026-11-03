@@ -83,7 +83,7 @@
     return [...ids];
   }
 
-  /* mining ledger -> {systemId: {qty, types: Map(typeId -> qty)}} */
+  /* mining ledger -> {systemId: {qty, types: Map(typeId -> qty), last: Map(typeId -> date)}} */
   function miningBySystem(rows) {
     const out = new Map();
     for (const r of rows || []) {
@@ -91,6 +91,8 @@
       if (!s) out.set(r.solar_system_id, s = { qty: 0, types: new Map() });
       s.qty += r.quantity;
       s.types.set(r.type_id, (s.types.get(r.type_id) || 0) + r.quantity);
+      s.last = s.last || new Map();                     /* latest day per ore */
+      if (!s.last.has(r.type_id) || r.date > s.last.get(r.type_id)) s.last.set(r.type_id, r.date);
     }
     return out;
   }

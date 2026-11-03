@@ -158,6 +158,20 @@ day and typical gang size, band changes and chokepoints. Pochven and
 Zarzakh gates are left out of routing. Use **Route from here** and
 **Route to here** on any system panel to set the ends.
 
+### Hourly traffic
+
+CCP publishes, for every system, the stargate jumps and kills of the last
+clock hour. `tools/traffic.py` stores each published hour once (the
+response's Last-Modified header names the hour, so a repeat run in the
+same hour is ignored and a skipped hour stays a gap) and keeps a week. The
+system panel charts the last 24 hours of jumps, marks hours with ship
+kills, and overlays a typical day: the average for each UTC hour across
+the week, which shows when a system is busy and when it is quiet.
+
+There is no public head count. No CCP API reports how many pilots are in
+a system, let alone at a belt or a Bulwark reserve, so jumps and kills
+per hour are the honest proxy.
+
 ### Pilot login (EVE SSO)
 
 **Pilot login** signs characters in with CCP's single sign-on, using the
@@ -177,7 +191,13 @@ character's data onto the map by system ID:
   item, so `web/pilot_core.js` walks each item up through containers and
   ship holds to its station, structure or system before the join;
 - home and jump clones, PI colonies, active industry jobs, and 30 days of
-  the mining ledger, all listed in the system panel.
+  the mining ledger, all listed in the system panel;
+- Bulwark reserves confirmed by the mining ledger (violet ring). The
+  limited-time reserve sites ("Republic Kangite Reserve" and the like)
+  are not in any CCP data feed: ESI lists only each system's permanent
+  belts. A pilot's ledger is the one CCP record that shows the campaign
+  ore (Kangite, Raspite, Moissanite or Polycrase X-Grade) being mined in a
+  given system, and on which day.
 
 The route planner gains **From my location** and **Send to autopilot**,
 which sets the in-game route jump by jump, so the game flies the safer

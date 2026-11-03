@@ -163,6 +163,12 @@ function drawPilots() {
     for (const c of d.clones || []) if (c.system) add(c.system, PILOT_COLORS.clone, 3, { weight: 1.5, dashArray: "2 2" });
     if (d.home && d.home.system) add(d.home.system, PILOT_COLORS.clone, 3, { weight: 2 });
     for (const pl of d.planets || []) add(pl.solar_system_id, PILOT_COLORS.pi, 9, { weight: 1.4 });
+    /* Bulwark reserves this pilot has mined: the ledger is the only CCP
+       record of where those limited-time sites have actually appeared */
+    for (const [sys, m] of d.mining || []) {
+      const p = state.byId.get(sys);
+      if (p && p.bulwark && m.types.has(p.bulwark.oreTypeId)) add(sys, PILOT_COLORS.mined, 12, { weight: 2.2 });
+    }
   }
   for (const [sys, v] of value) {
     add(sys, PILOT_COLORS.assets, 5 + Math.max(0, Math.log10(Math.max(v, 1)) - 6) * 1.5,
@@ -220,6 +226,11 @@ function renderPilotHere(p) {
       }
     }
     const m = d.mining && d.mining.get(p.id);
+    const ore = p.bulwark && p.bulwark.oreTypeId;
+    if (m && ore && m.types.has(ore)) {
+      lines.push(`<b>Reserve confirmed</b> by the mining ledger: ${m.types.get(ore).toLocaleString()} ` +
+                 `${esc(p.bulwark.ore)} mined here, last on ${m.last.get(ore)}`);
+    }
     if (m) {
       lines.push(`Mined here (30d): ${m.qty.toLocaleString()} units: ` +
         [...m.types].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([t, q]) => `${esc(typeName(t))} ${q.toLocaleString()}`).join(", "));

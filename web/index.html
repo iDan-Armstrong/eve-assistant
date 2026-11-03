@@ -223,6 +223,17 @@
     color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .route .r-pilot button:hover { background: #1b2a44; }
 
+  /* ---- traffic chart ------------------------------------------------- */
+  .traffic { margin: 10px 0 2px; font-size: 12px; color: var(--ink-dim); }
+  .traffic:empty { display: none; }
+  .traffic h3 { margin: 0 0 6px; font-size: 12px; font-weight: 400; color: var(--ink-dim);
+    border-top: 1px solid var(--panel-edge); padding-top: 10px; }
+  .traffic svg { display: block; width: 100%; height: auto; }
+  .traffic .t-axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-faint); margin-top: 2px; }
+  .traffic .t-line { margin-top: 4px; line-height: 1.45; }
+  .traffic .t-key i { display: inline-block; width: 10px; height: 3px; vertical-align: 3px; margin: 0 3px 0 8px; }
+  .traffic .t-key i:first-child { margin-left: 0; }
+
   .bulwark-key { margin-top: 7px; font-size: 11px; color: var(--ink-dim); }
   .bulwark-key .bk-ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     border: 2px dashed #5fa8d3; vertical-align: -2px; margin-right: 3px; }
@@ -546,6 +557,7 @@
     <div class="risk-box" id="pPilot"></div>
     <div class="risk-box" id="pRisk"></div>
     <div class="risk-box" id="pPvp"></div>
+    <div class="traffic" id="pTraffic"></div>
     <div class="star-line" id="pStar"></div>
     <button class="view3d" id="view3d" hidden>Enter system view (3D)</button>
     <div class="route-actions"><button id="routeFromHere">Route from here</button><button id="routeToHere">Route to here</button></div>
@@ -819,7 +831,7 @@ async function boot() {
       const p = state.byId.get(b.id);
       if (!p) continue;
       const hq = b.id === fx.warHQ;
-      p.bulwark = { faction, hq, ore: fx.ore || "", site: fx.miningSite || "",
+      p.bulwark = { faction, hq, ore: fx.ore || "", oreTypeId: fx.oreTypeId, site: fx.miningSite || "",
                     oresNote: bulwarkDb.campaignOresNote || "",
                     source: bulwarkDb.source || "" };
       const ring = L.circleMarker(p.ll, { renderer: canvas, interactive: false,
@@ -872,8 +884,9 @@ async function boot() {
     getJson("data/risk_static.json"), getJson("data/live/activity.json"),
     getJson("data/live/ganks.json"), getJson("data/live/history.json")]);
   riskData.wormholes = await getJson("data/live/wormholes.json");
-  [riskData.pvp, riskData.strat] = await Promise.all([
-    getJson("data/live/pvp_history.json"), getJson("data/pvp_static.json")]);
+  [riskData.pvp, riskData.strat, riskData.traffic] = await Promise.all([
+    getJson("data/live/pvp_history.json"), getJson("data/pvp_static.json"),
+    getJson("data/live/traffic.json")]);
   if (riskData.pvp && !riskData.pvp.windowDays) riskData.pvp = null;
 
   /* strategic overlay (tools/analyze_null.py): orange ring on systems
@@ -1162,6 +1175,58 @@ function renderPvp(p) {
       lines.map(l => `<div class="rb-line">${l}</div>`).join("")
     : "";
 }
+/* hourly traffic: CCP publishes jumps and kills per system per clock hour;
+   tools/traffic.py stores them by that hour. Bars are the last 24 hours
+   (a hatch where no sample was taken), the line is a typical day: the
+   average for that UTC hour over the stored week. */
+function renderTraffic(p) {
+  const box = document.getElementById("pTraffic"), T = riskData.traffic;
+  if (!T) { box.innerHTML = ""; return; }
+  const t = T.systems[p.id];
+  const head = `<h3>Traffic, last 24 hours (stargate jumps per hour)</h3>`;
+  if (!t) {
+    box.innerHTML = head + `<div class="t-line">No jumps recorded in the ${T.storedHours} stored hours.</div>`;
+    return;
+  }
+  const W = 268, H = 56, n = t.j.length, bw = W / n;
+  const hod = T.hours.map(k => +k.slice(-2));
+  const vals = [...t.j, ...hod.map(h => t.p[h])].filter(v => v != null);
+  const max = Math.max(1, ...vals);
+  const y = v => H - 2 - (H - 8) * v / max;
+  let svg = "";
+  t.j.forEach((v, i) => {
+    const x = i * bw + 1;
+    if (v == null) {
+      svg += `<rect x="${x}" y="${H - 4}" width="${bw - 2}" height="2" fill="var(--ink-faint)" opacity=".6"><title>${T.hours[i]}:00 UTC: not sampled</title></rect>`;
+    } else {
+      const top = y(v);
+      svg += `<rect x="${x}" y="${top}" width="${bw - 2}" height="${H - 2 - top}" fill="#3f7fd6"><title>${T.hours[i]}:00 UTC: ${v} jumps${t.k && t.k[i] ? `, ${t.k[i]} ship kills` : ""}</title></rect>`;
+      if (t.k && t.k[i]) svg += `<circle cx="${x + bw / 2 - 1}" cy="${Math.max(3, top - 4)}" r="2.4" fill="#ff4a4a"/>`;
+    }
+  });
+  const pts = hod.map((h, i) => t.p[h] == null ? null : `${i * bw + bw / 2},${y(t.p[h]).toFixed(1)}`);
+  let seg = [];
+  for (const pt of [...pts, null]) {
+    if (pt) { seg.push(pt); continue; }
+    if (seg.length > 1) svg += `<polyline points="${seg.join(" ")}" fill="none" stroke="#ffcf4a" stroke-width="1.4" opacity=".9"/>`;
+    seg = [];
+  }
+  const prof = t.p.map((v, h) => [h, v]).filter(([, v]) => v != null);
+  const busy = prof.length ? prof.reduce((a, b) => b[1] > a[1] ? b : a) : null;
+  const quiet = prof.length ? prof.reduce((a, b) => b[1] < a[1] ? b : a) : null;
+  const last = [...t.j].reverse().find(v => v != null);
+  const hh = h => String(h).padStart(2, "0") + ":00";
+  box.innerHTML = head +
+    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Jumps per hour in ${p.name}, last 24 hours">${svg}</svg>` +
+    `<div class="t-axis"><span>${hh(hod[0])}</span><span>${hh(hod[12])}</span><span>${hh(hod[n - 1])} UTC</span></div>` +
+    `<div class="t-line t-key"><i style="background:#3f7fd6"></i>jumps <i style="background:#ffcf4a"></i>typical day ` +
+    `<i style="background:#ff4a4a;width:5px;height:5px;border-radius:50%;vertical-align:1px"></i>ship kills</div>` +
+    `<div class="t-line">Latest hour: <b>${last ?? "n/a"}</b> jumps` +
+    (busy && busy[1] > 0 ? `. Busiest around ${hh(busy[0])} UTC (${Math.round(busy[1])}/h), quietest around ${hh(quiet[0])} (${Math.round(quiet[1])}/h)` : "") +
+    `.<br><span style="color:var(--ink-faint)">${T.sampled} of 24 hours sampled; typical day from ${T.storedHours} stored hours. ` +
+    `CCP publishes jumps, not a head count: no public API counts pilots in a system or at a belt.</span></div>`;
+}
+
 function updateRiskLegend(layer) {
   const title = document.getElementById("riskTitle"), el = document.getElementById("riskLive");
   if (layer === "risk-history") {
@@ -1469,6 +1534,7 @@ function select(id) {
   if (p.partial) flags.push("new system: moons, belts and stations arrive with the next full data refresh");
   renderRisk(p);
   renderPvp(p);
+  renderTraffic(p);
   if (typeof renderPilotHere === "function") renderPilotHere(p);
   document.getElementById("pFlags").textContent = flags.join(", ") +
     (p.ores && p.ores.length ? `${flags.length ? "; " : ""}belt ores: ${p.ores.join(", ")}` : "") +

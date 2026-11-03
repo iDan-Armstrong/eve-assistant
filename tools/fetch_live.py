@@ -35,6 +35,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import traffic  # noqa: E402
 from ambush import summarize  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[1] / "web" / "data" / "live"
@@ -49,7 +50,7 @@ ZKILL_SPACING_S = 1.1
 
 
 def http(url: str, *, data: bytes | None = None, esi: bool = False,
-         timeout: int = 30):
+         timeout: int = 30, meta: dict | None = None):
     headers = {"User-Agent": UA, "Accept": "application/json",
                "Accept-Encoding": "gzip"}
     if esi:
@@ -58,18 +59,20 @@ def http(url: str, *, data: bytes | None = None, esi: bool = False,
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
+        if meta is not None:
+            meta["last_modified"] = resp.headers.get("Last-Modified")
         raw = resp.read()
         if resp.headers.get("Content-Encoding") == "gzip":
             raw = gzip.decompress(raw)
         return json.loads(raw)
 
 
-def esi_get(path: str):
+def esi_get(path: str, meta: dict | None = None):
     """Current ESI path style first, then the legacy /latest/ form."""
     try:
-        return http(f"{ESI}{path}", esi=True)
+        return http(f"{ESI}{path}", esi=True, meta=meta)
     except (urllib.error.URLError, ValueError):
-        return http(f"{ESI}/latest{path}/?datasource=tranquility", esi=True)
+        return http(f"{ESI}/latest{path}/?datasource=tranquility", esi=True, meta=meta)
 
 
 def parse_time(s: str) -> datetime:
@@ -90,7 +93,10 @@ def fetch_activity(status: dict) -> dict:
         status["esi_kills"] = f"error: {exc}"
     try:
         n = 0
-        for row in esi_get("/universe/system_jumps"):
+        meta = {}
+        rows = esi_get("/universe/system_jumps", meta)
+        status["esi_hour"] = meta.get("last_modified")
+        for row in rows:
             rec = systems.setdefault(str(row["system_id"]), [0, 0, 0, 0])
             rec[3] = row.get("ship_jumps", 0)
             n += 1
@@ -98,7 +104,8 @@ def fetch_activity(status: dict) -> dict:
     except Exception as exc:                         # noqa: BLE001
         status["esi_jumps"] = f"error: {exc}"
     return {"schema": ["shipKills", "podKills", "npcKills", "jumps"],
-            "window": "last hour (ESI)", "systems": systems}
+            "window": "last hour (ESI)", "lastModified": status.get("esi_hour"),
+            "systems": systems}
 
 
 def zkill_ganked(status: dict) -> list[dict]:
@@ -299,10 +306,17 @@ def main() -> None:
     resolve_ship_names(ledger, status)
 
     daily = {}
+    hour = traffic.esi_hour(activity.get("lastModified"), now)
+    store = {}
     if hist_dir:
+        store = load_json(hist_dir / "traffic_hours.json", {"hours": {}})
+        new_hour = traffic.add_hour(store, hour, activity)
+        (hist_dir / "traffic_hours.json").write_text(json.dumps(store, separators=(",", ":")))
         daily = load_json(hist_dir / "activity_daily.json", {"days": {}})["days"]
-        if activity["systems"]:
-            daily = add_activity_day(daily, activity, now.strftime("%Y-%m-%d"))
+        if new_hour:          # one sample per ESI hour, however often we run
+            daily = add_activity_day(daily, activity, hour[:10])
+        status["traffic"] = f"ESI hour {hour}: {'new' if new_hour else 'already stored'}, " \
+                            f"{len(store['hours'])} hours held"
         (hist_dir / "ganks_ledger.json").write_text(
             json.dumps({"updated": stamp, "ganks": ledger}, separators=(",", ":")))
         (hist_dir / "activity_daily.json").write_text(
@@ -331,7 +345,8 @@ def main() -> None:
            "systems": summarize(pvp_daily)}
     status["pvpHistory"] = f"{len(pvp_daily)} days of low/null kill history"
     for name, doc in (("activity", activity), ("ganks", ganks_now), ("history", history),
-                      ("wormholes", wormholes), ("pvp_history", pvp)):
+                      ("wormholes", wormholes), ("pvp_history", pvp),
+                      ("traffic", traffic.summarize(store, now))):
         doc["generated"] = stamp
         (OUT / f"{name}.json").write_text(json.dumps(doc, separators=(",", ":")))
     (OUT / "status.json").write_text(json.dumps(status, indent=1))

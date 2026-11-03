@@ -1,7 +1,7 @@
 {
  "about": "Bulwark systems (Cradle of War). Not exposed by ESI or confirmed in the static export; curated from the in-game star map's faction warfare filter. War HQ systems per CCP's Cradle of War expansion notes.",
  "source": "in-game star map, faction warfare filter (curated)",
- "asOf": "2026-11-02",
+ "asOf": "2026-11-03",
  "campaignOresNote": "found in the system's asteroid belts during the campaign (limited time)",
  "factions": {
   "Caldari State": {
@@ -53,8 +53,9 @@
      "name": "Oshaima"
     }
    ],
-   "ore": "Crystalline Polycrase",
-   "miningSite": "State Polycrase Reserve"
+   "ore": "Polycrase X-Grade",
+   "miningSite": "State Polycrase Reserve",
+   "oreTypeId": 92566
   },
   "Gallente Federation": {
    "color": "#4fb07a",
@@ -105,8 +106,9 @@
      "name": "Theruesse"
     }
    ],
-   "ore": "Crystalline Moissanite",
-   "miningSite": "Federal Moissanite Reserve"
+   "ore": "Moissanite X-Grade",
+   "miningSite": "Federal Moissanite Reserve",
+   "oreTypeId": 92567
   },
   "Amarr Empire": {
    "color": "#d9b44a",
@@ -149,8 +151,9 @@
      "name": "Lisudeh"
     }
    ],
-   "ore": "Crystalline Raspite",
-   "miningSite": "Imperial Raspite Reserve"
+   "ore": "Raspite X-Grade",
+   "miningSite": "Imperial Raspite Reserve",
+   "oreTypeId": 92565
   },
   "Minmatar Republic": {
    "color": "#c0563a",
@@ -193,9 +196,10 @@
      "name": "Trytedald"
     }
    ],
-   "ore": "Crystalline Kangite",
-   "miningSite": "Republic Kangite Reserve"
+   "ore": "Kangite X-Grade",
+   "miningSite": "Republic Kangite Reserve",
+   "oreTypeId": 92568
   }
  },
- "oreSource": "per-faction ore from the site names in CCP's Cradle of War notes; confirmed in game 2026-11-02: Odatrik (Minmatar Bulwark) has an asteroid belt named 'Republic Kangite Reserve'"
+ "oreSource": "per-faction ore from the site names in CCP's Cradle of War notes; confirmed in game 2026-11-02: Odatrik (Minmatar Bulwark) has an asteroid belt named 'Republic Kangite Reserve'; ore names and type IDs from CCP ESI. A pilot's mining ledger confirmed Kangite, Raspite and Moissanite X-Grade mined in Bulwark systems (2026-11-03). ESI lists only the permanent asteroid belts, so the Reserve sites themselves are not in any CCP data feed"
 }
