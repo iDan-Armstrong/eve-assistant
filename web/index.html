@@ -16,8 +16,8 @@
     --panel: #0d131f;
     --panel-edge: #1c2638;
     --ink: #c9d4e3;
-    --ink-dim: #6b7891;
-    --ink-faint: #3d4860;
+    --ink-dim: #6aa9ff;     /* neon blue: secondary text */
+    --ink-faint: #3f7fd6;   /* deeper neon blue: notes, sources */
     --focus: #9fc1ff;
   }
   * { box-sizing: border-box; }
@@ -582,7 +582,7 @@ const secColor = s => SEC_COLORS[Math.max(0, s).toFixed(1)] || SEC_COLORS["0.0"]
    Lowsec and nullsec sit outside the scale: no CONCORD, so for an
    industrial pilot they are high-risk by definition. */
 const RISK_LEVELS = [
-  { key: "calm",     label: "calm",     max: .12, color: "#356b77" },
+  { key: "calm",     label: "calm",     max: .12, color: "#3f95a6" },
   { key: "guarded",  label: "guarded",  max: .30, color: "#d4c25a" },
   { key: "elevated", label: "elevated", max: .55, color: "#e88a2e" },
   { key: "high",     label: "high",     max: 2,   color: "#ec3b2c" },
