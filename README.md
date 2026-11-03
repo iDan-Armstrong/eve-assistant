@@ -80,6 +80,34 @@ survey data:
   station counts derived from the universe tree match the station table in
   5,431 of 5,432 systems.
 
+## Layers
+
+Layers are built per player role. **Security Risk (industry)** is the
+default; **Security Status** shows the classic in-game ramp; PvP layers are
+next.
+
+**Security Risk** answers "where will my hauler or barge get ganked?" by
+blending three inputs, every one shown in the system panel:
+
+| Input | Source | Weight |
+|---|---|---|
+| Suicide ganks, last 24h | zKillboard's `ganked` label (CONCORD-involved kills), details via CCP ESI | 50% |
+| Ship kills per traffic, last hour | CCP ESI `system_kills` / `system_jumps` | 25% |
+| Structural exposure | trade-route chokepoint analysis × CONCORD response | 25% |
+
+The structural term is pure network analysis
+(`tools/analyze_routes.py`): for the 10 trade-hub pairs (Jita, Amarr,
+Dodixie, Rens, Hek) it counts the shortest highsec routes and measures the
+share passing through each system, then weights by security (0.5 = slowest
+CONCORD). With no kill data at all it independently ranks **Balle** first
+and puts **Uedama** and **Sivala** in the top tier, the systems players
+know as the classic gank pipes.
+
+Live inputs refresh hourly: a scheduled GitHub Action runs
+`tools/fetch_live.py` (stdlib only, polite User-Agent, zKillboard request
+spacing, ESI compatibility date) and redeploys. A source outage never blocks
+a deploy; the layer degrades to structural risk and says so.
+
 ## Data pipeline
 
 ```

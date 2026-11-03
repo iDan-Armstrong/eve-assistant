@@ -5,6 +5,8 @@ name: Deploy Atlas to GitHub Pages
 on:
   push:
     branches: [master, main]
+  schedule:
+    - cron: "17 * * * *"     # hourly refresh of the live Security Risk data
   workflow_dispatch:
 
 permissions:
@@ -35,6 +37,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch live risk data (ESI + zKillboard)
+        run: |
+          python tools/analyze_routes.py
+          python tools/fetch_live.py
+        continue-on-error: true      # a source outage must never block deploy
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -4,3 +4,4 @@ __pycache__/
 sde/
 *.tgz
 shot-*.png
+web/data/live/
