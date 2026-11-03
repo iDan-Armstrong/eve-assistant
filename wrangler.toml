@@ -1,10 +1,10 @@
 # Cloudflare Worker: reserve-sightings relay for the New Eden Atlas.
-# Deployed by Cloudflare's Git integration (Workers Builds) on every push:
-# root directory "worker", deploy command "npx wrangler deploy".
+# Deployed by Cloudflare's Git integration (Workers Builds) on every push,
+# from the repository root, deploy command "npx wrangler deploy".
 # The KV namespace has no id: Wrangler 4.45+ creates and links it on the
 # first deploy (automatic resource provisioning).
 name = "atlas-sightings"
-main = "index.js"
+main = "worker/index.js"
 compatibility_date = "2025-09-01"
 
 [vars]
