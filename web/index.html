@@ -113,6 +113,8 @@
     overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 0 1 auto;
     background: rgba(13,19,31,.85); }
   .layers::-webkit-scrollbar { display: none; }
+  .layers.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+                       mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
   .layers button {
     background: none; border: 0; border-right: 1px solid var(--panel-edge);
     color: var(--ink-dim); font: inherit; font-size: 12.5px; padding: 6px 11px; cursor: pointer;
@@ -986,6 +988,7 @@ async function boot() {
       const pt = map.latLngToContainerPoint(p.ll), r = radiusFor(map.getZoom()) + 1;
       return { x: pt.x - r, y: pt.y - r, w: 2 * r, h: 2 * r };
     });
+    if (typeof pilotTagBoxes === "function") dots.push(...pilotTagBoxes());
     const rank = p => (p.id === state.selected ? 1e7 : 0) + (p.hub ? 1e5 : 0)
                       + p.stations * 100 + p.gates;
     const placed = placeLabels(visible.sort((a, b) => rank(b) - rank(a)).map(p => {
@@ -1028,6 +1031,13 @@ async function boot() {
     ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
   wireRoute();
+  /* fade the layer strip's edge while buttons are scrolled out of view */
+  const strip = document.querySelector(".layers");
+  const edge = () => strip.classList.toggle("more-right",
+    strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 2);
+  strip.addEventListener("scroll", edge);
+  addEventListener("resize", edge);
+  edge();
   if (typeof startPilots === "function") startPilots();
 
   const want = decodeURIComponent((location.hash.match(/^#s=(.+)/) || [])[1] || "");
@@ -1356,8 +1366,9 @@ function wireRoute() {
     if (name) { document.getElementById("rFrom").value = name; drawRoute(); }
   };
   document.getElementById("rAutopilot").onclick = async () => {
-    document.getElementById("rSum").textContent = "Sending waypoints…";
-    const msg = await sendToAutopilot(route.path);
+    const sum = document.getElementById("rSum");
+    sum.textContent = "Sending waypoints…";
+    const msg = await sendToAutopilot(route.path, (i, n) => { sum.textContent = `Sending waypoint ${i} of ${n}…`; });
     drawRoute();
     document.getElementById("rSum").insertAdjacentHTML("afterbegin", `<b>${msg}</b><br>`);
   };

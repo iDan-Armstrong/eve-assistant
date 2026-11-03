@@ -175,6 +175,7 @@ function drawPilots() {
                                         className: "pilot-tag" });
   }
   sizePilotRings();
+  map.fire("moveend");                       /* re-place labels around the name tags */
   document.getElementById("rPilot").hidden = !pilotState.data.size;
   const box = document.getElementById("tPilots");
   box.closest("label").hidden = !pilotState.data.size;
@@ -300,13 +301,14 @@ function pilotLocationName() {
   const d = pilotState.data.get(pilotState.active);
   return d && d.loc ? sysName(d.loc.system) : null;
 }
-async function sendToAutopilot(path) {
+async function sendToAutopilot(path, progress = () => {}) {
   const id = pilotState.active;
   if (!id || !path || path.length < 2) return "Plan a route and sign in first.";
   const d = pilotState.data.get(id);
   try {
     const hops = path.slice(1);
     for (let i = 0; i < hops.length; i++) {
+      progress(i + 1, hops.length);
       await EveSSO.esi(id, `/ui/autopilot/waypoint?add_to_beginning=false&clear_other_waypoints=${i === 0}` +
                           `&destination_id=${hops[i]}`, { method: "POST" });
     }
@@ -314,4 +316,17 @@ async function sendToAutopilot(path) {
   } catch (e) {
     return `Autopilot update failed (${e.message}). The pilot must be logged in to the game.`;
   }
+}
+
+/* screen boxes covered by pilot name tags, so system labels steer clear */
+function pilotTagBoxes() {
+  const out = [];
+  for (const d of pilotState.data.values()) {
+    const p = d.loc && state.byId.get(d.loc.system);
+    if (!p || !document.getElementById("tPilots").checked) continue;
+    const pt = map.latLngToContainerPoint(p.ll);
+    const w = textWidth(d.name, '600 11px "Chakra Petch", sans-serif') + 16;
+    out.push({ x: pt.x - w / 2, y: pt.y - 16 - 22, w, h: 22 });
+  }
+  return out;
 }
