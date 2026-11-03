@@ -1,0 +1,64 @@
+{
+ "about": "Bulwark systems (Cradle of War). Not exposed by ESI or confirmed in the static export; curated from the in-game star map's faction warfare filter. War HQ systems per CCP's Cradle of War expansion notes.",
+ "source": "in-game star map, faction warfare filter (curated)",
+ "asOf": "2026-11-02",
+ "campaignOres": [
+  "Kangite",
+  "Raspite",
+  "Moissanite",
+  "Polycrase"
+ ],
+ "campaignOresNote": "campaign mining anomalies, not static belts",
+ "factions": {
+  "Caldari State": {
+   "color": "#5fa8d3",
+   "warHQ": 30045324,
+   "systems": [
+    {
+     "id": 30045322,
+     "name": "Samanuni"
+    },
+    {
+     "id": 30045321,
+     "name": "Uchomida"
+    },
+    {
+     "id": 30045325,
+     "name": "Rohamaa"
+    },
+    {
+     "id": 30045326,
+     "name": "Uuhulanen"
+    },
+    {
+     "id": 30045324,
+     "name": "Onnamon"
+    },
+    {
+     "id": 30045327,
+     "name": "Tsuruma"
+    },
+    {
+     "id": 30045323,
+     "name": "Astoh"
+    },
+    {
+     "id": 30002799,
+     "name": "Oisio"
+    },
+    {
+     "id": 30002794,
+     "name": "Yria"
+    },
+    {
+     "id": 30002798,
+     "name": "Venilen"
+    },
+    {
+     "id": 30002795,
+     "name": "Oshaima"
+    }
+   ]
+  }
+ }
+}

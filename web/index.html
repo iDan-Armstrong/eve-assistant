@@ -87,6 +87,11 @@
   .legend .ramp { display: flex; gap: 2px; margin-bottom: 5px; }
   .legend .ramp i { width: 17px; height: 8px; border-radius: 1px; }
   .legend .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-dim); }
+  .bulwark-key { margin-top: 7px; font-size: 11px; color: var(--ink-dim); }
+  .bulwark-key .bk-ring { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    border: 2px dashed #5fa8d3; vertical-align: -2px; margin-right: 3px; }
+  .bulwark-key .bk-hq { border-style: double; border-width: 3px; margin-left: 8px; }
+  .bulwark-key .bk-src { display: block; color: var(--ink-faint); font-size: 10.5px; margin-top: 2px; }
   .legend .stats { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--panel-edge); font-size: 11px; color: var(--ink-dim); }
 
   /* ---- info panel -------------------------------------------------- */
@@ -308,6 +313,7 @@
     <div class="results" id="qResults" role="listbox"></div>
   </div>
   <div class="toggles">
+    <label><input type="checkbox" id="tBulwark" checked> bulwarks</label>
     <label><input type="checkbox" id="tJumps" checked> stargate network</label>
     <label><input type="checkbox" id="tLabels" checked> labels</label>
   </div>
@@ -316,6 +322,9 @@
 <div class="legend">
   <div class="ramp" id="ramp"></div>
   <div class="ends"><span>0.0 nullsec</span><span>highsec 1.0</span></div>
+  <div class="bulwark-key" id="bulwarkKey" hidden>
+    <i class="bk-ring"></i> Bulwark system <i class="bk-ring bk-hq"></i> War HQ
+    <span class="bk-src">curated from the in-game map</span></div>
   <div class="stats" id="stats">loading…</div>
 </div>
 
@@ -400,6 +409,9 @@ async function boot() {
     fetch("data/regions.json").then(r => r.json()),
     fetch("data/stations.json").then(r => r.json()).catch(() => ({ stations: [] })),
   ]);
+  /* curated overlay: Bulwark systems (not in ESI or the static export) */
+  const bulwarkDb = await fetch("data/bulwarks.json").then(r => r.json())
+    .catch(() => ({ factions: {} }));
 
   /* relational join: stations -> their system, by solarSystemID */
   for (const st of stationDb.stations) {
@@ -466,6 +478,41 @@ async function boot() {
     (state.adj.get(from) || state.adj.set(from, []).get(from)).push(to);
     (state.adj.get(to) || state.adj.set(to, []).get(to)).push(from);
   }
+
+  /* Bulwark rings: dashed faction-colored ring per system, a second ring
+     on the War HQ. Joined onto the systems by ID like every other layer;
+     the system record carries the attribute for the panel and 3D view. */
+  const bulwarkLayer = L.layerGroup().addTo(map);
+  const bulwarkRings = [];
+  for (const [faction, fx] of Object.entries(bulwarkDb.factions || {})) {
+    for (const b of fx.systems) {
+      const p = state.byId.get(b.id);
+      if (!p) continue;
+      const hq = b.id === fx.warHQ;
+      p.bulwark = { faction, hq, ores: bulwarkDb.campaignOres || [],
+                    oresNote: bulwarkDb.campaignOresNote || "",
+                    source: bulwarkDb.source || "" };
+      const ring = L.circleMarker(p.ll, { renderer: canvas, interactive: false,
+        fill: false, color: fx.color, weight: 2, opacity: .95, dashArray: "3 3" });
+      bulwarkLayer.addLayer(ring);
+      bulwarkRings.push({ m: ring, extra: 5 });
+      if (hq) {
+        const outer = L.circleMarker(p.ll, { renderer: canvas, interactive: false,
+          fill: false, color: fx.color, weight: 1.5, opacity: .8 });
+        bulwarkLayer.addLayer(outer);
+        bulwarkRings.push({ m: outer, extra: 9 });
+      }
+    }
+  }
+  const sizeBulwarkRings = () => {
+    const r = radiusFor(map.getZoom());
+    for (const { m, extra } of bulwarkRings) m.setRadius(r + extra);
+  };
+  sizeBulwarkRings();
+  map.on("zoomend", sizeBulwarkRings);
+  const tBulwark = document.getElementById("tBulwark");
+  tBulwark.onchange = () => tBulwark.checked ? bulwarkLayer.addTo(map) : bulwarkLayer.remove();
+  document.getElementById("bulwarkKey").hidden = !bulwarkRings.length;
 
   /* labels live on their own pane, above lines, markers and arrows */
   map.createPane("labels");
@@ -629,8 +676,10 @@ function select(id) {
      ["stations", p.stations], ["gates", p.gates]]
     .map(([k, v]) => `<div><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
   const flags = [p.hub && "trade-lane hub", p.border && "border system"].filter(Boolean);
+  if (p.bulwark) flags.unshift(`${p.bulwark.faction} Bulwark${p.bulwark.hq ? " (War HQ)" : ""}`);
   document.getElementById("pFlags").textContent = flags.join(", ") +
-    (p.ores && p.ores.length ? `${flags.length ? " — " : ""}belt ores: ${p.ores.join(", ")}` : "");
+    (p.ores && p.ores.length ? `${flags.length ? " — " : ""}belt ores: ${p.ores.join(", ")}` : "") +
+    (p.bulwark ? ` — campaign ores: ${p.bulwark.ores.join(", ")} (${p.bulwark.oresNote})` : "");
 
   const neighbors = (state.adj.get(id) || []).map(nid => state.byId.get(nid))
     .sort((a, b) => a.name.localeCompare(b.name));

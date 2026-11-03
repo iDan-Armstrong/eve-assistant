@@ -90,7 +90,8 @@ export function openOrrery(host, data, onClose) {
   host.innerHTML = `
     <div class="orr-top">
       <div>
-        <div class="orr-crumbs">${system.region} ‹ ${system.constellation}</div>
+        <div class="orr-crumbs">${system.region} ‹ ${system.constellation}${system.bulwark
+          ? ` · ${system.bulwark.faction} Bulwark${system.bulwark.hq ? " (War HQ)" : ""}` : ""}</div>
         <div class="orr-title">${system.name}
           <span style="color:${data.secColor}">${system.sec.toFixed(1)}</span></div>
       </div>
@@ -253,6 +254,8 @@ export function openOrrery(host, data, onClose) {
                     : "not covered by the reference table"],
                  ["Ore source", (system.ores || []).length
                     ? "EVE University reference (flagged pre-Catalyst)" : ""],
+                 ["Campaign ores", system.bulwark
+                    ? `${system.bulwark.ores.join(", ")} (${system.bulwark.oresNote})` : ""],
                  ...statRows(b.st)] }, null);
       hit.position.copy(centre);
     }
