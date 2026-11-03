@@ -1,0 +1,234 @@
+# Data refresh report
+
+*2026-11-02: HISA trimmed export overlaid on the CCP SDE (CCP SDE, June 2024 release (npm eve-online-sde 126.6.18)) basemap by tools/overlay_current.py*
+
+- k-space systems: **5,485**; stargate links: **6,989**; regions: **70**
+- systems with ice fields: **820**; with a Jove Observatory: **1028**
+- carried forward from the full SDE: moons, belts, stations, gate types, planet physics, sovereignty power/workforce. New systems show star and planets only (marked partial).
+
+## Regions added (1)
+
+- Exordium
+
+## Systems added (53)
+
+- Manifest (Exordium)
+- Gallant (Exordium)
+- Fortitude (Exordium)
+- Forte (Exordium)
+- Triumph (Exordium)
+- Decorum (Exordium)
+- Lustre (Exordium)
+- Celerity (Exordium)
+- Ratiocinate (Exordium)
+- Rigor (Exordium)
+- Lenity (Exordium)
+- Steadfast (Exordium)
+- Couth (Exordium)
+- Mettle (Exordium)
+- Venerate (Exordium)
+- Repute (Exordium)
+- Adroit (Exordium)
+- Sagacity (Exordium)
+- Erudite (Exordium)
+- Solemn (Exordium)
+- Tenacity (Exordium)
+- Valiance (Exordium)
+- Chivalric (Exordium)
+- Equity (Exordium)
+- Abstention (Exordium)
+- Tiberis (Exordium)
+- Rotonos (Exordium)
+- Ligare (Exordium)
+- Axiosere (Exordium)
+- Waison (Exordium)
+- Maso (Exordium)
+- Mondaekus (Exordium)
+- Kita-Aino (Exordium)
+- Aldoras (Exordium)
+- Pamirasu (Exordium)
+- Hotak (Exordium)
+- Dyka-hau (Exordium)
+- Urtasvaar (Exordium)
+- Tatrys (Exordium)
+- Vatna (Exordium)
+- Tungna (Exordium)
+- Dranga (Exordium)
+- Tindfjalla (Exordium)
+- Lang (Exordium)
+- Hofs (Exordium)
+- Dettisolin (Exordium)
+- Adaz (Exordium)
+- Mazor (Exordium)
+- Kanta (Exordium)
+- Taikud (Exordium)
+- Vaejra (Exordium)
+- Sakizra (Exordium)
+- Ichorah (Exordium)
+
+## Stargate links added (101)
+
+- Kassigainen ↔ Pakhshi
+- Mehatoor ↔ Akes
+- Rayeret ↔ Jakri
+- Yulai ↔ Manifest
+- Kemerk ↔ Bania
+- Manifest ↔ Fortitude
+- Manifest ↔ Celerity
+- Manifest ↔ Rigor
+- Manifest ↔ Steadfast
+- Gallant ↔ Fortitude
+- Gallant ↔ Celerity
+- Gallant ↔ Rigor
+- Gallant ↔ Steadfast
+- Gallant ↔ Mettle
+- Gallant ↔ Venerate
+- Gallant ↔ Repute
+- Fortitude ↔ Forte
+- Fortitude ↔ Triumph
+- Fortitude ↔ Decorum
+- Fortitude ↔ Lustre
+- Fortitude ↔ Tiberis
+- Forte ↔ Celerity
+- Forte ↔ Rigor
+- Forte ↔ Steadfast
+- Forte ↔ Adroit
+- Forte ↔ Sagacity
+- Forte ↔ Erudite
+- Triumph ↔ Celerity
+- Triumph ↔ Rigor
+- Triumph ↔ Steadfast
+- Triumph ↔ Solemn
+- Triumph ↔ Tenacity
+- Triumph ↔ Valiance
+- Decorum ↔ Celerity
+- Decorum ↔ Rigor
+- Decorum ↔ Steadfast
+- Decorum ↔ Chivalric
+- Decorum ↔ Equity
+- Decorum ↔ Abstention
+- Lustre ↔ Ratiocinate
+- Lustre ↔ Couth
+- Celerity ↔ Ratiocinate
+- Celerity ↔ Kita-Aino
+- Ratiocinate ↔ Lenity
+- Rigor ↔ Lenity
+- Rigor ↔ Vatna
+- Lenity ↔ Couth
+- Steadfast ↔ Couth
+- Steadfast ↔ Adaz
+- Tiberis ↔ Rotonos
+- Tiberis ↔ Ligare
+- Tiberis ↔ Axiosere
+- Rotonos ↔ Ligare
+- Rotonos ↔ Axiosere
+- Rotonos ↔ Waison
+- Ligare ↔ Axiosere
+- Ligare ↔ Maso
+- Axiosere ↔ Waison
+- Axiosere ↔ Maso
+- Axiosere ↔ Mondaekus
+- Waison ↔ Mondaekus
+- Maso ↔ Mondaekus
+- Kita-Aino ↔ Aldoras
+- Kita-Aino ↔ Pamirasu
+- Kita-Aino ↔ Hotak
+- Aldoras ↔ Pamirasu
+- Aldoras ↔ Hotak
+- Aldoras ↔ Dyka-hau
+- Pamirasu ↔ Hotak
+- Pamirasu ↔ Urtasvaar
+- Hotak ↔ Dyka-hau
+- Hotak ↔ Urtasvaar
+- Hotak ↔ Tatrys
+- Dyka-hau ↔ Tatrys
+- Urtasvaar ↔ Tatrys
+- Vatna ↔ Tungna
+- Vatna ↔ Dranga
+- Vatna ↔ Tindfjalla
+- Tungna ↔ Dranga
+- Tungna ↔ Tindfjalla
+- Tungna ↔ Lang
+- Dranga ↔ Tindfjalla
+- Dranga ↔ Hofs
+- Tindfjalla ↔ Lang
+- Tindfjalla ↔ Hofs
+- Tindfjalla ↔ Dettisolin
+- Lang ↔ Dettisolin
+- Hofs ↔ Dettisolin
+- Adaz ↔ Mazor
+- Adaz ↔ Kanta
+- Adaz ↔ Taikud
+- Mazor ↔ Kanta
+- Mazor ↔ Taikud
+- Mazor ↔ Vaejra
+- Kanta ↔ Taikud
+- Kanta ↔ Sakizra
+- Taikud ↔ Vaejra
+- Taikud ↔ Sakizra
+- Taikud ↔ Ichorah
+- Vaejra ↔ Ichorah
+- Sakizra ↔ Ichorah
+
+## Security changed (60)
+
+- Hirtamon: 0.9747 → 0.949
+- Ikuchi: 0.9868 → 0.949
+- Urlen: 0.96 → 0.949
+- Kisogo: 1.0 → 0.949
+- Niyabainen: 0.9639 → 0.949
+- Perimeter: 0.9531 → 0.949
+- New Caldari: 1.0 → 0.949
+- Aokannitoh: 0.9709 → 0.949
+- Amsen: 1.0 → 0.949
+- Kakakela: 0.9723 → 0.949
+- Todaki: 1.0 → 0.949
+- Emrayur: 1.0 → 0.949
+- Kerepa: 0.9697 → 0.949
+- Safilbab: 0.9576 → 0.949
+- Hulm: 1.0 → 0.949
+- Ameinaka: 0.9874 → 0.949
+- Edmalbrurdus: 0.9892 → 0.949
+- Ivar: 0.9562 → 0.949
+- Pator: 1.0 → 0.949
+- Ammold: 1.0 → 0.949
+- Onga: 0.9535 → 0.949
+- Vullat: 0.9714 → 0.949
+- Malukker: 0.988 → 0.949
+- Todeko: 0.9921 → 0.949
+- Usteli: 0.9506 → 0.949
+- Loguttur: 0.9573 → 0.949
+- Egghelende: 0.4493 → 0.4483
+- Bourynes: 1.0 → 0.949
+- Yashunen: 0.9512 → 0.949
+- Blameston: 0.9516 → 0.949
+- Athinard: 0.9749 → 0.949
+- Meves: 0.9791 → 0.949
+- Mattere: 0.9511 → 0.949
+- Arlulf: 0.9564 → 0.949
+- Alf: 0.9537 → 0.949
+- Todrir: 0.9728 → 0.949
+- Leurtmar: 0.9579 → 0.949
+- Ryddinjorn: 1.0 → 0.949
+- Arlek: 0.9596 → 0.949
+- Erstet: 0.4494 → 0.4484
+- Abrat: 0.9786 → 0.949
+- Orgron: 0.9616 → 0.949
+- Embod: 0.9607 → 0.949
+- Fildar: 0.9526 → 0.949
+- Amarr: 1.0 → 0.949
+- Hedion: 0.9639 → 0.949
+- Neziel: 0.4499 → 0.4489
+- Bhizheba: 0.9636 → 0.949
+- Chaven: 1.0 → 0.949
+- Sarum Prime: 1.0 → 0.949
+- Irnal: 0.9508 → 0.949
+- Galeh: 0.4492 → 0.4482
+- Rilera: 0.4498 → 0.4488
+- Luminaire: 1.0 → 0.949
+- Duripant: 1.0 → 0.949
+- Palmon: 0.4497 → 0.4487
+- Sehmy: 1.0 → 0.949
+- Liparer: 0.4491 → 0.4481
+- Yulai: 1.0 → 0.949
+- Cistuvaert: 1.0 → 0.949

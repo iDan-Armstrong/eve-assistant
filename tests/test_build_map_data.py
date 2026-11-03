@@ -123,3 +123,12 @@ def test_typical_ores_reads_sde_subclass_suffix():
     from build_map_data import typical_ores
     # SDE securityClass values carry a numeric suffix (D4R-H7 is "H7")
     assert "Bistot" in typical_ores(-1.0, -1.0, "H7", "")
+
+
+def test_overlay_star_record_converts_units():
+    from overlay_current import star_record
+    star = {"id": 1, "type": "Sun G5 (Yellow)", "name": "X - Star", "radius": 5.0e8}
+    rec = star_record(star, (5600.4, "G5 V", 1.02, 3.1557e16, 0))
+    assert rec["tempK"] == 5600 and rec["radiusKm"] == 500000
+    assert rec["ageYr"] == 1_000_000_000 and rec["spectral"] == "G5 V"
+    assert star_record(None, None) is None

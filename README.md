@@ -5,15 +5,17 @@
 
 > **In development.** Live preview: https://idan-armstrong.github.io/eve-assistant/
 > — feedback welcome via [Issues](https://github.com/iDan-Armstrong/eve-assistant/issues).
-> The basemap is currently built from a 2024 static data export; a refresh
-> to current data (Cradle of War era) is in progress.
+> Geography is current (Cradle of War era, incl. the new Exordium region);
+> moons, belts and stations still come from CCP's June 2024 export until the
+> next full SDE refresh.
 
 An interactive star atlas of the EVE Online universe, built the way a GIS
-professional builds a map: **5,432 real solar systems** as point features with
-full attribute data, **6,888 stargate connections** as a line network,
+professional builds a map: **5,485 real solar systems** as point features with
+full attribute data, **6,989 stargate connections** as a line network,
 **5,150 stations** joined to their systems by foreign key, the full celestial
 hierarchy (**46,172 planets, 234,651 moons, 40,928 asteroid belts**, every
-star), and **69 regions**
+star), **820 ice-field systems**, **1,028 Jove Observatories**, and
+**70 regions**
 — a spatial / attribute / relational dataset rendered with the same tooling
 (Leaflet, GeoJSON) used in production web GIS.
 
@@ -99,9 +101,11 @@ The structural term is pure network analysis
 (`tools/analyze_routes.py`): for the 10 trade-hub pairs (Jita, Amarr,
 Dodixie, Rens, Hek) it counts the shortest highsec routes and measures the
 share passing through each system, then weights by security (0.5 = slowest
-CONCORD). With no kill data at all it independently ranks **Balle** first
-and puts **Uedama** and **Sivala** in the top tier, the systems players
-know as the classic gank pipes.
+CONCORD). With no kill data at all it independently ranks **Uedama** first,
+with **Balle** second and **Sivala** in the top tier, the systems players
+know as the classic gank pipes. (On the 2024 map Balle led; the current
+stargate network shortened Jita-Amarr from 45 to 34 jumps and moved the
+traffic.)
 
 Live inputs refresh hourly: a scheduled GitHub Action runs
 `tools/fetch_live.py` (stdlib only, polite User-Agent, zKillboard request
@@ -132,6 +136,20 @@ design; Zarzakh's station missing from the universe tree is a genuine SDE
 inconsistency; and the audit's first run caught a mislabeled faction in
 this project's own builder.
 
+### Keeping the map current
+
+CCP's full export is the source of record (`tools/build_map_data.py`). When
+only a newer *trimmed* export is at hand, `tools/overlay_current.py` patches
+the built map by system ID from [HISA](https://github.com/Crytopox/HISA)'s
+current database (MIT): new systems and regions, security changes, new
+stargate links, stars and planets for new systems, plus ice-field counts and
+Jove Observatory flags. Everything the trimmed export lacks (moons, belts,
+stations, gate types, planet physics) is carried forward, the overlay is
+idempotent, and every change is listed in
+[docs/data-refresh.md](docs/data-refresh.md): 1 region (Exordium), 53
+systems, 101 stargate links and 60 security changes since the June 2024
+export.
+
 ## Roadmap
 
 - **Live layers (ESI):** CCP's public API serves sovereignty, faction-warfare
@@ -157,6 +175,9 @@ EVE Online and all related data are the intellectual property of
 Data Export under the
 [Developer License](https://developers.eveonline.com/license-agreement).
 This project is a fan-made tool and is not affiliated with or endorsed by CCP.
+Current geography, ice fields and observatories come from
+[HISA](https://github.com/Crytopox/HISA) by Crytopox (MIT); see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 

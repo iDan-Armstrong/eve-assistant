@@ -1,0 +1,56 @@
+# Third-party notices
+
+## HISA — Haakario Interstellar Survey Authority
+
+Source: https://github.com/Crytopox/HISA
+
+Used for: current k-space geography (systems, regions, security, stargate
+links, stars, planets), ice-field counts and Jove Observatory flags,
+applied by tools/overlay_current.py.
+
+```
+MIT License
+
+Copyright (c) 2026 Crytopox
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Additional Notice
+
+This project may reference, display, or interact with assets, names, logos,
+icons, images, trademarks, data, or other intellectual property related to
+EVE Online and Fenris Creations, formerly known as CCP Games.
+
+All EVE Online, Fenris Creations, CCP Games, and related assets, names,
+logos, trademarks, and intellectual property remain the property of Fenris
+Creations, CCP hf., and/or their respective owners.
+
+The MIT License applies only to the original source code and documentation
+created for this project. It does not grant any rights to EVE Online assets,
+Fenris Creations assets, CCP Games assets, trademarks, logos, or other
+third-party intellectual property.
+
+This project is an unofficial, fan-made tool and is not affiliated with,
+endorsed by, sponsored by, or approved by Fenris Creations or CCP Games.```
+
+## EVE Online data
+
+EVE Online and all related data are the intellectual property of CCP hf.
+Used under the EVE Developer License; this project is not affiliated with
+or endorsed by CCP.
