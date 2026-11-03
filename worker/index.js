@@ -47,7 +47,11 @@ function cors(req, env) {
 const json = (data, status, headers) => new Response(JSON.stringify(data), {
   status, headers: { "Content-Type": "application/json", ...headers } });
 
-const b64urlBytes = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+/* JWT segments are unpadded base64url; atob needs standard, padded base64 */
+const b64urlBytes = s => {
+  const b = s.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(b + "=".repeat((4 - b.length % 4) % 4)), c => c.charCodeAt(0));
+};
 const b64urlJson = s => JSON.parse(new TextDecoder().decode(b64urlBytes(s)));
 
 async function verify(token, env, needMining = false) {
