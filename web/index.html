@@ -131,7 +131,7 @@
   .risk-live { margin-top: 6px; font-size: 10.5px; color: var(--ink-faint); }
   .risk-box { margin: 8px 0 2px; font-size: 12px; color: var(--ink-dim); line-height: 1.45; }
   .risk-box:empty { display: none; }
-  .risk-box .rb-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .risk-box .rb-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 16px; margin-bottom: 3px; }
   .risk-box .rb-level { font-weight: 600; font-size: 13px; }
   .risk-box .rb-line { padding-left: 2px; }
   .risk-box .rb-note { color: var(--ink-faint); font-size: 11px; margin-top: 2px; }
@@ -364,7 +364,8 @@
     <div class="results" id="qResults" role="listbox"></div>
   </div>
   <div class="layers" role="group" aria-label="Map layer">
-    <button data-layer="risk" aria-pressed="true">Security risk <small>industry</small></button>
+    <button data-layer="risk-now" aria-pressed="true">Risk now <small>industry</small></button>
+    <button data-layer="risk-history" aria-pressed="false">Risk history <small>30 days</small></button>
     <button data-layer="status" aria-pressed="false">Security status</button>
     <button data-layer="pvp" aria-pressed="false" disabled
             title="PvP layers are next on the roadmap">PvP <small>soon</small></button>
@@ -387,7 +388,7 @@
     <div class="ends"><span>0.0 nullsec</span><span>highsec 1.0</span></div>
   </div>
   <div id="riskLegend">
-    <div class="risk-title">Security risk for industry</div>
+    <div class="risk-title" id="riskTitle">Risk now for industry</div>
     <div class="risk-ramp" id="riskRamp"></div>
     <div class="risk-live" id="riskLive">loading live data…</div>
   </div>
@@ -440,14 +441,19 @@ const SEC_COLORS = {
 };
 const secColor = s => SEC_COLORS[Math.max(0, s).toFixed(1)] || SEC_COLORS["0.0"];
 
-/* ---- Security Risk (industry) ---------------------------------------
-   A transparent blend, so every score can be explained in the panel:
-     ganks (24h, zKillboard 'ganked')       50%  — saturates at 4 ganks
-     ship kills per traffic (last hour, ESI) 25%  — 1 kill per 15 jumps = max
-     structural exposure (trade-route choke  25%  — tools/analyze_routes.py
-       x CONCORD response)
-   Without live data the structural term alone is shown at half weight,
-   so a quiet chokepoint can read "guarded" but never "high".
+/* ---- Security Risk (industry): now and history -------------------------
+   Two transparent blends, so every score can be explained in the panel.
+   RISK NOW ("should I undock?")
+     ganks, last 6h                          50%  — saturates at 2 ganks
+     ship kills per traffic, last hour (ESI) 25%  — 1 kill per 15 jumps = max
+     structural exposure                     25%
+   RISK HISTORY ("is this a bad neighborhood?")
+     ganks, last 30 days                     50%  — saturates at 20 ganks
+     average hourly kills per traffic        25%  — same scale as now
+     structural exposure                     25%
+   Structural exposure = trade-route chokepoint load x CONCORD response
+   (tools/analyze_routes.py). With no data for a mode, the structural term
+   alone shows at half weight: a quiet chokepoint reads "guarded" at most.
    Lowsec and nullsec sit outside the scale: no CONCORD, so for an
    industrial pilot they are high-risk by definition. */
 const RISK_LEVELS = [
@@ -457,31 +463,44 @@ const RISK_LEVELS = [
   { key: "high",     label: "high",     max: 2,   color: "#ec3b2c" },
 ];
 const RISK_OUTSIDE = { key: "outside", label: "outside highsec", color: "#4b3548" };
-const riskData = { static: null, activity: null, ganks: null };
+const riskData = { static: null, activity: null, ganks: null, history: null };
+const isRiskLayer = l => l === "risk-now" || l === "risk-history";
 
-function riskFor(p) {
+function riskFor(p, mode = "risk-now") {
   if (p.sec < 0.5) return { level: RISK_OUTSIDE, outside: true };
   const st = riskData.static && riskData.static.systems[p.id];
-  const act = riskData.activity && riskData.activity.systems[p.id];
-  const gk = riskData.ganks && riskData.ganks.systems[p.id];
-  const live = !!(riskData.activity || riskData.ganks);
   const exposure = st ? st.exposure : 0;
-  const ganks = gk ? gk.n : 0;
-  const [shipKills = 0, podKills = 0, , jumps = 0] = act || [];
-  const killRate = shipKills / Math.max(jumps, 40);
+  let live, ganks, killRate, detail;
+  if (mode === "risk-history") {
+    const h = riskData.history;
+    const gk = h && h.ganks[p.id];
+    const [kph = 0, jph = 0] = (h && h.activity.systems[p.id]) || [];
+    live = !!h && (h.oldestGank || h.activityDays > 0);
+    ganks = gk ? gk.n / 10 : 0;                    // 20 ganks -> full weight
+    killRate = kph / Math.max(jph, 40);
+    detail = { gk, kph, jph };
+  } else {
+    const gk = riskData.ganks && riskData.ganks.systems[p.id];
+    const [shipKills = 0, podKills = 0, , jumps = 0] =
+      (riskData.activity && riskData.activity.systems[p.id]) || [];
+    live = !!(riskData.activity || riskData.ganks);
+    ganks = gk ? gk.n : 0;                          // 2 ganks -> full weight
+    killRate = shipKills / Math.max(jumps, 40);
+    detail = { gk, shipKills, podKills, jumps };
+  }
   const score = live
-    ? .5 * Math.min(1, ganks / 4) + .25 * Math.min(1, killRate * 15) + .25 * exposure
+    ? .5 * Math.min(1, ganks / 2) + .25 * Math.min(1, killRate * 15) + .25 * exposure
     : .5 * exposure;
   const level = RISK_LEVELS.find(l => score < l.max);
-  return { level, score, live, st, gk, shipKills, podKills, jumps };
+  return { level, score, live, st, ...detail };
 }
 
 /* marker size: hubs a touch larger; in the risk layer, hotspots grow so
    they read at any zoom */
 function markerRadius(p, z) {
   let r = radiusFor(z) + (p.hub ? 1.3 : 0);
-  if (currentLayer === "risk") {
-    const k = riskFor(p).level.key;
+  if (isRiskLayer(currentLayer)) {
+    const k = riskFor(p, currentLayer).level.key;
     r += k === "high" ? 3.5 : k === "elevated" ? 1.8 : 0;
   }
   return r;
@@ -656,14 +675,9 @@ async function boot() {
   /* risk inputs: structural file ships with the site; live files are
      written hourly by CI and may be absent (local runs, source outage) */
   const getJson = url => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
-  [riskData.static, riskData.activity, riskData.ganks] = await Promise.all([
+  [riskData.static, riskData.activity, riskData.ganks, riskData.history] = await Promise.all([
     getJson("data/risk_static.json"), getJson("data/live/activity.json"),
-    getJson("data/live/ganks.json")]);
-  const liveEl = document.getElementById("riskLive");
-  const stamp = (riskData.activity || riskData.ganks || {}).generated;
-  liveEl.textContent = stamp
-    ? `live: ESI kills/jumps + zKillboard ganks, updated ${new Date(stamp).toUTCString().slice(17, 22)} UTC`
-    : "live data unavailable here: structural chokepoint risk only";
+    getJson("data/live/ganks.json"), getJson("data/live/history.json")]);
   document.getElementById("riskRamp").innerHTML = [...RISK_LEVELS, RISK_OUTSIDE]
     .map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join("");
 
@@ -775,7 +789,7 @@ async function boot() {
   try { saved = localStorage.getItem("atlas.layer"); } catch { /* ignore */ }
   document.querySelectorAll(".layers button:not(:disabled)").forEach(b =>
     b.onclick = () => applyLayer(b.dataset.layer));
-  applyLayer(saved === "status" ? "status" : "risk");   // risk is the default
+  applyLayer(["status", "risk-history"].includes(saved) ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
 
   const want = decodeURIComponent((location.hash.match(/^#s=(.+)/) || [])[1] || "");
@@ -786,47 +800,82 @@ async function boot() {
 }
 
 /* ---- layers ------------------------------------------------------------ */
-let currentLayer = "risk";
+let currentLayer = "risk-now";
 function applyLayer(layer) {
   currentLayer = layer;
   try { localStorage.setItem("atlas.layer", layer); } catch { /* private mode */ }
   document.querySelectorAll(".layers button").forEach(b =>
     b.setAttribute("aria-pressed", String(b.dataset.layer === layer)));
-  document.getElementById("riskLegend").hidden = layer !== "risk";
+  document.getElementById("riskLegend").hidden = !isRiskLayer(layer);
   document.getElementById("secLegend").hidden = layer !== "status";
+  if (isRiskLayer(layer)) updateRiskLegend(layer);
   const z = map.getZoom();
   state.markers.forEach((m, id) => {
     const p = state.byId.get(id);
-    m.setStyle({ fillColor: layer === "risk" ? riskFor(p).level.color : secColor(p.sec) });
+    const r = isRiskLayer(layer) ? riskFor(p, layer) : null;
+    m.setStyle({ fillColor: r ? r.level.color : secColor(p.sec) });
     m.setRadius(markerRadius(p, z));
-    if (layer === "risk" && riskFor(p).level.key === "high") m.bringToFront();
+    if (r && r.level.key === "high") m.bringToFront();
   });
   if (state.selected) renderRisk(state.byId.get(state.selected));
 }
 
+const hhmm = iso => new Date(iso).toUTCString().slice(17, 22) + " UTC";
+function updateRiskLegend(layer) {
+  const title = document.getElementById("riskTitle"), el = document.getElementById("riskLive");
+  if (layer === "risk-history") {
+    title.textContent = "Risk history for industry: last 30 days";
+    const h = riskData.history;
+    if (h && (h.oldestGank || h.activityDays)) {
+      const since = h.oldestGank ? new Date(h.oldestGank).toISOString().slice(0, 10) : "—";
+      el.textContent = `ganks since ${since}, ${h.activityDays} day${h.activityDays === 1 ? "" : "s"} ` +
+        `of hourly kill averages; updated ${hhmm(h.generated)}`;
+    } else {
+      el.textContent = "history not collected yet here: structural chokepoint risk only";
+    }
+  } else {
+    title.textContent = "Risk now for industry: last 6 hours";
+    const stamp = (riskData.activity || riskData.ganks || {}).generated;
+    el.textContent = stamp
+      ? `live: ESI kills/jumps (last hour) + ganks (last 6h), updated ${hhmm(stamp)}`
+      : "live data unavailable here: structural chokepoint risk only";
+  }
+}
+
+function ganksLine(gk, label) {
+  if (!gk) return `${label}: none recorded`;
+  const isk = gk.isk > 0 ? ` (${fmtIsk(gk.isk)} ISK where priced)` : "";
+  const top = gk.top && gk.top.length
+    ? ` — ${gk.top.map(([s, n]) => n > 1 ? `${s} ×${n}` : s).join(", ")}` : "";
+  return `${label}: <b>${gk.n}</b>${isk}${top}`;
+}
+
 function renderRisk(p) {
   const box = document.getElementById("pRisk");
-  const r = riskFor(p);
-  if (r.outside) {
+  const now = riskFor(p, "risk-now"), hist = riskFor(p, "risk-history");
+  if (now.outside) {
     box.innerHTML = `<div class="rb-head"><span class="rb-level" style="color:#b07aa6">Outside highsec</span></div>
       <div class="rb-line">No CONCORD response: treat as high risk for industry.</div>`;
     return;
   }
   const lines = [];
-  if (r.live) {
-    lines.push(r.gk
-      ? `Ganks, last 24h: <b>${r.gk.n}</b> (${fmtIsk(r.gk.isk)} ISK)` +
-        (r.gk.top && r.gk.top.length ? ` — ${r.gk.top.map(([s, n]) => n > 1 ? `${s} ×${n}` : s).join(", ")}` : "")
-      : "Ganks, last 24h: none recorded");
-    lines.push(`Last hour: ${r.shipKills} ship kills, ${r.podKills} pod kills, ${r.jumps} jumps`);
+  if (now.live) {
+    lines.push(ganksLine(now.gk, "Ganks, last 6h"));
+    lines.push(`Last hour: ${now.shipKills} ship kills, ${now.podKills} pod kills, ${now.jumps} jumps`);
   }
-  if (r.st && r.st.load > 0) {
-    lines.push(`Trade-route chokepoint: carries ${r.st.load.toFixed(1)} of 10 hub-to-hub routes`);
+  if (hist.live) {
+    lines.push(ganksLine(hist.gk, "Ganks, last 30 days"));
+    if (hist.jph) lines.push(`Typical hour: ${hist.kph.toFixed(1)} ship kills in ${Math.round(hist.jph)} jumps`);
   }
-  box.innerHTML = `<div class="rb-head"><span class="rb-level" style="color:${r.level.color}">
-      Security risk: ${r.level.label}</span></div>` +
+  if (now.st && now.st.load > 0) {
+    lines.push(`Trade-route chokepoint: carries ${now.st.load.toFixed(1)} of 10 hub-to-hub routes`);
+  }
+  const chip = (r, label) =>
+    `<span class="rb-level" style="color:${r.level.color}">${label}: ${r.level.label}</span>`;
+  box.innerHTML = `<div class="rb-head">${chip(now, "Risk now")}${chip(hist, "30-day")}</div>` +
     lines.map(l => `<div class="rb-line">${l}</div>`).join("") +
-    (r.live ? "" : `<div class="rb-note">Live gank and kill data unavailable: structural risk only.</div>`);
+    (now.live || hist.live ? "" :
+      `<div class="rb-note">Live gank and kill data unavailable: structural risk only.</div>`);
 }
 
 /* ---- label placement ------------------------------------------------- */

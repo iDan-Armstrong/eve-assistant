@@ -1,23 +1,32 @@
-"""Fetch live activity for the Security Risk layer (run hourly in CI).
+"""Fetch live activity and maintain the risk history (run hourly in CI).
 
 Writes, under web/data/live/:
     activity.json  CCP ESI: ship/pod/NPC kills and jumps per system, last hour
-    ganks.json     zKillboard 'ganked' killmails (CONCORD-involved suicide
-                   ganks) aggregated per system over the last 24 hours, with
-                   victim details resolved through ESI
+    ganks.json     "risk now": ganks per system over the last NOW_HOURS
+    history.json   "risk history": ganks per system over the last
+                   HISTORY_DAYS plus average hourly kills and jumps
     status.json    what each source returned this run
 
+With --history DIR the run also maintains a persistent store in DIR (CI
+keeps it on the repo's live-data branch):
+    ganks_ledger.json    every gank seen, deduplicated by killmail id,
+                         pruned to HISTORY_DAYS; fed hourly by zKillboard
+                         and once by the EVE Ref backfill
+    activity_daily.json  per-day sums of ESI kills/jumps per system
+
 Every source is optional: a failure is recorded in status.json and the
-script still exits 0, so the site always deploys with whatever succeeded.
-Standard library only. Etiquette: a descriptive User-Agent (project URL,
-no personal contact), gzip, ESI's X-Compatibility-Date, and zKillboard's
-request spacing.
+script exits 0, so the site always deploys with whatever succeeded.
+Standard library only. Etiquette: descriptive User-Agent (project URL, no
+personal contact), gzip, ESI's X-Compatibility-Date, zKillboard spacing.
+
+    python tools/fetch_live.py [--history DIR]
 """
 
 from __future__ import annotations
 
 import gzip
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -29,9 +38,10 @@ UA = "eve-assistant New Eden Atlas (+https://github.com/iDan-Armstrong/eve-assis
 ESI = "https://esi.evetech.net"
 ESI_COMPAT = "2025-09-30"
 ZKILL = "https://zkillboard.com/api"
-GANK_WINDOW_H = 24
-MAX_KILLMAILS = 200          # ESI lookups per run, newest first
-ZKILL_SPACING_S = 1.1        # stay well under zKillboard's request rate
+NOW_HOURS = 6
+HISTORY_DAYS = 30
+MAX_KILLMAILS = 200           # ESI killmail lookups per run, newest first
+ZKILL_SPACING_S = 1.1
 
 
 def http(url: str, *, data: bytes | None = None, esi: bool = False,
@@ -58,6 +68,12 @@ def esi_get(path: str):
         return http(f"{ESI}/latest{path}/?datasource=tranquility", esi=True)
 
 
+def parse_time(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+# ---- sources ------------------------------------------------------------
+
 def fetch_activity(status: dict) -> dict:
     systems: dict[str, list[int]] = {}
     try:
@@ -82,9 +98,9 @@ def fetch_activity(status: dict) -> dict:
 
 
 def zkill_ganked(status: dict) -> list[dict]:
-    """zKillboard summaries for recent ganked kills. zKill's URL scheme for
-    labels has varied, so try the known forms and record which answered;
-    the last resort filters a highsec listing on the 'ganked' label."""
+    """zKillboard summaries for recent ganked kills. Try the known URL
+    forms and record which answered; the last resort filters a highsec
+    listing on the 'ganked' label."""
     attempts = [("label/ganked", f"{ZKILL}/kills/label/ganked/"),
                 ("ganked", f"{ZKILL}/kills/ganked/"),
                 ("highsec+filter", f"{ZKILL}/kills/highsec/")]
@@ -92,11 +108,11 @@ def zkill_ganked(status: dict) -> list[dict]:
     for name, url in attempts:
         try:
             rows = http(url)
-            time.sleep(ZKILL_SPACING_S)
         except Exception as exc:                     # noqa: BLE001
             errors.append(f"{name}: {exc}")
             time.sleep(ZKILL_SPACING_S)
             continue
+        time.sleep(ZKILL_SPACING_S)
         if not isinstance(rows, list):
             errors.append(f"{name}: unexpected response")
             continue
@@ -109,63 +125,154 @@ def zkill_ganked(status: dict) -> list[dict]:
     return []
 
 
-def fetch_ganks(status: dict) -> dict:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=GANK_WINDOW_H)
+def fetch_recent_ganks(status: dict, known: set[int]) -> list[dict]:
+    """New ganks from zKillboard, resolved through ESI (skips known ids)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=1)
     summaries = sorted(zkill_ganked(status),
                        key=lambda r: r.get("killmail_id", 0), reverse=True)
-    kills, type_ids, failed = [], set(), 0
+    out, failed = [], 0
     for row in summaries[:MAX_KILLMAILS]:
+        if row.get("killmail_id") in known:
+            continue
         zkb = row.get("zkb") or {}
         try:
             km = esi_get(f"/killmails/{row['killmail_id']}/{zkb['hash']}")
         except Exception:                            # noqa: BLE001
             failed += 1
             continue
-        when = datetime.fromisoformat(km["killmail_time"].replace("Z", "+00:00"))
-        if when < cutoff:
-            break                                    # newest-first: done
-        ship = km.get("victim", {}).get("ship_type_id")
-        type_ids.add(ship)
-        kills.append({"id": km["killmail_id"], "sys": km["solar_system_id"],
-                      "time": km["killmail_time"], "ship": ship,
-                      "isk": round(zkb.get("totalValue", 0))})
+        if parse_time(km["killmail_time"]) < cutoff:
+            break                                    # newest first: done
+        out.append({"id": km["killmail_id"], "sys": km["solar_system_id"],
+                    "time": km["killmail_time"],
+                    "ship": km.get("victim", {}).get("ship_type_id"),
+                    "isk": round(zkb.get("totalValue", 0)), "src": "zkill"})
+    status["zkill_new"] = f"{len(out)} new ganks, {failed} ESI lookups failed"
+    return out
 
+
+def resolve_ship_names(kills: list[dict], status: dict) -> None:
+    """Fill shipName for kills that lack one (ESI /universe/names, ≤1000/call)."""
+    ids = sorted({k["ship"] for k in kills if k.get("ship") and not k.get("shipName")})
     names = {}
-    if type_ids:
+    for i in range(0, len(ids), 1000):
         try:
-            body = json.dumps(sorted(t for t in type_ids if t)).encode()
+            body = json.dumps(ids[i:i + 1000]).encode()
             for rec in http(f"{ESI}/universe/names", data=body, esi=True):
                 names[rec["id"]] = rec["name"]
         except Exception as exc:                     # noqa: BLE001
             status["esi_names"] = f"error: {exc}"
+    for k in kills:
+        if not k.get("shipName"):
+            k["shipName"] = names.get(k.get("ship"), "")
 
+
+# ---- ledger + aggregation -------------------------------------------------
+
+def merge_ledger(ledger: list[dict], new: list[dict], now: datetime,
+                 days: int = HISTORY_DAYS) -> list[dict]:
+    """Union by killmail id (existing entries win), pruned to `days`."""
+    by_id = {k["id"]: k for k in new}
+    by_id.update({k["id"]: k for k in ledger})
+    cutoff = now - timedelta(days=days)
+    return sorted((k for k in by_id.values() if parse_time(k["time"]) >= cutoff),
+                  key=lambda k: k["time"], reverse=True)
+
+
+def aggregate_ganks(kills: list[dict], since: datetime) -> dict:
     per_sys: dict[str, dict] = {}
     for k in kills:
-        k["shipName"] = names.get(k["ship"], "")
+        if parse_time(k["time"]) < since:
+            continue
         s = per_sys.setdefault(str(k["sys"]), {"n": 0, "isk": 0, "ships": {}})
         s["n"] += 1
-        s["isk"] += k["isk"]
-        s["ships"][k["shipName"]] = s["ships"].get(k["shipName"], 0) + 1
+        s["isk"] += k.get("isk") or 0
+        name = k.get("shipName") or ""
+        if name:
+            s["ships"][name] = s["ships"].get(name, 0) + 1
     for s in per_sys.values():
         s["top"] = sorted(s.pop("ships").items(), key=lambda kv: -kv[1])[:3]
-    status["ganks"] = (f"{len(kills)} ganks in {len(per_sys)} systems "
-                       f"(last {GANK_WINDOW_H}h), {failed} ESI lookups failed")
-    return {"windowHours": GANK_WINDOW_H,
-            "source": "zKillboard 'ganked' label (CONCORD-involved kills), "
-                      "details from CCP ESI",
-            "systems": per_sys, "recent": kills[:50]}
+    return per_sys
+
+
+def add_activity_day(daily: dict, activity: dict, day: str,
+                     days: int = HISTORY_DAYS) -> dict:
+    """Accumulate one hourly ESI sample into per-day sums [kills, pods,
+    jumps, samples]; keep the most recent `days` days."""
+    bucket = daily.setdefault(day, {})
+    for sid, (kills, pods, _npc, jumps) in activity["systems"].items():
+        rec = bucket.setdefault(sid, [0, 0, 0, 0])
+        rec[0] += kills
+        rec[1] += pods
+        rec[2] += jumps
+        rec[3] += 1
+    for old in sorted(daily)[:-days]:
+        del daily[old]
+    return daily
+
+
+def activity_averages(daily: dict) -> dict:
+    """Average per-sample (per hour) ship kills and jumps across days."""
+    totals: dict[str, list[int]] = {}
+    for bucket in daily.values():
+        for sid, (kills, _pods, jumps, n) in bucket.items():
+            t = totals.setdefault(sid, [0, 0, 0])
+            t[0] += kills
+            t[1] += jumps
+            t[2] += n
+    return {sid: [round(k / n, 3), round(j / n, 1)] for sid, (k, j, n) in totals.items() if n}
+
+
+def load_json(path: Path, default):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return default
 
 
 def main() -> None:
+    hist_dir = None
+    if "--history" in sys.argv:
+        hist_dir = Path(sys.argv[sys.argv.index("--history") + 1])
+        hist_dir.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    status = {"generated": now}
+    now = datetime.now(timezone.utc)
+    stamp = now.isoformat(timespec="seconds")
+    status = {"generated": stamp}
+
     activity = fetch_activity(status)
-    ganks = fetch_ganks(status)
-    for name, doc in (("activity", activity), ("ganks", ganks)):
-        doc["generated"] = now
+    ledger = load_json(hist_dir / "ganks_ledger.json", {"ganks": []})["ganks"] if hist_dir else []
+    new = fetch_recent_ganks(status, {k["id"] for k in ledger})
+    ledger = merge_ledger(ledger, new, now)
+    resolve_ship_names(ledger, status)
+
+    daily = {}
+    if hist_dir:
+        daily = load_json(hist_dir / "activity_daily.json", {"days": {}})["days"]
+        if activity["systems"]:
+            daily = add_activity_day(daily, activity, now.strftime("%Y-%m-%d"))
+        (hist_dir / "ganks_ledger.json").write_text(
+            json.dumps({"updated": stamp, "ganks": ledger}, separators=(",", ":")))
+        (hist_dir / "activity_daily.json").write_text(
+            json.dumps({"updated": stamp, "days": daily}, separators=(",", ":")))
+
+    oldest = min((k["time"] for k in ledger), default=None)
+    status["ledger"] = (f"{len(ledger)} ganks held, oldest {oldest}, "
+                        f"{len(daily)} activity days")
+    ganks_now = {"windowHours": NOW_HOURS,
+                 "source": "zKillboard 'ganked' label + CONCORD-pairing backfill, "
+                           "details from CCP ESI",
+                 "systems": aggregate_ganks(ledger, now - timedelta(hours=NOW_HOURS))}
+    history = {"windowDays": HISTORY_DAYS, "oldestGank": oldest,
+               "activityDays": len(daily),
+               "ganks": aggregate_ganks(ledger, now - timedelta(days=HISTORY_DAYS)),
+               "activity": {"schema": ["avgShipKillsPerHour", "avgJumpsPerHour"],
+                            "systems": activity_averages(daily)}}
+    for name, doc in (("activity", activity), ("ganks", ganks_now), ("history", history)):
+        doc["generated"] = stamp
         (OUT / f"{name}.json").write_text(json.dumps(doc, separators=(",", ":")))
     (OUT / "status.json").write_text(json.dumps(status, indent=1))
+    if hist_dir:
+        (hist_dir / "status.json").write_text(json.dumps(status, indent=1))
     print(json.dumps(status, indent=1))
 
 

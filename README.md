@@ -84,18 +84,21 @@ survey data:
 
 ## Layers
 
-Layers are built per player role. **Security Risk (industry)** is the
-default; **Security Status** shows the classic in-game ramp; PvP layers are
-next.
+Layers are built per player role. For industry there are two risk
+layers (**Risk now** is the default) next to the classic **Security
+Status** ramp; PvP layers are next.
 
-**Security Risk** answers "where will my hauler or barge get ganked?" by
-blending three inputs, every one shown in the system panel:
-
-| Input | Source | Weight |
+| | **Risk now** — "should I undock?" | **Risk history** — "is this a bad neighborhood?" |
 |---|---|---|
-| Suicide ganks, last 24h | zKillboard's `ganked` label (CONCORD-involved kills), details via CCP ESI | 50% |
-| Ship kills per traffic, last hour | CCP ESI `system_kills` / `system_jumps` | 25% |
-| Structural exposure | trade-route chokepoint analysis × CONCORD response | 25% |
+| Ganks (50%) | last 6 hours | last 30 days |
+| Kills per traffic (25%) | last hour, CCP ESI | average hour over the collected days |
+| Structural exposure (25%) | trade-route chokepoint × CONCORD response | same |
+
+Ganks are zKillboard's `ganked` label (CONCORD-involved kills) hourly, plus
+a one-time 30-day backfill from EVE Ref's raw killmail archives using the
+same rule directly (`tools/gank_detect.py`: a highsec kill where an attacker
+dies to CONCORD in the same system moments later). The system panel shows
+both levels side by side with every input behind them.
 
 The structural term is pure network analysis
 (`tools/analyze_routes.py`): for the 10 trade-hub pairs (Jita, Amarr,
@@ -109,8 +112,11 @@ traffic.)
 
 Live inputs refresh hourly: a scheduled GitHub Action runs
 `tools/fetch_live.py` (stdlib only, polite User-Agent, zKillboard request
-spacing, ESI compatibility date) and redeploys. A source outage never blocks
-a deploy; the layer degrades to structural risk and says so.
+spacing, ESI compatibility date) and redeploys. History persists on the
+`live-data` branch as a rolling 30-day gank ledger and daily activity
+sums, force-pushed as a single commit so it never grows, along with a
+`status.json` for every run. A source outage never blocks a deploy; a
+layer with no data degrades to structural risk and says so.
 
 ## Data pipeline
 

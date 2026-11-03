@@ -6,37 +6,49 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 import fetch_live  # noqa: E402
 
+NOW = datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc)
+
 
 def iso(hours_ago):
-    t = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
-    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (NOW - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def test_ganks_aggregate_per_system_and_respect_window(monkeypatch):
-    summaries = [
-        {"killmail_id": 3, "zkb": {"hash": "c", "totalValue": 3e9}},
-        {"killmail_id": 2, "zkb": {"hash": "b", "totalValue": 1e9}},
-        {"killmail_id": 1, "zkb": {"hash": "a", "totalValue": 5e8}},
-    ]
-    kms = {
-        3: {"killmail_id": 3, "killmail_time": iso(1), "solar_system_id": 30002768,
-            "victim": {"ship_type_id": 20183}},
-        2: {"killmail_id": 2, "killmail_time": iso(2), "solar_system_id": 30002768,
-            "victim": {"ship_type_id": 20183}},
-        1: {"killmail_id": 1, "killmail_time": iso(30), "solar_system_id": 30002768,
-            "victim": {"ship_type_id": 17476}},   # outside the 24h window
-    }
-    monkeypatch.setattr(fetch_live, "zkill_ganked", lambda status: summaries)
-    monkeypatch.setattr(fetch_live, "esi_get",
-                        lambda path: kms[int(path.split("/")[2])])
-    monkeypatch.setattr(fetch_live, "http",
-                        lambda url, **kw: [{"id": 20183, "name": "Providence"}])
-    status = {}
-    out = fetch_live.fetch_ganks(status)
-    s = out["systems"]["30002768"]
-    assert s["n"] == 2 and s["isk"] == 4_000_000_000
-    assert s["top"] == [["Providence", 2]] or s["top"] == [("Providence", 2)]
-    assert "2 ganks in 1 systems" in status["ganks"]
+def test_merge_ledger_dedupes_and_prunes():
+    ledger = [{"id": 1, "sys": 9, "time": iso(2), "shipName": "Charon"},
+              {"id": 2, "sys": 9, "time": iso(24 * 40)}]          # older than 30 days
+    new = [{"id": 1, "sys": 9, "time": iso(2), "shipName": ""},   # duplicate
+           {"id": 3, "sys": 9, "time": iso(1)}]
+    out = fetch_live.merge_ledger(ledger, new, NOW)
+    assert [k["id"] for k in out] == [3, 1]                       # newest first
+    assert out[1]["shipName"] == "Charon"                         # existing entry wins
+
+
+def test_aggregate_ganks_windows_and_tops():
+    kills = [{"id": 1, "sys": 9, "time": iso(1), "isk": 3e9, "shipName": "Charon"},
+             {"id": 2, "sys": 9, "time": iso(2), "isk": 1e9, "shipName": "Charon"},
+             {"id": 3, "sys": 9, "time": iso(10), "isk": 5e8, "shipName": "Retriever"}]
+    now6 = fetch_live.aggregate_ganks(kills, NOW - timedelta(hours=6))
+    assert now6["9"]["n"] == 2 and now6["9"]["isk"] == 4e9
+    assert now6["9"]["top"] == [("Charon", 2)]
+    all30 = fetch_live.aggregate_ganks(kills, NOW - timedelta(days=30))
+    assert all30["9"]["n"] == 3
+
+
+def test_activity_days_accumulate_and_average():
+    daily = {}
+    sample = {"systems": {"9": [4, 1, 0, 300]}}
+    fetch_live.add_activity_day(daily, sample, "2026-11-02")
+    fetch_live.add_activity_day(daily, sample, "2026-11-02")
+    fetch_live.add_activity_day(daily, {"systems": {"9": [0, 0, 0, 100]}}, "2026-11-03")
+    assert daily["2026-11-02"]["9"] == [8, 2, 600, 2]
+    avg = fetch_live.activity_averages(daily)
+    assert avg["9"] == [round(8 / 3, 3), round(700 / 3, 1)]
+
+
+def test_activity_days_keep_only_the_window():
+    daily = {f"2026-10-{d:02d}": {} for d in range(1, 31)}
+    fetch_live.add_activity_day(daily, {"systems": {}}, "2026-10-31", days=30)
+    assert len(daily) == 30 and "2026-10-01" not in daily
 
 
 def test_activity_merges_kills_and_jumps(monkeypatch):
@@ -49,4 +61,3 @@ def test_activity_merges_kills_and_jumps(monkeypatch):
     out = fetch_live.fetch_activity(status)
     assert out["systems"]["1"] == [4, 1, 9, 300]
     assert out["systems"]["2"] == [0, 0, 0, 7]
-    assert status["esi_kills"].startswith("ok") and status["esi_jumps"].startswith("ok")

@@ -1,5 +1,8 @@
-# Publishes web/ to GitHub Pages on every push to the default branch, so
-# the live Atlas always matches the latest commit.
+# Publishes web/ to GitHub Pages on every push, hourly with fresh risk data,
+# and on demand (optionally backfilling the 30-day gank history first).
+#
+# Risk history persists on the `live-data` branch (one force-pushed
+# commit, so it never grows), which also carries status.json for each run.
 name: Deploy Atlas to GitHub Pages
 
 on:
@@ -8,15 +11,19 @@ on:
   schedule:
     - cron: "17 * * * *"     # hourly refresh of the live Security Risk data
   workflow_dispatch:
+    inputs:
+      backfill_days:
+        description: "Backfill N days of gank history from EVE Ref (0 = skip)"
+        default: "0"
 
 permissions:
-  contents: read
+  contents: write            # push the live-data branch
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false  # queue: an hourly run must not kill a backfill
 
 jobs:
   test:
@@ -40,11 +47,37 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Load risk history (live-data branch)
+        run: |
+          if git fetch -q --depth 1 origin live-data 2>/dev/null; then
+            git worktree add -q --detach ledger FETCH_HEAD
+          else
+            git worktree add -q --detach ledger HEAD
+            (cd ledger && git rm -rq .)
+          fi
+
+      - name: Backfill gank history (EVE Ref)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_days != '0' }}
+        run: python tools/backfill_everef.py --days "${{ inputs.backfill_days }}" --history ledger
+        continue-on-error: true
+
       - name: Fetch live risk data (ESI + zKillboard)
         run: |
           python tools/analyze_routes.py
-          python tools/fetch_live.py
+          python tools/fetch_live.py --history ledger
         continue-on-error: true      # a source outage must never block deploy
+
+      - name: Save risk history
+        run: |
+          cd ledger
+          git checkout -q --orphan snapshot
+          git add -A
+          git -c user.name="atlas-bot" -c user.email="github-actions@users.noreply.github.com" \
+              commit -q -m "risk history $(date -u +%FT%TZ)"
+          git push -q -f origin snapshot:live-data
+        continue-on-error: true
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
