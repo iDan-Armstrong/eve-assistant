@@ -45,12 +45,12 @@ async function startPilots() {
     const p = await EveSSO.init();
     if (p) {
       pilotState.active = p.id; note = `Signed in as ${p.name}`;
-      if (reserves.relay && !shareDecided(p.id)) askToShare(p);
     }
   } catch (e) { note = e.message; }
   wirePilotMenu();
   renderPilotMenu(note);
   await refreshPilots();
+  askUndecided();
 }
 
 async function refreshPilots() {
@@ -474,6 +474,13 @@ function reserveLine(p) {
   return `Reserve last seen ${s.lastConfirmed}: ${esc(p.bulwark.ore)} in a corp mate's or your mining ledger`;
 }
 
+/* every signed-in pilot who has not chosen yet is asked, one at a time */
+function askUndecided() {
+  if (!reserves.relay || document.querySelector(".consent")) return;
+  const next = EveSSO.pilots().find(p => !shareDecided(p.id));
+  if (next) askToShare(next);
+}
+
 /* ask once per pilot, right after sign-in. Both boxes start unticked:
    sharing tracks where a pilot is and mines, so it needs express consent */
 function askToShare(pilot) {
@@ -497,6 +504,7 @@ function askToShare(pilot) {
     box.querySelectorAll("input").forEach(i => { choice[i.dataset.kind] = i.checked; });
     setShare(pilot.id, choice);
     box.remove();
+    askUndecided();                           /* next pilot who has not chosen */
     reportReserves();
     reportPresence();
     renderPilotMenu();
