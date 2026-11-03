@@ -427,11 +427,26 @@
   }
   .boot.done { opacity: 0; pointer-events: none; }
 
+  /* phones: header wraps into rows (layers, buttons, search); the system
+     panel and route planner become bottom sheets; the legend slims down
+     and steps aside while a sheet is open */
   @media (max-width: 720px) {
-    header { flex-wrap: wrap; gap: 8px 12px; }
-    .search { flex-basis: 100%; order: 3; }
-    .panel { top: auto; left: 14px; right: 14px; width: auto; max-height: 55vh; transform: translateY(calc(100% + 30px)); }
+    header { flex-wrap: wrap; gap: 8px; padding: 8px 10px;
+             background: rgba(6,10,18,.94); }
+    .layers { flex: 1 1 100%; order: 1; }
+    .toggles { order: 2; margin-left: 0; }
+    .route-btn { order: 2; }
+    .pilot { order: 2; margin-left: auto; }
+    .search { flex: 1 1 100%; order: 3; }
+    .panel { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; max-height: 58vh;
+             transform: translateY(calc(100% + 30px)); }
     .panel.open { transform: none; }
+    .route { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; max-height: 62vh; }
+    body.route-open .leaflet-top.leaflet-left { left: 0; }
+    .leaflet-top.leaflet-left { top: 120px; }
+    .legend { left: 10px; right: 10px; bottom: 18px; padding: 7px 10px; }
+    .legend .stats, .bulwark-key .bk-src, .risk-live { display: none; }
+    body.sheet-open .legend { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
     .panel, .boot { transition: none; }
@@ -1334,6 +1349,7 @@ function drawRoute() {
 function openRoute(open) {
   document.getElementById("route").hidden = !open;
   document.body.classList.toggle("route-open", open);
+  document.body.classList.toggle("sheet-open", open || document.getElementById("panel").classList.contains("open"));
   document.getElementById("routeBtn").setAttribute("aria-expanded", String(open));
 }
 function wireRoute() {
@@ -1481,6 +1497,7 @@ function select(id) {
   document.getElementById("pFoot").textContent =
     `x ${p.ll[1].toFixed(1)} ly, z ${p.ll[0].toFixed(1)} ly, id ${p.id}`;
   document.getElementById("panel").classList.add("open");
+  document.body.classList.add("sheet-open");
   history.replaceState(null, "", `#s=${encodeURIComponent(p.name)}`);
 }
 /* celestial hierarchy: lazy-fetched per region and cached; the join runs
@@ -1557,6 +1574,7 @@ async function openSystem3d(p, cel) {
 
 document.getElementById("panelClose").onclick = () => {
   document.getElementById("panel").classList.remove("open");
+  document.body.classList.toggle("sheet-open", !document.getElementById("route").hidden);
   if (state.selRing) state.selRing.remove();
   history.replaceState(null, "", location.pathname);
 };
