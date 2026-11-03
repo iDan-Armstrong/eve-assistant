@@ -1311,10 +1311,16 @@ function drawRoute() {
     `<br>${counts[2]} highsec, ${counts[1]} lowsec, ${counts[0]} nullsec systems` +
     (riskData.pvp ? "" : "<br>kill history not loaded here: weighting uses security and live kills only");
 
+  /* the route draws on its own canvas pane under the system markers, so
+     dots stay on top of the line (overlay pane, markers, is z 400) */
+  if (!route.renderer) {
+    map.createPane("routePane").style.zIndex = 395;
+    route.renderer = L.canvas({ pane: "routePane", padding: .3 });
+  }
   route.layer = L.layerGroup().addTo(map);
-  route.layer.addLayer(L.polyline(ps.map(p => p.ll), { renderer: canvas, interactive: false,
+  route.layer.addLayer(L.polyline(ps.map(p => p.ll), { renderer: route.renderer, pane: "routePane", interactive: false,
     color: "#ffffff", weight: 4.5, opacity: .25 }));
-  route.layer.addLayer(L.polyline(ps.map(p => p.ll), { renderer: canvas, interactive: false,
+  route.layer.addLayer(L.polyline(ps.map(p => p.ll), { renderer: route.renderer, pane: "routePane", interactive: false,
     color: route.mode === "safe" ? "#7fe0ff" : "#ffd34d", weight: 2, opacity: .95 }));
 
   list.innerHTML = ps.map((p, i) => {
