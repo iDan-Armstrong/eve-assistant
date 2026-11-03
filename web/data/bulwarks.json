@@ -109,6 +109,48 @@
      "name": "Theruesse"
     }
    ]
+  },
+  "Amarr Empire": {
+   "color": "#d9b44a",
+   "warHQ": 30002974,
+   "systems": [
+    {
+     "id": 30003064,
+     "name": "Tuomuta"
+    },
+    {
+     "id": 30003066,
+     "name": "Kuomi"
+    },
+    {
+     "id": 30003065,
+     "name": "Otelen"
+    },
+    {
+     "id": 30002970,
+     "name": "Ohide"
+    },
+    {
+     "id": 30002971,
+     "name": "Sasoutikh"
+    },
+    {
+     "id": 30002972,
+     "name": "Gheth"
+    },
+    {
+     "id": 30002974,
+     "name": "Mehatoor"
+    },
+    {
+     "id": 30002969,
+     "name": "Eredan"
+    },
+    {
+     "id": 30002973,
+     "name": "Lisudeh"
+    }
+   ]
   }
  }
 }
