@@ -1,0 +1,30 @@
+name: J-space reference data
+
+# Run by hand when CCP publishes a new SDE. Builds web/data/jspace/*.json and
+# uploads them as an artifact to be reviewed and committed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download the SDE (JSON Lines)
+        run: |
+          curl -fsSL -o sde.zip \
+            -A "J-Space Survey (https://idan-armstrong.github.io/eve-assistant/)" \
+            https://developers.eveonline.com/static-data/eve-online-static-data-latest-jsonl.zip
+          unzip -l sde.zip | head -60
+      - name: Build J-space data
+        run: python tools/build_jspace.py sde.zip web/data/jspace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jspace
+          path: web/data/jspace/
