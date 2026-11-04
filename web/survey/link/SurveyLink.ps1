@@ -21,7 +21,7 @@
 param([int]$Port = 47321)
 
 $ErrorActionPreference = 'Stop'
-$Version = '1.2'
+$Version = '1.3'
 $Allowed = @('https://idan-armstrong.github.io', 'http://localhost:8799')
 $KeepMs = 10 * 60 * 1000
 
@@ -93,6 +93,7 @@ function Read-From([string]$path, [long]$pos) {
   $fs = [System.IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
   try {
     if ($pos -gt $fs.Length) { $pos = 0 }
+    if ($fs.Length -le $pos) { return @{ text = ''; pos = $pos } }
     if ($pos % 2 -eq 1) { $pos-- }
     [void]$fs.Seek($pos, 'Begin')
     $buf = New-Object byte[] ($fs.Length - $pos)
@@ -112,9 +113,11 @@ function Note-System([string]$char, [string]$system, [bool]$initial) {
 
 function Check-Logs {
   if (-not (Test-Path $LogDir)) { return }
-  $since = (Get-Date).AddHours(-12)
+  # Windows does not refresh the size or time of a file EVE still has open, so the
+  # listing is only used to find today's logs; each one is opened to read its real size
+  $since = (Get-Date).AddHours(-24)
   foreach ($f in (Get-ChildItem -Path $LogDir -Filter 'Local_*.txt' -File -ErrorAction SilentlyContinue |
-                  Where-Object { $_.LastWriteTime -gt $since })) {
+                  Where-Object { $_.LastWriteTime -gt $since -or $_.CreationTime -gt $since })) {
     $t = $script:logs[$f.FullName]
     $initial = $false
     if (-not $t) {
@@ -122,8 +125,8 @@ function Check-Logs {
       $script:logs[$f.FullName] = $t
       $initial = $true
     }
-    if ($f.Length -le $t.pos) { continue }
     try { $r = Read-From $f.FullName $t.pos } catch { continue }
+    if (-not $r.text) { continue }
     $t.pos = $r.pos
     $last = $null
     foreach ($line in ($r.text -split "`r?`n")) {

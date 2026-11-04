@@ -190,8 +190,10 @@ function linkExtra(from, to) {
   const hit = taggedHole(from);
   if (!hit) return {};
   const [sid, sg] = hit;
-  const size = sg.code !== "K162" ? C.sizeFromJump(S.WH[sg.code]?.jump) : null;
-  return { code: sg.code, codeAt: from, ...(from < to ? { sigA: sid } : { sigB: sid }), ...(size ? { size } : {}) };
+  const size = sg.info?.size || (sg.code !== "K162" ? C.sizeFromJump(S.WH[sg.code]?.jump) : null);
+  const info = sg.info ? { ...(sg.info.life ? { life: sg.info.life, lifeAt: sg.infoAt } : {}),
+                           ...(sg.info.mass ? { mass: sg.info.mass } : {}) } : {};
+  return { code: sg.code, codeAt: from, ...(from < to ? { sigA: sid } : { sigB: sid }), ...(size ? { size } : {}), ...info };
 }
 
 function onMove(who, from, to, opts) {
@@ -228,9 +230,18 @@ async function poll() {
       /* when Survey Link reads this pilot's chat log, the log is the faster and
          surer source: the API is only used for ship and docked state */
       if (S.link.ok && S.link.logs && S.logWhere[p.name] !== undefined) {
-        Object.assign(w, { system: S.logWhere[p.name], ship: ship.ship_type_id, docked, name: p.name, err: "" });
-        S.where[p.id] = w;
-        continue;
+        /* trust the log, unless the API has disagreed for 25 seconds: then the log
+           missed a jump, and the API's answer is used */
+        const api = loc.solar_system_id, logged = S.logWhere[p.name];
+        if (api === logged) w.mismatchSince = null;
+        else if (!w.mismatchSince) w.mismatchSince = Date.now();
+        if (!w.mismatchSince || Date.now() - w.mismatchSince < 25e3) {
+          Object.assign(w, { system: logged, ship: ship.ship_type_id, docked, name: p.name, err: "" });
+          S.where[p.id] = w;
+          continue;
+        }
+        w.mismatchSince = null;
+        w.system = logged;
       }
       const prev = w.system ?? S.logWhere[p.name], now = loc.solar_system_id;
       const becameCapsule = CAPSULES.has(ship.ship_type_id) && w.ship && !CAPSULES.has(w.ship);
@@ -341,8 +352,18 @@ function routePaste(text, source) {
     feed(`D-scan in ${where}: ${dscanLine(sum)}`, sum.cats.S ? "warn" : "scan");
   } else if (r.kind === "showinfo") {
     const here = Object.entries(S.chain.links).filter(([, l]) => l.a === sys || l.b === sys);
-    const target = S.selLink && S.chain.links[S.selLink] ? S.selLink : here.length === 1 ? here[0][0] : null;
+    const tagged = taggedHole(sys);
+    /* a hole not jumped yet: the info rides on the wormhole signature you tagged
+       most recently, and carries into the connection when you jump it */
+    const recentTag = tagged && Date.now() - (tagged[1].codeAt || 0) < 30 * 60e3;
+    const target = S.selLink && S.chain.links[S.selLink] ? S.selLink
+      : recentTag ? null : here.length === 1 ? here[0][0] : null;
     if (target) applyInfo(target, r.info);
+    else if (recentTag) {
+      const [sid, sg] = tagged;
+      edit({ kind: "sig", system: sys, id: sid, rec: { ...sg, info: r.info, infoAt: Date.now() } });
+      feed(`Show Info saved on ${sid} (${sg.code}): ${infoText(r.info)}. It moves to the connection when you jump it.`, "scan");
+    }
     else {
       S.pendingInfo = r.info;
       feed(`Show Info read (${infoText(r.info)}). Pick which hole it was in Connections.`, "warn");
