@@ -103,6 +103,7 @@ function planHauls() {
     const homeAlone = home.dist.get(o.L1.bsys) ?? Infinity;
     let best = { L2: null, j2: homeAlone, profit: 0 };
     for (const L2 of legs) {
+      if (L2.a === o.L1.a && L2.b === o.L1.b) continue;      /* the outbound leg already took those orders */
       const bc = fromB.dist.get(L2.asys);
       if (bc == null || bc > maxOut) continue;
       const cd = tree(L2.asys).dist.get(L2.bsys), dh = home.dist.get(L2.bsys);
@@ -185,16 +186,39 @@ function showLoop(o, li) {
     try { await navigator.clipboard.writeText(text); b.textContent = "Copied: paste into Multibuy in game"; }
     catch { b.textContent = "Copy failed: browser blocked the clipboard"; }
   });
-  const btn = document.getElementById("hDest");
-  btn.hidden = !(typeof pilotState !== "undefined" && pilotState.data.size);
+  /* autopilot: the whole circuit, jump by jump, so the game flies this
+     route (highsec only if chosen) rather than its own; each trade stop is
+     its station, so autopilot docks there; home is the starting system */
+  const stopIds = [o.L1.a, o.L1.b, ...(o.L2 ? [o.L2.a, o.L2.b] : []), origin.id];
+  const waypoints = [];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const seg = pathTo(tree(stops[i]), stops[i + 1]) || [stops[i + 1]];
+    waypoints.push(...seg.slice(1, -1), stopIds[i]);
+  }
+  const btn = document.getElementById("hDest"), first = document.getElementById("hFirst");
+  const signedIn = typeof pilotState !== "undefined" && pilotState.data.size;
+  btn.hidden = first.hidden = !signedIn;
+  btn.textContent = `Send whole trip to autopilot (${waypoints.length} waypoints)`;
+  first.textContent = "Set destination: first buy stop only";
   btn.onclick = async () => {
-    btn.textContent = "Sending…";
+    btn.disabled = true;
+    try {
+      for (let i = 0; i < waypoints.length; i++) {
+        btn.textContent = `Sending waypoint ${i + 1} of ${waypoints.length}…`;
+        await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false` +
+          `&clear_other_waypoints=${i === 0}&destination_id=${waypoints[i]}`, { method: "POST" });
+      }
+      btn.textContent = `Trip sent: ${waypoints.length} waypoints, docking at each trade stop`;
+    } catch (e) { btn.textContent = `Failed (${e.message}); is the pilot in game?`; }
+    btn.disabled = false;
+  };
+  first.onclick = async () => {
+    first.textContent = "Sending…";
     try {
       await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false&clear_other_waypoints=true&destination_id=${o.L1.a}`, { method: "POST" });
-      btn.textContent = "Destination set: first buy stop";
-    } catch (e) { btn.textContent = `Failed (${e.message}); is the pilot in game?`; }
+      first.textContent = "Destination set: first buy stop";
+    } catch (e) { first.textContent = `Failed (${e.message}); is the pilot in game?`; }
   };
-  btn.textContent = "Set destination: first buy stop";
 }
 
 function haulOrigin() {
