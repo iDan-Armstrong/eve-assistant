@@ -403,8 +403,9 @@ Info sets a hole's age, mass and size.
   last. The countdown is the weakest guarantee along the path home; holes with
   no Show Info read and holes at critical mass are called out. Alarms sound at
   30 minutes, 10 minutes and zero.
-- Signature checklist (unscanned, partial, scanned, and which hole each one
-  is), connections with their timers, directional scan history and every
+- Signature checklist: unscanned (no type yet), identified (a site whose type
+  shows, which is all a survey needs), "to finish" (a wormhole under 100%) and
+  ready (a wormhole you can warp to), plus which hole each one is, connections with their timers, directional scan history and every
   structure ever seen in the system, and an activity feed.
 
 **Points and badges.** Surveying earns points: 10 for a wormhole found by

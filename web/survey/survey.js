@@ -586,16 +586,19 @@ function sigsHtml(id, withPaste) {
     if (l.b === id && l.sigB) used.set(l.sigB, l.a);
   }
   const fresh = new Set(S.lastProbe?.system === id && Date.now() - S.lastProbe.at < 30 * 60e3 ? S.lastProbe.fresh : []);
-  const state = s => (!s.type ? "unscanned" : s.pct < 100 ? "partial" : "scanned");
+  /* a site is done once its type shows (25%+); a wormhole needs 100% so it can be
+     warped to, tagged and jumped */
+  const isHole = s => /wormhole/i.test(s.type);
+  const state = s => (!s.type ? "unscanned" : isHole(s) ? (s.pct < 100 ? "to finish" : "ready") : "identified");
   const rows = sigs.map(([sid, s]) => `<tr class="${fresh.has(sid) ? "fresh" : ""}">
       <td>${esc(sid)}</td><td>${esc(s.type || "?")}</td><td>${esc(s.name)}</td>
-      <td><span class="st st-${state(s)}">${state(s)}</span>${used.has(sid) ? ` to ${esc(nameOf(used.get(sid)))}` : ""}</td>
+      <td><span class="st st-${state(s).replace(" ", "-")}">${state(s)}</span>${used.has(sid) ? ` to ${esc(nameOf(used.get(sid)))}` : ""}</td>
       <td>${age(s.first)}</td>
       <td class="x"><button class="xbtn" data-delsig="${esc(sid)}" title="Remove">x</button></td></tr>`).join("");
-  const unscanned = sigs.filter(([, s]) => !s.type || s.pct < 100).length;
+  const unscanned = sigs.filter(([, s]) => ["unscanned", "to finish"].includes(state(s))).length;
   return (withPaste ? `<textarea id="sigPaste" rows="2" placeholder="Probe scanner: select all, copy, paste here (or anywhere on this page)"></textarea>
     <div class="row"><button id="sigGo">Save</button></div>` : "") +
-    (sigs.length ? `<div class="hint">${pl(sigs.length, "signature")}, ${unscanned} still to scan</div>
+    (sigs.length ? `<div class="hint">${pl(sigs.length, "signature")}, ${unscanned ? `${unscanned} still to scan` : "all identified"}</div>
       <table><tr><th>ID</th><th>Type</th><th>Name</th><th>State</th><th>Age</th><th></th></tr>${rows}</table>`
       : `<p class="hint">No signatures recorded. Copy the probe scanner in game.</p>`);
 }
