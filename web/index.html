@@ -35,7 +35,7 @@
   /* ---- top bar ---------------------------------------------------- */
   header {
     position: absolute; top: 0; left: 0; right: 0; z-index: 1300;
-    display: flex; align-items: center; gap: 16px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px;
     padding: 10px 16px;
     background: linear-gradient(rgba(6,10,18,.92), rgba(6,10,18,.75) 70%, rgba(6,10,18,0));
     pointer-events: none;
@@ -109,8 +109,11 @@
   .legend .ramp i { width: 17px; height: 8px; border-radius: 1px; }
   .legend .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-dim); }
   /* ---- layer switch -------------------------------------------------- */
-  .layers { display: flex; border: 1px solid var(--panel-edge); border-radius: 3px;
-    overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 0 1 auto;
+  /* the layer strip has its own row under the wordmark and search, so the
+     tool buttons on the right never run into it */
+  .hbreak { order: 98; flex-basis: 100%; height: 0; }
+  .layers { order: 99; display: flex; border: 1px solid var(--panel-edge); border-radius: 3px;
+    overflow-x: auto; scrollbar-width: none; min-width: 0; max-width: 100%; flex: 0 1 auto;
     background: rgba(13,19,31,.85); }
   .layers::-webkit-scrollbar { display: none; }
   .layers.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
@@ -150,8 +153,8 @@
   .route-btn[aria-expanded="true"] { background: #1b2a44; }
   .route-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .route {
-    position: absolute; top: 56px; left: 14px; z-index: 1150; width: 320px;
-    max-width: calc(100vw - 28px); max-height: calc(100vh - 250px);
+    position: absolute; top: calc(var(--header-h, 56px) + 4px); left: 14px; z-index: 1150; width: 320px;
+    max-width: calc(100vw - 28px); max-height: calc(100vh - var(--header-h, 56px) - 200px);
     background: rgba(11,16,26,.97); border: 1px solid var(--panel-edge); border-radius: 3px;
     display: flex; flex-direction: column; font-size: 12.5px;
   }
@@ -363,8 +366,8 @@
 
   /* ---- info panel -------------------------------------------------- */
   .panel {
-    position: absolute; top: 56px; right: 14px; z-index: 1100;
-    width: 300px; max-width: calc(100vw - 28px); max-height: calc(100vh - 92px);
+    position: absolute; top: calc(var(--header-h, 56px) + 4px); right: 14px; z-index: 1100;
+    width: 300px; max-width: calc(100vw - 28px); max-height: calc(100vh - var(--header-h, 56px) - 36px);
     background: rgba(11,16,26,.97); backdrop-filter: blur(5px);
     border: 1px solid var(--panel-edge); border-radius: 3px;
     transform: translateX(calc(100% + 18px));
@@ -541,7 +544,7 @@
     background: var(--panel) !important; color: var(--ink) !important;
     border-color: var(--panel-edge) !important;
   }
-  .leaflet-top.leaflet-left { top: 50px; }
+  .leaflet-top.leaflet-left { top: calc(var(--header-h, 56px) - 4px); }
   .leaflet-tooltip.sys-tip {
     background: var(--panel); border: 1px solid var(--panel-edge); color: var(--ink);
     border-radius: 3px; font: inherit; font-size: 12px; padding: 3px 8px;
@@ -574,7 +577,7 @@
     .panel.open { transform: none; }
     .route { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; max-height: 62vh; }
     body.route-open .leaflet-top.leaflet-left { left: 0; }
-    .leaflet-top.leaflet-left { top: 120px; }
+    .hbreak { display: none; }
     .legend { left: 10px; right: 10px; bottom: 18px; padding: 7px 10px; }
     .legend .stats, .bulwark-key .bk-src, .risk-live { display: none; }
     body.sheet-open .legend { display: none; }
@@ -596,6 +599,7 @@
            aria-label="Find a system or region">
     <div class="results" id="qResults" role="listbox"></div>
   </div>
+  <div class="hbreak"></div>
   <div class="layers" role="group" aria-label="Map layer">
     <button data-layer="risk-now" aria-pressed="true" title="Industry: gank risk right now">Risk now <small>industry</small></button>
     <button data-layer="risk-history" aria-pressed="false" title="Industry: gank risk over the last 30 days">Risk 30d</button>
@@ -1301,6 +1305,11 @@ async function boot() {
     ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
   wireRoute();
+  /* panels and the zoom buttons sit under the header, whatever its height */
+  const hdr = document.querySelector("header");
+  const setHeader = () => document.documentElement.style.setProperty("--header-h", hdr.offsetHeight + "px");
+  setHeader();
+  new ResizeObserver(setHeader).observe(hdr);
   /* fade the layer strip's edge while buttons are scrolled out of view */
   const strip = document.querySelector(".layers");
   const edge = () => strip.classList.toggle("more-right",
