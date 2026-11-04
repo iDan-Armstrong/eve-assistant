@@ -191,7 +191,23 @@ function wireMarket() {
   btn.onclick = () => openMarket(document.getElementById("market").hidden);
   document.getElementById("marketClose").onclick = () => {
     openMarket(false); market.layer.remove(); document.body.classList.remove("route-open"); };
+  const clear = document.getElementById("mClear");
+  const syncClear = () => { clear.hidden = !input.value && !market.item; };
+  clear.onclick = () => {                      /* back to a blank search, map cleared */
+    market.item = null;
+    market.rows = [];
+    input.value = "";
+    results.classList.remove("open");
+    document.getElementById("mList").innerHTML = "";
+    document.getElementById("mSum").textContent = "Pick an item. Every region's NPC market is searched live from CCP.";
+    market.layer.clearLayers();
+    market.rings = [];
+    syncClear();
+    input.focus();
+  };
+  input.addEventListener("input", syncClear);
   input.oninput = () => {
+    syncClear();
     const q = input.value.trim().toLowerCase();
     if (!q || !market.types) { results.classList.remove("open"); return; }
     const starts = [], has = [];
@@ -206,6 +222,7 @@ function wireMarket() {
     results.querySelectorAll("button").forEach(b => b.onclick = () => {
       market.item = [+b.dataset.id, b.textContent];
       input.value = b.textContent;
+      syncClear();
       results.classList.remove("open");
       runMarketSearch();
     });

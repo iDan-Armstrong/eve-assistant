@@ -157,7 +157,12 @@
   }
   .route[hidden] { display: none; }
   .m-pick { position: relative; flex: 1; min-width: 0; }
-  .m-pick input { width: 100%; }
+  .m-pick input { width: 100%; padding-right: 56px; }
+  .m-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); padding: 2px 8px;
+    background: #1b2a44; border: 1px solid var(--panel-edge); border-radius: 3px; color: var(--ink);
+    font: inherit; font-size: 11.5px; cursor: pointer; }
+  .m-clear:hover { background: #24375a; }
+  .m-clear[hidden] { display: none; }
   .m-results { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 5; display: none;
     background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 3px; max-height: 240px; overflow-y: auto; }
   .m-results.open { display: block; }
@@ -588,6 +593,7 @@
     <div class="r-title"><span>MARKET FINDER</span><button id="marketClose" aria-label="Close market finder">✕</button></div>
     <div class="r-row"><label for="mItem">item</label>
       <div class="m-pick"><input type="text" id="mItem" autocomplete="off" placeholder="type an item name">
+        <button class="m-clear" id="mClear" type="button" title="Clear the search" aria-label="Clear the search" hidden>Clear</button>
         <div class="m-results" id="mItemResults" role="listbox"></div></div></div>
     <div class="r-row"><label for="mFrom">near</label><input type="text" id="mFrom" list="sysNames" autocomplete="off" placeholder="system (defaults to your pilot)"></div>
     <div class="r-modes" role="group" aria-label="Buy or sell">
