@@ -56,18 +56,85 @@ function buildLegs(cargo, budget, tax) {
   }
   const legs = [];
   for (const g of groups.values()) {
-    g.items.sort((x, y) => y.net / y.v - x.net / x.v);
-    let m3 = 0, isk = 0, profit = 0;
-    const take = [];
-    for (const it of g.items) {
-      const n = Math.floor(Math.min(it.units, (cargo - m3) / it.v, (budget - isk) / it.c));
-      if (n <= 0) continue;
-      m3 += n * it.v; isk += n * it.c; profit += n * it.net;
-      take.push({ tid: it.tid, n, profit: n * it.net, cost: n * it.c, c: it.c, g: it.g, m3: n * it.v });
-    }
-    if (profit > 0) legs.push({ ...g, take, m3, isk, profit });
+    const filled = fillHold(g.items, cargo, budget);
+    if (filled.profit > 0) legs.push({ ...g, ...filled });
   }
   return legs;
+}
+
+/* fill the hold with the items that earn the most per m3, within budget */
+function fillHold(items, cargo, budget) {
+  /* only items with at least this many units on the market at a profit:
+     thin stock is likely gone by the time you arrive */
+  const minStock = Math.max(1, +document.getElementById("hMin").value || 1);
+  items = [...items].sort((x, y) => y.net / y.v - x.net / x.v);
+  let m3 = 0, isk = 0, profit = 0;
+  const take = [];
+  for (const it of items) {
+    if (it.units < minStock) continue;
+    const n = Math.floor(Math.min(it.units, (cargo - m3) / it.v, (budget - isk) / it.c));
+    if (n <= 0) continue;
+    m3 += n * it.v; isk += n * it.c; profit += n * it.net;
+    take.push({ tid: it.tid, n, profit: n * it.net, cost: n * it.c, c: it.c, g: it.g, m3: n * it.v });
+  }
+  return { take, m3, isk, profit };
+}
+
+/* ---- live check --------------------------------------------------------------
+   The pairs come from the last hourly snapshot; orders get bought out in
+   between. Before a trip is shown in detail, every candidate item of each
+   leg is re-read from CCP right now (that station's sell orders, the other
+   station's buy orders), the books are walked again, and the hold is
+   refilled from what is really there. */
+const regionOf = sys => state.byId.get(sys).regionId;
+async function liveOrders(region, tid, side) {
+  const r = await fetch(`https://esi.evetech.net/markets/${region}/orders?order_type=${side}&type_id=${tid}`,
+    { headers: { "X-Compatibility-Date": "2025-09-30" } });
+  if (!r.ok) throw new Error(`ESI ${r.status}`);
+  return r.json();
+}
+function walkLive(asks, bids, tax) {
+  asks = asks.map(a => [a.price, a.volume_remain]).sort((x, y) => x[0] - y[0]);
+  bids = bids.map(b => [b.price, b.volume_remain, b.min_volume || 1]).sort((x, y) => y[0] - x[0]);
+  let i = 0, j = 0, units = 0, cost = 0, gross = 0;
+  while (i < asks.length && j < bids.length) {
+    const [pa, qa] = asks[i], [pb, qb, mn] = bids[j];
+    if (pb * (1 - tax) <= pa) break;
+    const take = Math.min(qa, qb);
+    if (take < mn) { j++; continue; }
+    units += take; cost += take * pa; gross += take * pb;
+    asks[i][1] -= take; bids[j][1] -= take;
+    if (!asks[i][1]) i++;
+    if (!bids[j][1]) j++;
+  }
+  return { units, cost, gross };
+}
+async function verifyLeg(L) {
+  const { tax, cargo, budget } = haul.ctx;
+  const candidates = [...L.items].sort((x, y) => y.net / y.v - x.net / x.v).slice(0, 25);
+  const live = [], gone = [];
+  await Promise.all(candidates.map(async it => {
+    try {
+      const [asks, bids] = await Promise.all([
+        liveOrders(regionOf(L.asys), it.tid, "sell").then(o => o.filter(x => x.location_id === L.a)),
+        liveOrders(regionOf(L.bsys), it.tid, "buy").then(o => o.filter(x => x.location_id === L.b))]);
+      const w = walkLive(asks, bids, tax);
+      if (!w.units) { gone.push(it.tid); return; }
+      live.push({ tid: it.tid, v: it.v, units: w.units, c: w.cost / w.units, g: w.gross / w.units,
+                  net: w.gross / w.units * (1 - tax) - w.cost / w.units });
+    } catch { live.push(it); }          /* CCP unreachable: keep the snapshot figure */
+  }));
+  const filled = fillHold(live.filter(x => x.net > 0), cargo, budget);
+  const wasTaken = new Set(L.take.map(x => x.tid));
+  return { ...L, ...filled, gone: gone.filter(t => wasTaken.has(t)), checked: new Date() };
+}
+async function verifyLoop(o) {
+  const [L1, L2] = await Promise.all([verifyLeg(o.L1), o.L2 ? verifyLeg(o.L2) : null]);
+  o.L1 = L1;
+  if (L2) o.L2 = L2;
+  o.total = o.L1.profit + (o.L2 ? o.L2.profit : 0);
+  o.perJump = o.total / Math.max(1, o.jumps);
+  o.verified = true;
 }
 
 function planHauls() {
@@ -119,28 +186,19 @@ function planHauls() {
   haul.loops = loops;
   haul.ctx = { origin, tax, cargo, budget, hs, home, tree };
   sum.innerHTML = `${legs.length.toLocaleString()} profitable station pairs at ${(tax * 100).toFixed(2)}% sales tax; ` +
-    `${loops.length} round trips from <b>${esc(origin.name)}</b>${hs ? ", highsec only" : ""}.`;
+    `${loops.length} round trips from <b>${esc(origin.name)}</b>${hs ? ", highsec only" : ""}. ` +
+    `Snapshot ${Math.round((Date.now() - Date.parse(haul.data.generated)) / 60e3)} min old; pick a trip to check it live.`;
   drawHauls();
 }
 
 function drawHauls() {
   const list = document.getElementById("hList");
   const loops = [...haul.loops].sort((a, b) => haul.sort === "total" ? b.total - a.total : b.perJump - a.perJump).slice(0, 15);
-  const nm = t => (haul.names && haul.names.get(+t)) || `item ${t}`;
-  const leg = (L, label, jumpsTo) => {
-    const a = state.byId.get(L.asys), b = state.byId.get(L.bsys);
-    const items = L.take.slice(0, 4).map(x => `${esc(nm(x.tid))} ×${x.n.toLocaleString()}`).join(", ") +
-      (L.take.length > 4 ? `, +${L.take.length - 4} more` : "");
-    return `<div class="h-leg"><b>${label}</b>: buy at ${esc(stationName(L.a) || a.name)} ` +
-      `<span class="m-meta">(${jumpsTo} jumps)</span>, sell at ${esc(stationName(L.b) || b.name)}<br>` +
-      `<span class="m-meta">${items}; ${Math.round(L.m3).toLocaleString()} m3, ${fmtPrice(L.isk)} ISK in</span> ` +
-      `<span class="h-profit">+${fmtPrice(L.profit)}</span></div>`;
-  };
   list.innerHTML = loops.map((o, i) => `<li data-i="${i}">
     <div class="r-sys"><span class="h-profit">+${fmtPrice(o.total)} ISK</span>
       <span class="m-meta">${o.jumps} jumps, ${fmtPrice(o.perJump)} per jump</span></div>
-    ${leg(o.L1, "Out", haul.ctx.home.dist.get(o.L1.asys))}
-    ${o.L2 ? leg(o.L2, "Back", haul.ctx.tree(o.L1.bsys).dist.get(o.L2.asys))
+    ${legHtml(o.L1, "Out", haul.ctx.home.dist.get(o.L1.asys))}
+    ${o.L2 ? legHtml(o.L2, "Back", haul.ctx.tree(o.L1.bsys).dist.get(o.L2.asys))
            : `<div class="h-leg m-meta">Back: no profitable return leg nearby; fly home empty.</div>`}
   </li>`).join("") || `<li class="m-meta">No profitable loops within reach. Widen the reach, raise the budget, or allow lowsec.</li>`;
   list.querySelectorAll("li[data-i]").forEach(li => li.onclick = e => {
@@ -150,8 +208,31 @@ function drawHauls() {
 }
 
 /* the whole circuit on the map: home, buy, sell, buy, sell, home */
-function showLoop(o, li) {
+function legHtml(L, label, jumpsTo) {
+  const nm = haulName;
+    const a = state.byId.get(L.asys), b = state.byId.get(L.bsys);
+    const items = L.take.slice(0, 4).map(x => `${esc(nm(x.tid))} ×${x.n.toLocaleString()}`).join(", ") +
+      (L.take.length > 4 ? `, +${L.take.length - 4} more` : "");
+    return `<div class="h-leg"><b>${label}</b>: buy at ${esc(stationName(L.a) || a.name)} ` +
+      `<span class="m-meta">(${jumpsTo} jumps)</span>, sell at ${esc(stationName(L.b) || b.name)}<br>` +
+      `<span class="m-meta">${items}; ${Math.round(L.m3).toLocaleString()} m3, ${fmtPrice(L.isk)} ISK in</span> ` +
+      `<span class="h-profit">+${fmtPrice(L.profit)}</span></div>`;
+  }
+
+async function showLoop(o, li) {
   const { origin, tree } = haul.ctx;
+  if (!o.verified) {
+    li.classList.add("on");
+    li.insertAdjacentHTML("beforeend", `<div class="h-stops m-meta">Checking every item live with CCP…</div>`);
+    await verifyLoop(o);
+    li.querySelector(".h-stops").remove();
+    const head = li.querySelector(".r-sys");
+    if (head) head.innerHTML = `<span class="h-profit">+${fmtPrice(o.total)} ISK</span>` +
+      `<span class="m-meta">${o.jumps} jumps, ${fmtPrice(o.perJump)} per jump · checked live</span>`;
+    const legs = li.querySelectorAll(".h-leg");
+    if (legs[0]) legs[0].outerHTML = legHtml(o.L1, "Out", haul.ctx.home.dist.get(o.L1.asys));
+    if (legs[1] && o.L2) legs[1].outerHTML = legHtml(o.L2, "Back", haul.ctx.tree(o.L1.bsys).dist.get(o.L2.asys));
+  }
   const stops = [origin.id, o.L1.asys, o.L1.bsys, ...(o.L2 ? [o.L2.asys, o.L2.bsys] : []), origin.id];
   const path = [];
   for (let i = 0; i < stops.length - 1; i++) {
@@ -339,8 +420,15 @@ function stopsHtml(o) {
     html += stop(3, "buy", o.L2.a, o.L2.asys, buyTable(o.L2), "2") +
             stop(4, "sell", o.L2.b, o.L2.bsys, sellTable(o.L2));
   }
-  return html + `<div class="m-meta">Buy from sell orders, sell into buy orders. Prices are this hour's best;
-    check each in game before you commit.</div></div>`;
+  const gone = [...(o.L1.gone || []), ...((o.L2 && o.L2.gone) || [])];
+  if (!o.L1.take.length) {
+    return `<div class="h-stops m-meta">Nothing on this trip passes the live check now: the items were bought out,
+      or there is less on the market than your minimum stock. Try another trip, or run Find hauls again.</div>`;
+  }
+  const when = o.L1.checked ? o.L1.checked.toUTCString().slice(17, 22) + " UTC" : "";
+  return html + `<div class="m-meta">${when ? `Checked live with CCP at ${when}: these quantities and prices are on the market now. ` : ""}` +
+    `${gone.length ? `Bought out since the snapshot and dropped: ${gone.map(t => esc(haulName(t))).join(", ")}. ` : ""}` +
+    `Buy from sell orders, sell into buy orders; anything can still move before you arrive.</div></div>`;
 }
 
 /* the active haul, for the pop-out window (hud.html): every stop with

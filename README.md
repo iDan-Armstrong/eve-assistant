@@ -210,7 +210,11 @@ your budget and your sales tax (7.5%, less 11% per Accounting level):
 each leg fills the hold with the items that earn the most per m3 between
 the same two stations. A loop is one leg out from home and the leg that
 best brings you back, ranked by ISK per jump over the whole circuit, with
-a highsec-only option. Click a loop to draw it on the map and send the
+a highsec-only option and a minimum stock (items with fewer units on the
+market than that are skipped, since thin stock is often gone on arrival).
+Picking a loop re-reads every item from CCP right then and rebuilds the
+legs from what is really on the market, listing anything bought out since
+the hourly snapshot. Click a loop to draw it on the map and send the
 first buy stop to your autopilot, or send the whole trip: every jump of
 the circuit as a waypoint, docking at each trade station.
 
