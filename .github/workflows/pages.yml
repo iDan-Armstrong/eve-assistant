@@ -74,6 +74,16 @@ jobs:
           python tools/fetch_live.py --history ledger
         continue-on-error: true      # a source outage must never block deploy
 
+      - name: Market summaries (ESI, every region)
+        run: |
+          if python tools/fetch_market.py; then
+            cp web/data/live/market.json web/data/live/market_types.json ledger/
+          elif [ -f ledger/market.json ]; then
+            cp ledger/market.json ledger/market_types.json web/data/live/   # keep the last good copy
+          fi
+        timeout-minutes: 15
+        continue-on-error: true
+
       - name: Save risk history
         run: |
           cd ledger

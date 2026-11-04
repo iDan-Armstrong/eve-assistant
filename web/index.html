@@ -156,6 +156,21 @@
     display: flex; flex-direction: column; font-size: 12.5px;
   }
   .route[hidden] { display: none; }
+  .m-pick { position: relative; flex: 1; min-width: 0; }
+  .m-pick input { width: 100%; }
+  .m-results { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 5; display: none;
+    background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 3px; max-height: 240px; overflow-y: auto; }
+  .m-results.open { display: block; }
+  .m-results button { display: block; width: 100%; text-align: left; padding: 5px 8px; background: none; border: 0;
+    color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+  .m-results button:hover, .m-results button:focus-visible { background: #162032; outline: none; }
+  .leaflet-tooltip.price-tag { background: #0b2233; border: 1px solid #7fd0ff; color: #e9f6ff;
+    font: 700 11.5px "Chakra Petch", sans-serif; padding: 1px 6px; box-shadow: 0 0 0 2px rgba(6,10,18,.8); }
+  .leaflet-tooltip.price-tag::before { display: none; }
+  .route .m-list li { counter-increment: none; padding-left: 12px; }
+  .route .m-list li::before { content: none; }
+  .m-list .m-price { font-weight: 700; color: #e9f6ff; }
+  .m-list .m-meta { font-size: 11px; color: var(--ink-dim); }
   body.route-open .leaflet-top.leaflet-left { left: 340px; }
   .route .r-head { padding: 10px 12px 8px; border-bottom: 1px solid var(--panel-edge); display: grid; gap: 6px; }
   .route .r-title { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; letter-spacing: .04em; }
@@ -519,6 +534,7 @@
     <button data-layer="pvp-kills" aria-pressed="false" title="PvP: where ships died in the last hour">PvP kills <small>pvp</small></button>
     <button data-layer="ambush" aria-pressed="false" title="PvP: kills on stargate grids over the last 30 days (gate camps)">Ambush 30d</button>
     <button data-layer="ratting" aria-pressed="false" title="PvP: where pilots are killing NPCs (targets)">Ratting</button>
+    <button data-layer="market" aria-pressed="false" title="Market: NPC market orders per system">Market</button>
     <button data-layer="status" aria-pressed="false" title="The in-game security status colors">Security</button>
   </div>
   <details class="toggles">
@@ -535,6 +551,7 @@
     </div>
   </details>
   <button class="route-btn" id="routeBtn" aria-expanded="false" aria-controls="route">Route</button>
+  <button class="route-btn" id="marketBtn" aria-expanded="false" aria-controls="market" title="Where to buy or sell an item">Find item</button>
   <div class="pilot" id="corpWrap" hidden>
     <button class="route-btn" id="corpBtn" aria-expanded="false" aria-controls="corpMenu">Corp</button>
     <div class="pilot-menu corp-menu" id="corpMenu" hidden></div>
@@ -565,6 +582,28 @@
   <div class="r-note">Estimates from public kill data, not a guarantee. Pochven and Zarzakh gates are left out.</div>
 </section>
 <datalist id="sysNames"></datalist>
+
+<section class="route market" id="market" hidden aria-label="Market finder">
+  <div class="r-head">
+    <div class="r-title"><span>MARKET FINDER</span><button id="marketClose" aria-label="Close market finder">✕</button></div>
+    <div class="r-row"><label for="mItem">item</label>
+      <div class="m-pick"><input type="text" id="mItem" autocomplete="off" placeholder="type an item name">
+        <div class="m-results" id="mItemResults" role="listbox"></div></div></div>
+    <div class="r-row"><label for="mFrom">near</label><input type="text" id="mFrom" list="sysNames" autocomplete="off" placeholder="system (defaults to your pilot)"></div>
+    <div class="r-modes" role="group" aria-label="Buy or sell">
+      <button data-side="sell" aria-pressed="true">Buy it (sellers)</button>
+      <button data-side="buy" aria-pressed="false">Sell it (buyers)</button>
+    </div>
+    <div class="r-modes" role="group" aria-label="Sort">
+      <button data-sort="price" aria-pressed="true">Best price</button>
+      <button data-sort="jumps" aria-pressed="false">Nearest</button>
+      <button data-sort="safe" aria-pressed="false">Safest</button>
+    </div>
+    <div class="r-sum" id="mSum">Pick an item. Every region's NPC market is searched live from CCP.</div>
+  </div>
+  <ol id="mList" class="m-list"></ol>
+  <div class="r-note">Prices from CCP's public NPC market. Player structures are left out. Click a row to plan the safer route.</div>
+</section>
 
 <div class="legend">
   <div id="secLegend" hidden>
@@ -710,6 +749,13 @@ function markerRadius(p, z) {
      Ambush     kills on a stargate grid (victim within 400 km of a gate):
                 where gate camps actually catch people                    */
 const PVP_LEVELS = {
+  "market": [
+    { key: "none",     label: "no market",       min: 0,     color: "#26334a", boost: 0 },
+    { key: "local",    label: "1-99 orders",     min: 1,     color: "#2f6f8f", boost: 0 },
+    { key: "regional", label: "100-999",         min: 100,   color: "#3fa0d0", boost: .8 },
+    { key: "big",      label: "1k-9,999",        min: 1000,  color: "#7fd0ff", boost: 2 },
+    { key: "hub",      label: "10k+ (trade hub)", min: 10000, color: "#e9f6ff", boost: 3.8 },
+  ],
   "pvp-kills": [
     { key: "quiet",  label: "quiet",       min: 0,  color: "#26334a", boost: 0 },
     { key: "active", label: "1-2 kills",   min: 1,  color: "#c9a23a", boost: 1 },
@@ -735,7 +781,9 @@ function pvpFor(p, layer) {
   const [ship = 0, pod = 0, npc = 0, jumps = 0] =
     (riskData.activity && riskData.activity.systems[p.id]) || [];
   const hist = pvpHist(p);
-  const value = layer === "ratting" ? npc : layer === "ambush" ? hist.g : ship + pod;
+  const mk = (riskData.market && riskData.market.systems[p.id]) || [0, 0];
+  const value = layer === "ratting" ? npc : layer === "ambush" ? hist.g
+              : layer === "market" ? mk[0] + mk[1] : ship + pod;
   const levels = PVP_LEVELS[layer];
   const level = [...levels].reverse().find(l => value >= l.min);
   return { level, ship, pod, npc, jumps, live: !!riskData.activity, hist };
@@ -928,6 +976,7 @@ async function boot() {
   [riskData.pvp, riskData.strat, riskData.traffic] = await Promise.all([
     getJson("data/live/pvp_history.json"), getJson("data/pvp_static.json"),
     getJson("data/live/traffic.json")]);
+  riskData.market = await getJson("data/live/market.json");
   if (riskData.pvp && !riskData.pvp.windowDays) riskData.pvp = null;
 
   /* strategic overlay (tools/analyze_null.py): orange ring on systems
@@ -1101,7 +1150,7 @@ async function boot() {
   try { saved = localStorage.getItem("atlas.layer"); } catch { /* ignore */ }
   document.querySelectorAll(".layers button:not(:disabled)").forEach(b =>
     b.onclick = () => applyLayer(b.dataset.layer));
-  applyLayer(["status", "risk-history", "pvp-kills", "ambush", "ratting"].includes(saved)
+  applyLayer(["status", "risk-history", "pvp-kills", "ambush", "ratting", "market"].includes(saved)
     ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
   wireRoute();
@@ -1158,9 +1207,17 @@ function updatePvpLegend(layer) {
   document.getElementById("pvpTitle").textContent = layer === "ratting"
     ? "Ratting, last hour: NPC kills (where PvE pilots are)"
     : layer === "ambush" ? "Ambush sites, last 30 days: kills on stargate grids"
+    : layer === "market" ? "Market: NPC buy and sell orders per system"
     : "PvP kills, last hour: ship and pod kills";
   document.getElementById("pvpRamp").innerHTML = PVP_LEVELS[layer]
     .map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join("");
+  if (layer === "market") {
+    const m = riskData.market;
+    document.getElementById("pvpLive").textContent = m
+      ? `all regions, CCP ESI, updated ${hhmm(m.generated)}; use Find item in the top bar`
+      : "market data not collected yet here";
+    return;
+  }
   if (layer === "ambush") {
     const h = riskData.pvp;
     document.getElementById("pvpLive").textContent = h
@@ -1188,6 +1245,11 @@ function renderPvp(p) {
     lines.push(`Last hour: ${r.ship} ship kills, ${r.pod} pod kills, ${r.npc} NPC kills, ${r.jumps} jumps`);
   } else if (r.live && r.npc) {
     lines.push(`Last hour: ${r.npc} NPC kills`);
+  }
+  const mk = riskData.market && riskData.market.systems[p.id];
+  if (mk) {
+    lines.push(`Market: <b>${mk[0].toLocaleString()}</b> sell and ${mk[1].toLocaleString()} buy orders, ` +
+               `${mk[2].toLocaleString()} items; ${fmtIsk(mk[3])} ISK for sale, ${fmtIsk(mk[4])} ISK in buy orders`);
   }
   if (riskData.pvp && p.sec < 0.5) {
     const h = r.hist, days = riskData.pvp.windowDays;
@@ -1471,6 +1533,10 @@ function drawRoute() {
 }
 function openRoute(open) {
   document.getElementById("route").hidden = !open;
+  if (open && document.getElementById("market")) {
+    document.getElementById("market").hidden = true;
+    document.getElementById("marketBtn").setAttribute("aria-expanded", "false");
+  }
   document.body.classList.toggle("route-open", open);
   document.body.classList.toggle("sheet-open", open || document.getElementById("panel").classList.contains("open"));
   document.getElementById("routeBtn").setAttribute("aria-expanded", String(open));
@@ -1482,12 +1548,12 @@ function wireRoute() {
     openRoute(document.getElementById("route").hidden);
   document.getElementById("routeClose").onclick = () => openRoute(false);
   for (const id of ["rFrom", "rTo"]) document.getElementById(id).onchange = drawRoute;
-  document.querySelectorAll(".r-modes button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#route .r-modes button").forEach(b => b.onclick = () => {
     if (b.dataset.mode === "clear") {
       document.getElementById("rFrom").value = document.getElementById("rTo").value = "";
     } else {
       route.mode = b.dataset.mode;
-      document.querySelectorAll(".r-modes button").forEach(x =>
+      document.querySelectorAll("#route .r-modes button").forEach(x =>
         x.setAttribute("aria-pressed", String(x.dataset.mode === route.mode)));
     }
     drawRoute();
@@ -1759,5 +1825,6 @@ boot().catch(err => {
 <script src="sso.js"></script>
 <script src="pilot_core.js"></script>
 <script src="pilot.js"></script>
+<script src="market.js"></script>
 </body>
 </html>

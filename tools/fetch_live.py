@@ -61,6 +61,7 @@ def http(url: str, *, data: bytes | None = None, esi: bool = False,
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         if meta is not None:
             meta["last_modified"] = resp.headers.get("Last-Modified")
+            meta["pages"] = int(resp.headers.get("X-Pages") or 1)
         raw = resp.read()
         if resp.headers.get("Content-Encoding") == "gzip":
             raw = gzip.decompress(raw)

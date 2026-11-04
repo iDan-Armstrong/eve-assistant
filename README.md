@@ -158,6 +158,23 @@ day and typical gang size, band changes and chokepoints. Pochven and
 Zarzakh gates are left out of routing. Use **Route from here** and
 **Route to here** on any system panel to set the ends.
 
+### Market
+
+Every NPC market order in New Eden is public in CCP's API, and each order
+names its solar system, so markets join onto the map like everything
+else. The hourly job (`tools/fetch_market.py`) reads every region's
+orders and publishes per-system totals: the **Market** layer colors
+systems from no market through local and regional markets up to the
+trade hubs, and the system panel lists order counts and ISK on the
+market.
+
+**Find item** answers "where can I buy (or sell) this near me?" The
+browser searches every region's orders for one item live from CCP, then
+measures each seller from your pilot (or any system you type) two ways:
+jumps, and the safer-route cost the route planner uses. Sort by best
+price, nearest, or safest; the best five show their price on the map,
+and clicking a row plans the safer route there.
+
 ### Hourly traffic
 
 CCP publishes, for every system, the stargate jumps and kills of the last

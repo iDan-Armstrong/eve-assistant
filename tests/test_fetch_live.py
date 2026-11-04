@@ -103,3 +103,14 @@ def test_esi_hour_from_last_modified():
     import traffic
     assert traffic.esi_hour("Tue, 03 Nov 2026 21:07:12 GMT", NOW) == "2026-11-03T21"
     assert traffic.esi_hour(None, NOW) == "2026-11-03T12"
+
+
+def test_market_aggregate_per_system():
+    import fetch_market
+    orders = [{"system_id": 30000142, "is_buy_order": False, "price": 5.0, "volume_remain": 100, "type_id": 34},
+              {"system_id": 30000142, "is_buy_order": True, "price": 4.0, "volume_remain": 50, "type_id": 34},
+              {"system_id": 30000142, "is_buy_order": False, "price": 1e6, "volume_remain": 1, "type_id": 648},
+              {"system_id": 30002187, "is_buy_order": False, "price": 6.0, "volume_remain": 10, "type_id": 34}]
+    out = fetch_market.aggregate(orders)
+    assert out["30000142"] == [2, 1, 2, 1000500, 200]
+    assert out["30002187"] == [1, 0, 1, 60, 0]
