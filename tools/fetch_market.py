@@ -96,6 +96,7 @@ def main() -> None:
     status = {"regions": len(regions)}
     systems: dict[str, list] = {}
     book: dict = {}
+    shelves: dict[int, dict[int, list]] = {}
     failed = []
     with ThreadPoolExecutor(WORKERS) as pool:
         for region, result in zip(regions, pool.map(lambda r: _safe(region_orders, r["id"]), regions)):
@@ -104,6 +105,7 @@ def main() -> None:
                 continue
             systems.update(aggregate(result))
             haul.merge(book, haul.region_book(result))
+            add_shelves(shelves, result)
     status.update({"systemsWithMarkets": len(systems), "failedRegions": failed,
                    "seconds": round(time.time() - started)})
 
@@ -117,6 +119,12 @@ def main() -> None:
         status["types"] = f"error: {exc}"
 
     try:
+        write_shelves(shelves)
+        status["stationFiles"] = len(shelves)
+    except Exception as exc:                         # noqa: BLE001
+        status["stationFiles"] = f"error: {exc}"
+
+    try:
         write_haul(book)
         status["haulPairs"] = "ok"
     except Exception as exc:                         # noqa: BLE001
@@ -126,6 +134,29 @@ def main() -> None:
         {"generated": _now(), "schema": ["sellOrders", "buyOrders", "items", "sellIsk", "buyIsk"],
          "systems": systems, "status": status}, separators=(",", ":")))
     print(json.dumps(status, indent=1))
+
+
+def add_shelves(shelves: dict, orders: list[dict]) -> None:
+    """Per station and item: [lowest sell, units for sale, highest buy, units wanted]."""
+    for o in orders:
+        row = shelves.setdefault(o["location_id"], {}).setdefault(o["type_id"], [None, 0, None, 0])
+        if o["is_buy_order"]:
+            row[2] = o["price"] if row[2] is None else max(row[2], o["price"])
+            row[3] += o["volume_remain"]
+        else:
+            row[0] = o["price"] if row[0] is None else min(row[0], o["price"])
+            row[1] += o["volume_remain"]
+
+
+def write_shelves(shelves: dict) -> None:
+    """web/data/live/stations/<stationId>.json: everything on that station's market."""
+    out = OUT / "stations"
+    out.mkdir(parents=True, exist_ok=True)
+    for old in out.glob("*.json"):
+        old.unlink()
+    for loc, items in shelves.items():
+        rows = [[tid, *row] for tid, row in items.items()]
+        (out / f"{loc}.json").write_text(json.dumps({"generated": _now(), "items": rows}, separators=(",", ":")))
 
 
 def write_haul(book: dict) -> None:

@@ -231,6 +231,7 @@ function openMarket(open) {
   if (open) {
     openRoute(false);
     document.getElementById("haul").hidden = true;
+    document.getElementById("shelf").hidden = true;
     document.body.classList.add("route-open");          /* zoom buttons step aside */
     loadMarketTypes();
     document.getElementById("mItem").focus();

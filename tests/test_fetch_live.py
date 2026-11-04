@@ -131,3 +131,15 @@ def test_token_encryption_round_trip():
     blob = fsm.crypt(b"refresh-token", "a-test-key", False)
     assert blob != b"refresh-token"
     assert fsm.crypt(blob, "a-test-key", True) == b"refresh-token"
+
+
+def test_station_shelves_best_prices_and_depth():
+    import fetch_market
+    shelves = {}
+    fetch_market.add_shelves(shelves, [
+        {"location_id": 1, "type_id": 34, "is_buy_order": False, "price": 5.0, "volume_remain": 10},
+        {"location_id": 1, "type_id": 34, "is_buy_order": False, "price": 4.5, "volume_remain": 3},
+        {"location_id": 1, "type_id": 34, "is_buy_order": True, "price": 4.0, "volume_remain": 7},
+        {"location_id": 1, "type_id": 35, "is_buy_order": True, "price": 9.0, "volume_remain": 1}])
+    assert shelves[1][34] == [4.5, 13, 4.0, 7]
+    assert shelves[1][35] == [None, 0, 9.0, 1]

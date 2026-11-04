@@ -338,6 +338,7 @@ async function openHaul(open) {
   if (!open) { haul.layer.remove(); document.body.classList.remove("route-open"); return; }
   openRoute(false);
   if (typeof openMarket === "function") document.getElementById("market").hidden = true;
+  document.getElementById("shelf").hidden = true;
   document.body.classList.add("route-open");
   fillShip();
   if (!haul.data) {

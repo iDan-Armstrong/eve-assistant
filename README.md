@@ -198,6 +198,14 @@ Actions secret; if CCP issues a new one, the job keeps it on the
 live-data branch encrypted with a second secret. It is read-only and
 used for markets and structure names only.
 
+Every station in the system panel has a **market** link that lists
+everything on that station's market: lowest sell price and units for
+sale, highest buy price and units wanted, with a filter and sorting by
+ISK on sale or wanted. CCP serves market orders only by region, so the
+hourly job writes one small file per station from the regions it already
+downloads. Clicking an item hands it to Find item to compare across New
+Eden.
+
 ### Haul planner
 
 **Haul** (behind a password) plans round trips that make ISK in both

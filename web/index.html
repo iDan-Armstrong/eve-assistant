@@ -195,6 +195,12 @@
     font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .h-dest[hidden] { display: none; }
   .route .m-list li.on { background: #14263a; }
+  .s-title { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+  .s-cols { display: flex; justify-content: space-between; gap: 8px; }
+  .s-cols b { color: var(--ink); }
+  .st-shelf { margin-left: 6px; background: none; border: 1px solid var(--panel-edge); border-radius: 3px;
+    color: var(--ink-dim); font: inherit; font-size: 10.5px; padding: 0 5px; cursor: pointer; vertical-align: 1px; }
+  .st-shelf:hover { color: var(--ink); border-color: var(--ink-dim); }
   .h-stops { margin-top: 8px; border-top: 1px solid var(--panel-edge); padding-top: 6px; cursor: default; }
   .h-stop { margin: 6px 0 8px; }
   .h-stop-head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-bottom: 3px; }
@@ -635,6 +641,22 @@
   <div class="r-note">Estimates from public kill data, not a guarantee. Pochven and Zarzakh gates are left out.</div>
 </section>
 <datalist id="sysNames"></datalist>
+
+<section class="route shelf" id="shelf" hidden aria-label="Station market">
+  <div class="r-head">
+    <div class="r-title"><span>STATION MARKET</span><button id="shelfClose" aria-label="Close station market">✕</button></div>
+    <div class="s-title" id="sTitle"></div>
+    <div class="r-row"><label for="sFilter">filter</label><input type="text" id="sFilter" autocomplete="off" placeholder="item name"></div>
+    <div class="r-modes" role="group" aria-label="Sort">
+      <button data-ssort="name" aria-pressed="true">A to Z</button>
+      <button data-ssort="sell" aria-pressed="false">Most ISK for sale</button>
+      <button data-ssort="buy" aria-pressed="false">Most ISK wanted</button>
+    </div>
+    <div class="r-sum" id="sSum"></div>
+  </div>
+  <ol id="sList" class="m-list"></ol>
+  <div class="r-note">NPC-station orders from the hourly snapshot: lowest sell price and highest buy price, with total units. Click an item to compare it across New Eden.</div>
+</section>
 
 <section class="route haul" id="haul" hidden aria-label="Haul planner">
   <div class="r-head">
@@ -1623,6 +1645,7 @@ function drawRoute() {
 }
 function openRoute(open) {
   document.getElementById("route").hidden = !open;
+  if (open && document.getElementById("shelf")) document.getElementById("shelf").hidden = true;
   if (open && document.getElementById("haul")) {
     document.getElementById("haul").hidden = true;
     document.getElementById("haulBtn").setAttribute("aria-expanded", "false");
@@ -1777,7 +1800,8 @@ function select(id) {
     return `<li data-dest="${st.id}" data-dest-name="${st.name.replace(/"/g, "&quot;")}"${edge ? ` style="border-left-color:${edge}"` : ""}` +
            `${st.svc ? ` title="${st.svc.join(", ")}"` : ""}>` +
            `${starred ? '<span style="color:#ffd966">★</span> ' : ""}` +
-           `${facility}${loc ? ` <span class="at">${loc}</span>` : ""}</li>`;
+           `${facility}${loc ? ` <span class="at">${loc}</span>` : ""}` +
+           `<button class="st-shelf" data-shelf="${st.id}" data-name="${st.name.replace(/"/g, "&quot;")}" title="Everything on this station's market">market</button></li>`;
   }).join("");
 
   document.getElementById("pFoot").textContent =
@@ -1923,5 +1947,6 @@ boot().catch(err => {
 <script src="pilot.js"></script>
 <script src="market.js"></script>
 <script src="haul.js"></script>
+<script src="shelf.js"></script>
 </body>
 </html>
