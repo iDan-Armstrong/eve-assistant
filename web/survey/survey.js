@@ -148,10 +148,12 @@ function addLink(a, b, extra = {}) {
   const key = C.linkKey(a, b);
   const old = S.chain.links[key];
   if (old) {
-    /* two systems can be joined by more than one hole: a jump through a tagged
-       signature that is not this connection's signature gets its own connection */
+    /* two systems can be joined by more than one hole. A jump through a tagged
+       signature becomes its own connection only when this connection already has a
+       different signature on that side; otherwise it is the same hole (usually the
+       one you came in through), and the jump fills in its signature and type */
     const side = extra.sigA !== undefined ? "sigA" : extra.sigB !== undefined ? "sigB" : null;
-    if (side && old[side] !== extra[side]) {
+    if (side && old[side] && old[side] !== extra[side]) {
       const twinKey = `${key}~${extra[side]}`;
       if (!S.chain.links[twinKey]) {
         const op = C.newLink(a, b, Date.now(), "", extra);
@@ -164,7 +166,7 @@ function addLink(a, b, extra = {}) {
     }
     const rec = {};
     if (extra.confirmed && !old.confirmed) rec.confirmed = true;
-    for (const k of ["code", "codeAt", "size", "life", "lifeAt", "mass"]) if (extra[k] != null && old[k] == null) rec[k] = extra[k];
+    for (const k of ["sigA", "sigB", "code", "codeAt", "size", "life", "lifeAt", "mass"]) if (extra[k] != null && old[k] == null) rec[k] = extra[k];
     if (Object.keys(rec).length) edit({ kind: "link", key, rec });
     return;
   }
