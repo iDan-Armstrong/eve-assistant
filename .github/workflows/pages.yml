@@ -72,6 +72,7 @@ jobs:
         run: |
           python tools/analyze_routes.py
           python tools/fetch_live.py --history ledger
+          python tools/fetch_fw.py --history ledger || true
         continue-on-error: true      # a source outage must never block deploy
 
       - name: Market summaries (ESI, every region)

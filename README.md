@@ -121,6 +121,19 @@ k-space, so its holes draw as lines; Thera is wormhole space, so its holes
 mark their k-space end. Each system panel lists the last hour's activity
 and any wormhole touching that system, with type, ship size and time left.
 
+### Faction warfare
+
+The **Faction war** layer reads CCP's public faction warfare feed hourly
+(`tools/fetch_fw.py`): who occupies each of the warzone systems (the four
+empires and the Guristas and Angel insurgencies), who owns it, and how
+contested it is (victory points against the capture threshold). Warzone
+systems take their occupier's color and grow with the contest. Victory
+points only move when pilots run complexes or fight, so the job keeps a
+snapshot per run and an orange ring marks systems whose contest moved in
+the last hour: where the fighting is right now. The panel gives contest,
+change over the last hour and day, and who the occupier is at war with;
+the legend gives each faction's systems, pilots and kills yesterday.
+
 ### Lowsec and nullsec strategy
 
 **Ambush 30d** finds where gate camps actually catch people. Every

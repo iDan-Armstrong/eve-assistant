@@ -154,3 +154,13 @@ def test_sell_index_keeps_cheapest_stations():
         {"location_id": 3, "system_id": 30, "type_id": 34, "is_buy_order": True, "price": 9.0, "volume_remain": 3}])
     idx = fetch_market.sell_index(shelves)
     assert idx[34] == [[2, 20, 4.0, 3], [1, 10, 5.0, 10]]       # buy-only station left out
+
+
+def test_fw_momentum_needs_same_occupier_and_old_sample():
+    import fetch_fw
+    hist = {"2026-11-03T10:00": {"9": [0.20, 500002]}, "2026-11-03T11:30": {"9": [0.35, 500002]},
+            "2026-11-03T12:00": {"9": [0.40, 500002]}}
+    assert fetch_fw.momentum(hist, NOW, "9", 1) == 0.2            # vs 10:00, the last sample an hour old
+    assert fetch_fw.momentum(hist, NOW, "9", 24) is None          # nothing a day old
+    hist["2026-11-03T10:00"]["9"][1] = 500003                     # it changed hands since then
+    assert fetch_fw.momentum(hist, NOW, "9", 1) is None

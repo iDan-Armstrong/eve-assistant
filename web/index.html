@@ -195,6 +195,11 @@
     font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .h-dest[hidden] { display: none; }
   .route .m-list li.on { background: #14263a; }
+  .fw-key { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 11.5px; color: var(--ink); }
+  .fw-key span { white-space: nowrap; }
+  .fw-key small { display: block; color: var(--ink-dim); font-size: 10.5px; margin-left: 14px; }
+  .fw-key i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .fw-key i.fw-ring { background: none; border: 2px solid #ff9a3c; width: 7px; height: 7px; }
   .f-sel { flex: 1; min-width: 0; background: rgba(13,19,31,.85); color: var(--ink); border: 1px solid var(--panel-edge);
     border-radius: 3px; font: inherit; font-size: 12.5px; padding: 4px; }
   .f-eft { width: 100%; box-sizing: border-box; background: rgba(13,19,31,.85); color: var(--ink); border: 1px solid var(--panel-edge);
@@ -597,6 +602,7 @@
     <button data-layer="pvp-kills" aria-pressed="false" title="PvP: where ships died in the last hour">PvP kills <small>pvp</small></button>
     <button data-layer="ambush" aria-pressed="false" title="PvP: kills on stargate grids over the last 30 days (gate camps)">Ambush 30d</button>
     <button data-layer="ratting" aria-pressed="false" title="PvP: where pilots are killing NPCs (targets)">Ratting</button>
+    <button data-layer="fw" aria-pressed="false" title="Faction warfare: who holds each warzone system and where the fighting is">Faction war</button>
     <button data-layer="market" aria-pressed="false" title="Market: NPC market orders per system">Market</button>
     <button data-layer="status" aria-pressed="false" title="The in-game security status colors">Security</button>
   </div>
@@ -746,6 +752,11 @@
     <div class="risk-ramp" id="riskRamp"></div>
     <div class="risk-live" id="riskLive">loading live data…</div>
   </div>
+  <div id="fwLegend" hidden>
+    <div class="risk-title">Faction warfare: occupier, contest and momentum</div>
+    <div class="fw-key" id="fwKey"></div>
+    <div class="risk-live" id="fwLive"></div>
+  </div>
   <div id="pvpLegend" hidden>
     <div class="risk-title" id="pvpTitle"></div>
     <div class="risk-ramp" id="pvpRamp"></div>
@@ -867,6 +878,9 @@ function markerRadius(p, z) {
     r += k === "high" ? 3.5 : k === "elevated" ? 1.8 : 0;
   } else if (isPvpLayer(currentLayer)) {
     r += pvpFor(p, currentLayer).level.boost;
+  } else if (currentLayer === "fw") {
+    const f = fwFor(p);
+    r += f ? 1 + 3 * Math.min(1, f.vp / Math.max(1, f.max)) : -.4;
   }
   return r;
 }
@@ -1109,6 +1123,7 @@ async function boot() {
     getJson("data/live/pvp_history.json"), getJson("data/pvp_static.json"),
     getJson("data/live/traffic.json")]);
   riskData.market = await getJson("data/live/market.json");
+  riskData.fw = await getJson("data/live/fw.json");
   if (riskData.pvp && !riskData.pvp.windowDays) riskData.pvp = null;
 
   /* strategic overlay (tools/analyze_null.py): orange ring on systems
@@ -1282,7 +1297,7 @@ async function boot() {
   try { saved = localStorage.getItem("atlas.layer"); } catch { /* ignore */ }
   document.querySelectorAll(".layers button:not(:disabled)").forEach(b =>
     b.onclick = () => applyLayer(b.dataset.layer));
-  applyLayer(["status", "risk-history", "pvp-kills", "ambush", "ratting", "market"].includes(saved)
+  applyLayer(["status", "risk-history", "pvp-kills", "ambush", "ratting", "market", "fw"].includes(saved)
     ? saved : "risk-now");   // risk now is the default
   document.getElementById("boot").classList.add("done");
   wireRoute();
@@ -1302,6 +1317,27 @@ async function boot() {
   }
 }
 
+/* ---- faction warfare -----------------------------------------------------
+   CCP's /fw feed via tools/fetch_fw.py: occupier, contest (victory points
+   against the capture threshold) and how far the contest moved in the
+   last hour and day. Warzone systems take their occupier's color and grow
+   with the contest; an orange ring marks systems whose contest moved in
+   the last hour, i.e. where pilots are plexing and fighting now. */
+const FW_COLORS = { 500001: "#5fa8d3", 500002: "#c0563a", 500003: "#d9b44a", 500004: "#4fb07a",
+                    500010: "#b7e04a", 500011: "#e05a9c" };
+const fwFor = p => riskData.fw && riskData.fw.systems[p.id];
+const fwActive = f => f && f.d1 != null && Math.abs(f.d1) >= 0.002;
+function updateFwLegend() {
+  const fw = riskData.fw;
+  if (!fw) { document.getElementById("fwKey").innerHTML = ""; document.getElementById("fwLive").textContent = "faction warfare data not collected yet here"; return; }
+  document.getElementById("fwKey").innerHTML = Object.entries(fw.factions).map(([id, name]) => {
+    const s = fw.stats[id] || {};
+    return `<span><i style="background:${FW_COLORS[id]}"></i>${esc(name.split(" ")[0])}` +
+      `<small>${s.systems ?? 0} sys · ${(s.pilots || 0).toLocaleString()} pilots · ${(s.killsYesterday || 0).toLocaleString()} kills yday</small></span>`;
+  }).join("") + `<span><i class="fw-ring"></i>contest moved in the last hour</span>`;
+  document.getElementById("fwLive").textContent = `CCP ESI, updated ${hhmm(fw.generated)}; ${fw.samples} hourly samples for momentum`;
+}
+
 /* ---- layers ------------------------------------------------------------ */
 let currentLayer = "risk-now";
 function applyLayer(layer) {
@@ -1312,6 +1348,9 @@ function applyLayer(layer) {
   document.getElementById("riskLegend").hidden = !isRiskLayer(layer);
   document.getElementById("pvpLegend").hidden = !isPvpLayer(layer);
   document.getElementById("secLegend").hidden = layer !== "status";
+  document.getElementById("fwLegend").hidden = layer !== "fw";
+  if (layer === "fw") updateFwLegend();
+  if (state.fwRings) state.fwRings.remove();
   if (isRiskLayer(layer)) updateRiskLegend(layer);
   if (isPvpLayer(layer)) updatePvpLegend(layer);
   const z = map.getZoom();
@@ -1323,12 +1362,27 @@ function applyLayer(layer) {
       const r = riskFor(p, layer); color = r.level.color; top = r.level.key === "high";
     } else if (isPvpLayer(layer)) {
       const r = pvpFor(p, layer); color = r.level.color; top = r.level.boost >= 2;
+    } else if (layer === "fw") {
+      const f = fwFor(p);
+      color = f ? FW_COLORS[f.occ] || "#888" : "#1a2233";
+      top = !!f;
     }
     m.setStyle({ fillColor: color });
     m.setRadius(markerRadius(p, z));
     if (top) hot.push(m);
   });
   hot.forEach(m => m.bringToFront());
+  if (layer === "fw" && riskData.fw) {
+    state.fwRings = L.layerGroup();
+    const rr = radiusFor(map.getZoom());
+    for (const [id, f] of Object.entries(riskData.fw.systems)) {
+      const p = state.byId.get(+id);
+      if (!p || !fwActive(f)) continue;
+      state.fwRings.addLayer(L.circleMarker(p.ll, { renderer: canvas, interactive: false, fill: false,
+        color: "#ff9a3c", weight: 2.2, opacity: .95, radius: rr + 7 }));
+    }
+    state.fwRings.addTo(map);
+  }
   if (typeof applyCorpFocus === "function") applyCorpFocus();
   if (state.selected) { renderRisk(state.byId.get(state.selected)); renderPvp(state.byId.get(state.selected)); }
 }
@@ -1377,6 +1431,20 @@ function renderPvp(p) {
     lines.push(`Last hour: ${r.ship} ship kills, ${r.pod} pod kills, ${r.npc} NPC kills, ${r.jumps} jumps`);
   } else if (r.live && r.npc) {
     lines.push(`Last hour: ${r.npc} NPC kills`);
+  }
+  const f = fwFor(p);
+  if (f) {
+    const fw = riskData.fw, name = id => fw.factions[id] || `faction ${id}`;
+    const pct = Math.round(100 * f.vp / Math.max(1, f.max));
+    const move = (d, label) => d == null ? "" : `${d > 0 ? "+" : ""}${(100 * d).toFixed(1)}% ${label}`;
+    const enemies = fw.wars.filter(([a]) => a === f.occ).map(([, b]) => name(b));
+    lines.push(`<b style="color:${FW_COLORS[f.occ]}">Faction warfare</b>: held by ${esc(name(f.occ))}` +
+      (f.own !== f.occ ? ` (owner ${esc(name(f.own))})` : "") +
+      `; ${f.status === "uncontested" ? "uncontested" : `<b>${pct}%</b> contested`} (${f.vp.toLocaleString()} of ${f.max.toLocaleString()} VP)` +
+      ([move(f.d1, "last hour"), move(f.d24, "today")].filter(Boolean).length
+        ? `; ${[move(f.d1, "last hour"), move(f.d24, "today")].filter(Boolean).join(", ")}` : "") +
+      (fwActive(f) ? ` <b style="color:#ff9a3c">· being fought over now</b>` : "") +
+      (enemies.length ? `<br>&nbsp;&nbsp;at war with ${enemies.map(esc).join(", ")}` : ""));
   }
   const mk = riskData.market && riskData.market.systems[p.id];
   if (mk) {
