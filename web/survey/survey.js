@@ -221,7 +221,19 @@ async function linkPoll() {
     if (!S.link.ok) feed("Survey Link connected: copies from EVE now arrive here on their own", "link");
     S.link.ok = true; S.link.err = ""; S.link.logs = !!body.logs;
     const items = [].concat(body.items || []);
-    if (body.seq < S.link.seq) S.link.seq = 0;               // helper restarted
+    if (body.seq < S.link.seq) S.link.primed = false;        // helper restarted
+    if (!S.link.primed) {
+      /* first contact since this page loaded: copies made before it are not
+         replayed (they would land in whatever system the page last knew);
+         only each pilot's latest system is taken, as a location */
+      const latest = {};
+      for (const it of items) if (it.kind === "system") latest[it.char] = it;
+      for (const it of Object.values(latest)) onLogSystem({ ...it, initial: true });
+      S.link.seq = body.seq;
+      S.link.primed = true;
+      S.link.next = Date.now() + 700;
+      return;
+    }
     for (const it of items) {
       if (it.seq <= S.link.seq) continue;
       S.link.seq = it.seq;
