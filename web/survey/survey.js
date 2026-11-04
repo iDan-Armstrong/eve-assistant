@@ -198,7 +198,9 @@ function renderPilots() {
   $("#pilots").innerHTML = ps.map(p => {
     const w = S.where[p.id] || {};
     const at = w.system ? nameOf(w.system) : "";
-    const state = !tracked(p.id) ? "not tracked" : w.err ? "error" : w.online === false ? "offline" : at;
+    const expired = /token request failed|not signed in/.test(w.err || "");
+    const state = !tracked(p.id) ? "not tracked" : expired ? "login expired: use Add pilot" : w.err ? "error"
+      : w.online === false ? "offline" : at;
     return `<label class="chip${tracked(p.id) ? "" : " off"}" title="${esc(w.err || "Track this pilot's jumps")}">
       <input type="checkbox" data-track="${p.id}"${tracked(p.id) ? " checked" : ""}>
       ${esc(p.name)} <span class="where">${esc(state)}</span></label>`;
