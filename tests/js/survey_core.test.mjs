@@ -145,3 +145,15 @@ test("knowledge base records probe scans and claims", () => {
   S.applyKbOp(kb, { kind: "claim", system: 30000142, by: "A", until: null }, 6);
   assert.equal(kb[30000142].claim, undefined);
 });
+
+test("the way home mixes stargates and wormholes; only wormholes count down", () => {
+  const HOMESYS = 30000001, NEXT = 30000002, EXIT = 30000003, J = 31000010;
+  const gates = { [HOMESYS]: [NEXT], [NEXT]: [HOMESYS, EXIT], [EXIT]: [NEXT] };
+  const c = C.emptyChain();
+  C.applyOp(c, C.newLink(EXIT, J, 0, "A", { life: "decay", lifeAt: 0 }), WH);
+  const k = S.wayHome(c, NEXT, HOMESYS, WH, H, gates);
+  assert.equal(k.jumps, 1); assert.equal(k.keys.length, 0); assert.equal(k.left, null);
+  const w = S.wayHome(c, J, HOMESYS, WH, H, gates);
+  assert.equal(w.jumps, 3); assert.equal(w.gateJumps, 2); assert.equal(w.left, 3 * H);
+  assert.equal(S.wayHome(c, J, HOMESYS, WH, H).connected, false, "without gates there is no path");
+});

@@ -104,21 +104,21 @@ export function lifeBounds(link, wormholes) {
   return { lo, hi };
 }
 
-/* links on the way from `from` to `to` through the chain (breadth first) */
-export function pathBetween(chain, from, to) {
+/* the way from `from` to `to`: wormhole links of the chain plus, when given,
+   known-space stargates ({id: [ids]}). Returns the steps as link keys, with
+   null for a gate jump, or null when there is no way (breadth first) */
+export function pathBetween(chain, from, to, gates = null) {
   if (from === to) return [];
   const adj = new Map();
-  for (const [key, l] of Object.entries(chain.links)) {
-    for (const [x, y] of [[l.a, l.b], [l.b, l.a]]) {
-      if (!adj.has(x)) adj.set(x, []);
-      adj.get(x).push([y, key]);
-    }
-  }
+  const add = (x, y, key) => { if (!adj.has(x)) adj.set(x, []); adj.get(x).push([y, key]); };
+  for (const [key, l] of Object.entries(chain.links)) { add(l.a, l.b, key); add(l.b, l.a, key); }
   const prev = new Map([[from, null]]), q = [from];
   for (let i = 0; i < q.length; i++) {
-    for (const [y, key] of adj.get(q[i]) || []) {
+    const v = q[i];
+    const next = [...(adj.get(v) || []), ...((gates && gates[String(v)]) || []).map(w => [w, null])];
+    for (const [y, key] of next) {
       if (prev.has(y)) continue;
-      prev.set(y, [q[i], key]);
+      prev.set(y, [v, key]);
       if (y === to) {
         const keys = [];
         for (let cur = to; prev.get(cur); cur = prev.get(cur)[0]) keys.unshift(prev.get(cur)[1]);
@@ -130,11 +130,13 @@ export function pathBetween(chain, from, to) {
   return null;
 }
 
-/* the way home: the weakest guaranteed life along the path, holes whose age
-   is unknown, and holes at critical mass */
-export function wayHome(chain, here, home, wormholes, now) {
-  const keys = pathBetween(chain, here, home);
-  if (keys === null) return { connected: false };
+/* the way home: the weakest guaranteed life among the wormholes on the path,
+   holes whose age is unknown, and holes at critical mass. Gate jumps (when
+   gates are given) count as jumps but never close */
+export function wayHome(chain, here, home, wormholes, now, gates = null) {
+  const steps = pathBetween(chain, here, home, gates);
+  if (steps === null) return { connected: false };
+  const keys = steps.filter(k => k !== null);
   let lo = Infinity, weakest = null;
   const unknown = [], crit = [];
   for (const k of keys) {
@@ -144,7 +146,7 @@ export function wayHome(chain, here, home, wormholes, now) {
     else if (b.lo < lo) { lo = b.lo; weakest = k; }
     if (l.mass === "crit") crit.push(k);
   }
-  return { connected: true, keys, jumps: keys.length,
+  return { connected: true, keys, jumps: steps.length, gateJumps: steps.length - keys.length,
            lo: keys.length && lo !== Infinity ? lo : null, left: lo !== Infinity ? lo - now : null,
            weakest, unknown, crit };
 }

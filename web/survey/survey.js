@@ -1005,17 +1005,24 @@ function renderTimers() {
   if (!id) { box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}</div><p class="hint">Waiting for your location.</p>`; return; }
   if (id === home) { box.className = "card"; box.innerHTML = `<div class="hint">Way home</div><div class="big ok">You are home</div><div class="hint">${esc(nameOf(home))}</div>`; return; }
   const now = Date.now();
-  const w = X.wayHome(S.chain, id, home, S.WH, now);
+  const w = X.wayHome(S.chain, id, home, S.WH, now, S.K.g);
   if (!w.connected) {
     box.className = "card warn";
     box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}</div><div class="big">No mapped route</div>
       <p class="hint">The chain has no path from here to home. Map the holes you came through.</p>`;
     return;
   }
+  if (!w.keys.length) {
+    /* only stargates between here and home: nothing can close */
+    box.className = "card ok";
+    box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}</div>
+      <div class="big ok">${pl(w.jumps, "gate jump")}</div><div class="hint">all by stargate, nothing on the way can close</div>`;
+    return;
+  }
   const left = w.left, tier = left == null ? "warn" : left <= 10 * 60e3 ? "bad" : left <= 30 * 60e3 ? "warn" : "ok";
   box.className = `card ${tier}`;
   const weak = w.weakest ? S.chain.links[w.weakest] : null;
-  box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}: ${w.jumps} jump${w.jumps > 1 ? "s" : ""}</div>
+  box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}: ${pl(w.jumps, "jump")}${w.gateJumps ? ` (${pl(w.keys.length, "wormhole")}, ${pl(w.gateJumps, "gate")})` : ""}</div>
     <div class="big countdown">${left == null ? "unknown" : dur(left)}</div>
     <div class="hint">${left == null ? "Guaranteed open time is unknown: check Show Info on every hole on the way."
       : left <= 0 ? `the guaranteed time has run out${weak ? ` on ${esc(nameOf(weak.a))} to ${esc(nameOf(weak.b))}` : ""}; it may close any moment`
