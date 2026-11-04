@@ -23,12 +23,23 @@
    POST /corpmates  body {"token": ...} -> {"corporation", "pilots": {id: {name, system, ship, online, at}}}
      Corp mates seen in the last 30 minutes, for a verified member only.
 
+   POST /chain      body {"token": ...} -> {"corporation", "chain"}
+   POST /chain/ops  body {"token": ..., "ops": [...]} -> {"corporation", "chain"}
+     The J-Space Survey wormhole chain, shared inside one corporation and
+     returned only to a verified member. Ops and merge rules come from
+     web/survey/chain_core.mjs, the same module the survey page runs.
+
    Bindings: SIGHTINGS (KV), CLIENT_ID and ALLOWED_ORIGINS (vars). The
    salt for pilot hashes is made on first use and kept in KV, which is
    private to the Worker; a SALT secret, if set, takes its place. */
 
 import { ACTIVE_MINUTES, diffLedger, freshPresence, mergeSightings, prune,
          reserveRows } from "./sightings_core.js";
+import { applyOp, emptyChain, prune as pruneChain } from "../web/survey/chain_core.mjs";
+import WORMHOLES from "../web/data/jspace/wormholes.json";
+
+const MAX_OPS = 200;
+const MAX_LINKS = 3000;
 
 const JWKS_URL = "https://login.eveonline.com/oauth/jwks";
 const ESI = "https://esi.evetech.net";
@@ -91,7 +102,7 @@ async function pilotKey(id, env) {
 /* the character's current corporation, from CCP's public record */
 async function corporationOf(id) {
   const r = await fetch(`${ESI}/characters/${id}`, {
-    headers: { "X-Compatibility-Date": "2025-09-30", "User-Agent": UA } });
+    headers: { "X-Compatibility-Date": "2025-09-30", "User-Agent": UA }, cf: { cacheTtl: 300 } });
   if (!r.ok) throw new Error(`ESI character: ${r.status}`);
   return (await r.json()).corporation_id;
 }
@@ -133,8 +144,46 @@ async function esiAuthed(path, token) {
    allowed than KV, so pilots can report every 30 seconds. */
 export class CorpRoom {
   constructor(state) { this.state = state; }
+
+  /* the survey chain is stored in parts: links, notes and tombstones as one
+     record each, signatures as one record per system */
+  async loadChain() {
+    const st = this.state.storage;
+    const c = emptyChain();
+    c.links = (await st.get("chain:links")) || {};
+    c.notes = (await st.get("chain:notes")) || {};
+    c.gone = (await st.get("chain:gone")) || {};
+    for (const [k, v] of await st.list({ prefix: "chain:sigs:" })) c.sigs[k.slice(11)] = v;
+    return c;
+  }
+  async saveChain(c, touched) {
+    const st = this.state.storage;
+    await st.put({ "chain:links": c.links, "chain:notes": c.notes, "chain:gone": c.gone });
+    for (const sys of touched) {
+      if (c.sigs[sys] && Object.keys(c.sigs[sys]).length) await st.put(`chain:sigs:${sys}`, c.sigs[sys]);
+      else await st.delete(`chain:sigs:${sys}`);
+    }
+  }
+
   async fetch(req) {
     const url = new URL(req.url), now = Date.now();
+    if (url.pathname === "/chain-get" || url.pathname === "/chain-ops") {
+      const c = await this.loadChain();
+      const before = new Set(Object.keys(c.sigs));
+      if (url.pathname === "/chain-ops") {
+        const { ops } = await req.json();
+        const touched = new Set();
+        for (const op of (ops || []).slice(0, MAX_OPS)) {
+          if (op.system !== undefined) touched.add(String(op.system));
+          applyOp(c, op, WORMHOLES);
+        }
+        pruneChain(c, now);
+        if (Object.keys(c.links).length > MAX_LINKS) throw new Error("chain is too large");
+        for (const sys of before) if (!c.sigs[sys]) touched.add(sys);
+        await this.saveChain(c, touched);
+      }
+      return new Response(JSON.stringify(c), { headers: { "Content-Type": "application/json" } });
+    }
     let map = (await this.state.storage.get("pilots")) || {};
     if (url.pathname === "/set") {
       const { id, rec } = await req.json();
@@ -189,6 +238,18 @@ export default {
         const corp = await corporationOf((await verify(token, env)).id);
         const pilots = await room(env, corp).fetch("https://room/get").then(r => r.json());
         return json({ corporation: corp, pilots }, 200, { ...headers, "Cache-Control": "no-store" });
+      }
+      if (req.method === "POST" && (url.pathname === "/chain" || url.pathname === "/chain/ops")) {
+        const body = await req.json();
+        const who = await verify(body.token, env);
+        const corp = await corporationOf(who.id);
+        const ops = (body.ops || []).map(op => ({ ...op, by: who.name,
+          rec: op.rec ? { ...op.rec, by: who.name } : op.rec }));
+        const path = url.pathname === "/chain" ? "/chain-get" : "/chain-ops";
+        const r = await room(env, corp).fetch(`https://room${path}`,
+          { method: "POST", body: JSON.stringify({ ops }) });
+        if (!r.ok) throw new Error(await r.text());
+        return json({ corporation: corp, chain: await r.json() }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/report") {
         return json(await report(req, env), 200, headers);

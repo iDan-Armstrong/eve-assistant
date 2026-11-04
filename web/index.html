@@ -150,6 +150,7 @@
     background: rgba(13,19,31,.85); border: 1px solid var(--panel-edge); border-radius: 3px;
     color: var(--ink); font: inherit; font-size: 12.5px; padding: 6px 12px; cursor: pointer;
   }
+  a.route-btn { text-decoration: none; display: inline-block; color: #7ef0ff; border-color: #2a5560; }
   .route-btn[aria-expanded="true"] { background: #1b2a44; }
   .route-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .route {
@@ -621,12 +622,14 @@
       <label hidden><input type="checkbox" id="tPilots" checked> <i class="sw" style="border-color:#ffcf4a"></i>my pilots, assets and corp mates</label>
       <label><input type="checkbox" id="tStrat"> <i class="sw" style="border-color:#ff6b3d"></i>entry systems, chokepoints</label>
       <label><input type="checkbox" id="tHoles"> <i class="sw" style="border-color:#ff8fd8"></i>Thera / Turnur holes</label>
+      <label><input type="checkbox" id="tSurvey" checked> <i class="sw" style="border-color:#7ef0ff"></i>J-Space Survey chain</label>
     </div>
   </details>
   <button class="route-btn" id="routeBtn" aria-expanded="false" aria-controls="route">Route</button>
   <button class="route-btn" id="haulBtn" aria-expanded="false" aria-controls="haul" title="Profitable round trips from where you are">Haul</button>
   <button class="route-btn" id="fitBtn" aria-expanded="false" aria-controls="fitbox" title="Where to buy what you still need for a fit">Fit</button>
   <button class="route-btn" id="marketBtn" aria-expanded="false" aria-controls="market" title="Where to buy or sell an item">Find item</button>
+  <a class="route-btn" id="surveyBtn" href="survey/" title="J-Space Survey: map wormhole chains; known-space exits show on this map">J-Space</a>
   <div class="pilot" id="corpWrap" hidden>
     <button class="route-btn" id="corpBtn" aria-expanded="false" aria-controls="corpMenu">Corp</button>
     <div class="pilot-menu corp-menu" id="corpMenu" hidden></div>
@@ -1178,9 +1181,50 @@ async function boot() {
   }
   const tHoles = document.getElementById("tHoles");
   tHoles.onchange = () => tHoles.checked ? holeLayer.addTo(map) : holeLayer.remove();
+  /* J-Space Survey chain (survey/ page, same origin): wormhole links saved in
+     this browser, corp-shared ones included once synced. Links between two
+     known-space systems draw as lines; a link into wormhole space rings its
+     known-space end. Refreshes when the survey tab saves. */
+  const surveyLayer = L.layerGroup();
+  const surveyRings = [];
+  const drawSurvey = () => {
+    surveyLayer.clearLayers();
+    surveyRings.length = 0;
+    let chain = null;
+    try { chain = JSON.parse(localStorage.getItem("atlas.survey.chain")); } catch { /* none */ }
+    const now = Date.now(), ringed = new Set();
+    for (const l of Object.values((chain && chain.links) || {})) {
+      if ((l.expires || 0) <= now) continue;
+      const a = state.byId.get(l.a), b = state.byId.get(l.b);
+      const tip = `Survey link${l.code ? " " + l.code : ""}${l.life === "eol" ? ", end of life" : ""}` +
+                  `${l.confirmed ? "" : " (unconfirmed)"}, about ${Math.max(0, Math.round((l.expires - now) / 36e5))}h left`;
+      if (a && b) {
+        surveyLayer.addLayer(L.polyline([a.ll, b.ll], { renderer: canvas, color: "#7ef0ff", weight: 1.8,
+          opacity: l.confirmed ? .9 : .5, dashArray: "6 4" }).bindTooltip(tip, { sticky: true }));
+      }
+      for (const end of [a, b]) {
+        if (!end || ringed.has(end.id) || (a && b)) continue;
+        ringed.add(end.id);
+        const ring = L.circleMarker(end.ll, { renderer: canvas, fill: false, color: "#7ef0ff", weight: 2,
+          opacity: .95 }).bindTooltip(`${end.name}: wormhole into J-space (${tip})`, { sticky: true });
+        surveyLayer.addLayer(ring);
+        surveyRings.push({ m: ring, extra: 8 });
+      }
+    }
+    const r = radiusFor(map.getZoom());
+    for (const { m, extra } of surveyRings) m.setRadius(r + extra);
+  };
+  drawSurvey();
+  addEventListener("storage", e => { if (e.key === "atlas.survey.chain") drawSurvey(); });
+  setInterval(drawSurvey, 60e3);
+  const tSurvey = document.getElementById("tSurvey");
+  tSurvey.onchange = () => tSurvey.checked ? surveyLayer.addTo(map) : surveyLayer.remove();
+  if (tSurvey.checked) surveyLayer.addTo(map);
+  map.on("zoomend", () => { const r = radiusFor(map.getZoom()); for (const { m, extra } of surveyRings) m.setRadius(r + extra); });
+
   /* overlays that corp view (pilot.js) tucks away, keyed to their checkbox */
   state.overlays = [[bulwarkLayer, "tBulwark"], [overlayLayers.ice, "tIce"], [overlayLayers.jove, "tJove"],
-                    [holeLayer, "tHoles"], [stratLayer, "tStrat"]];
+                    [holeLayer, "tHoles"], [stratLayer, "tStrat"], [surveyLayer, "tSurvey"]];
   const sizeHoleRings = () => {
     const r = radiusFor(map.getZoom());
     for (const { m, extra } of holeRings) m.setRadius(r + extra);

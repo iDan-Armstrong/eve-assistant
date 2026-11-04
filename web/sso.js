@@ -35,7 +35,11 @@
   const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const randomString = n => b64url(crypto.getRandomValues(new Uint8Array(n)));
-  const redirectUri = () => location.origin + location.pathname;
+  /* CCP sends the pilot back to one registered address, the Atlas page. A page
+     elsewhere on the site (J-Space Survey) sets EveSSO.redirectUri to that
+     address and gets the pilot back through `returnTo` once login completes;
+     both pages share this origin's localStorage, so the login is shared too. */
+  const redirectUri = () => EveSSO.redirectUri || location.origin + location.pathname;
 
   function load() {
     try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch { return {}; }
@@ -74,6 +78,7 @@
 
   const EveSSO = {
     clientId: "",
+    redirectUri: "",
     scopes: SCOPES,
 
     configured() { return !!EveSSO.clientId; },
@@ -85,8 +90,10 @@
       const verifier = randomString(32), state = randomString(16);
       const challenge = b64url(await crypto.subtle.digest("SHA-256",
         new TextEncoder().encode(verifier)));
+      const here = location.origin + location.pathname;
       sessionStorage.setItem(PENDING, JSON.stringify({ verifier, state, back: location.hash,
-                                                       collector: !!opts.collector }));
+                                                       collector: !!opts.collector,
+                                                       returnTo: here !== redirectUri() ? location.href : null }));
       location.assign(`${LOGIN}/v2/oauth/authorize?` + new URLSearchParams({
         response_type: "code", redirect_uri: redirectUri(), client_id: EveSSO.clientId,
         scope: [...SCOPES, ...extra].join(" "), state,
@@ -113,7 +120,12 @@
         return { collector: true, name: c.name, refresh: tok.refresh_token,
                  scopes: [].concat(c.scp || []) };
       }
-      return store(tok);
+      const pilot = store(tok);
+      if (pending.returnTo && new URL(pending.returnTo).origin === location.origin) {
+        location.replace(pending.returnTo);
+        return new Promise(() => {});              /* leaving the page */
+      }
+      return pilot;
     },
 
     async token(id) {

@@ -360,6 +360,49 @@ Its **Corp view** option fades every system where the corporation has
 nothing going on and tucks the other overlays away, leaving corp mates,
 your own pilots and assets, and the corp's reserve sightings.
 
+### J-Space Survey (wormhole chain mapper)
+
+Wormhole space has no stargates, no local chat until someone speaks, and
+connections that open and close every day, so no public feed can map it.
+[J-Space Survey](https://idan-armstrong.github.io/eve-assistant/survey/) is a
+companion page for mapping it by hand while you fly, and it feeds the Atlas.
+
+- **Jumps draw themselves.** Signed-in pilots with tracking on are polled
+  every 10 seconds while the page is open. A move into, out of or inside
+  wormhole space becomes a link at once. A move between two known-space
+  systems with no stargate between them is offered as an unconfirmed link,
+  since it could also be a cyno jump, a jump clone or a filament.
+- **Signatures:** select all in the probe scanner, copy, paste. Each system
+  keeps its own table with first-seen times; a full paste removes
+  signatures that are gone.
+- **Holes:** type the wormhole code (B274, K162 and so on) and its target
+  class, lifetime, total mass and per-jump mass limit come from the SDE.
+  Pasting a hole's Show Info text sets its age, mass state and size from
+  CCP's descriptive phrases. Links expire on the type's lifetime, sooner once
+  marked as decaying or end of life.
+- **Chain view:** a tree from any root (where you are, a saved home, or any
+  system), colored by class, with line width for hole size, color for mass
+  state and a dashed line for unconfirmed links. Each system has class,
+  effect, planets and moons, connections, signatures and notes.
+- **Sharing:** the map stays in your browser unless you tick "share map with
+  corp". The relay then keeps one copy per corporation in the same Durable
+  Object as corp-mate positions, readable only by verified members of that
+  corporation. Every record carries an edit time and deletions leave a
+  short-lived tombstone, so copies from several pilots merge the same way on
+  every client and on the relay (`web/survey/chain_core.mjs`, shared by both
+  and covered by `node --test`).
+- **On the Atlas:** the **J-Space** button opens the survey, and the
+  "J-Space Survey chain" overlay rings known-space systems with a hole into
+  wormhole space and draws links between two known-space systems.
+
+The survey uses the Atlas login: CCP returns to the Atlas page, which hands
+the pilot straight back to the survey. Reference data comes from the SDE:
+`tools/build_jspace.py` writes `web/data/jspace/systems.json` (2,604
+wormhole systems with class and effect) and `wormholes.json` (every wormhole
+type), refreshed by the manual "J-space reference data" workflow;
+`tools/build_kspace_index.py` writes a 0.4 MB known-space name and gate index
+so the page does not load the full basemap.
+
 ### Live data
 
 Live inputs refresh hourly: a scheduled GitHub Action runs
