@@ -256,6 +256,14 @@ jumps away, and the item list with quantities and prices. Docking at the
 stop's station shows "docked here"; undocking from it marks the stop done
 and moves to the next one.
 
+Leaving a buy stop triggers a cargo check. While docked there, a large
+"loaded into my ship" button waits to be tapped; undocking without it
+sounds an alarm at once (red banner, beep, flashing title). The window
+also reads the pilot's assets on undock: CCP refreshes that list about
+once an hour, so if it predates the docking the check is repeated as soon
+as CCP's next refresh is due (the response's Expires header), and any
+buy-list item still sitting in that station's hangar raises the alarm.
+
 The trades are instant (buy from sell orders, sell into buy orders), so
 the only fee is sales tax. The password is a soft gate on a public site:
 only its hash is in the code, and the data underneath is public.

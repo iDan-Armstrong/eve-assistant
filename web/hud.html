@@ -45,6 +45,15 @@
   .steps .cur { color: var(--ink); font-weight: 700; }
   .warn { margin-top: 8px; color: #ffb03a; font-size: 15px; }
   .empty { margin-top: 40px; text-align: center; color: var(--dim); }
+  .load { margin-top: 10px; width: 100%; font-size: 18px; font-weight: 800; padding: 12px; border-radius: 5px;
+          background: #3a2a08; border: 2px solid var(--sell); color: var(--sell); }
+  .load.ok { background: #123a1f; border-color: var(--buy); color: var(--buy); }
+  .alarm { margin: 10px 0; padding: 14px; border-radius: 6px; background: #5a0d0d; border: 2px solid #ff4a4a;
+           font-size: 19px; font-weight: 800; color: #fff; animation: blink 1s steps(2) infinite; }
+  .alarm small { display: block; font-size: 14px; font-weight: 400; margin-top: 6px; }
+  .alarm button { margin-top: 10px; background: #2a0606; border-color: #ff8a8a; }
+  .check { margin-top: 8px; font-size: 14px; color: var(--dim); }
+  @keyframes blink { 50% { border-color: #ffd24a; } }
 </style>
 </head>
 <body>
@@ -62,7 +71,72 @@ const KEY = "atlas.activeHaul";
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const isk = v => v >= 1e9 ? (v / 1e9).toFixed(2) + "B" : v >= 1e6 ? (v / 1e6).toFixed(2) + "M"
           : v >= 1e3 ? (v / 1e3).toFixed(1) + "K" : v.toFixed(2);
-let trip = null, here = null, ship = null, online = null, wasDockedAt = null, liveOk = true;
+let trip = null, here = null, ship = null, online = null, wasDockedAt = null, liveOk = true, dockedSince = null;
+
+/* ---- left-behind cargo -------------------------------------------------------
+   An alarm that cannot be missed: red banner, a beep, a flashing title. */
+function raise(title, detail) {
+  trip.alarm = { title, detail };
+  save();
+  try {
+    const ctx = new AudioContext(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "square"; o.frequency.value = 880; g.gain.value = .08;
+    o.connect(g); g.connect(ctx.destination); o.start();
+    [0, .25, .5].forEach((t, i) => g.gain.setValueAtTime(i % 2 ? 0 : .08, ctx.currentTime + t));
+    o.stop(ctx.currentTime + .75);
+  } catch { /* no audio until the window has been clicked once */ }
+  let on = false;
+  clearInterval(raise.flash);
+  raise.flash = setInterval(() => {
+    if (!trip || !trip.alarm) { clearInterval(raise.flash); document.title = "Haul | New Eden Atlas"; return; }
+    document.title = (on = !on) ? "⚠ CARGO LEFT BEHIND?" : "Haul | New Eden Atlas";
+  }, 700);
+}
+
+/* CCP refreshes a character's asset list about once an hour. Read it on
+   undock; if it was refreshed after we docked, check now whether the goods
+   are still in that station's hangar; otherwise check again as soon as
+   CCP's next refresh is due (the response's Expires header). */
+async function checkLeftBehind(index, stop, since) {
+  const id = trip.pilot;
+  try {
+    const token = await EveSSO.token(id);
+    let page = 1, pages = 1, assets = [], modified = 0, expires = 0;
+    do {
+      const r = await fetch(`https://esi.evetech.net/characters/${id}/assets?page=${page}`,
+        { headers: { Authorization: `Bearer ${token}`, "X-Compatibility-Date": "2025-09-30" } });
+      if (!r.ok) throw new Error(`ESI ${r.status}`);
+      pages = +r.headers.get("X-Pages") || 1;
+      modified = Date.parse(r.headers.get("Last-Modified")) || 0;
+      expires = Date.parse(r.headers.get("Expires")) || 0;
+      assets = assets.concat(await r.json());
+    } while (++page <= pages);
+    if (modified && modified < since) {
+      const wait = Math.max(30e3, expires - Date.now() + 15e3);
+      trip.check = `Cargo check for stop ${index + 1}: CCP's asset list is from ${new Date(modified).toUTCString().slice(17, 22)} UTC, ` +
+        `before you docked. Checking again at ${new Date(Date.now() + wait).toUTCString().slice(17, 22)} UTC.`;
+      save(); render();
+      setTimeout(() => checkLeftBehind(index, stop, since), wait);
+      return;
+    }
+    const names = new Map(stop.items.map(x => [x.name, x.n]));
+    const typeIds = await EveSSO.esiPublic("/universe/ids", [...names.keys()]).then(r => r.inventory_types || []);
+    const left = typeIds.map(t => ({ name: t.name, n: assets.filter(a => a.type_id === t.id && a.location_id === stop.station
+                    && a.location_flag === "Hangar").reduce((x, a) => x + a.quantity, 0) }))
+                        .filter(x => x.n > 0);
+    if (left.length) {
+      raise("Cargo left in the station hangar!", `${stop.stationName} still holds: ` +
+        left.map(x => `${x.name} ×${x.n.toLocaleString()}`).join(", ") + ". Go back for it before you sell.");
+      trip.check = "";
+    } else {
+      trip.check = `Cargo check for stop ${index + 1}: nothing from the buy list left in ${stop.stationName}'s hangar ✓`;
+    }
+    save(); render();
+  } catch (e) {
+    trip.check = `Cargo check for stop ${index + 1} could not read assets (${e.message}).`;
+    save(); render();
+  }
+}
 
 const load = () => { try { trip = JSON.parse(localStorage.getItem(KEY)); } catch { trip = null; } };
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(trip)); } catch { /* private mode */ } };
@@ -91,6 +165,9 @@ function render() {
   body += `<div class="where">Now in <b>${here ? esc(sysName(here.system) !== "unknown system" ? sysName(here.system) : here.systemName || "…") : "…"}</b>` +
     `${ship ? ` · ${esc(ship)}` : ""}</div>`;
   if (offRoute) body += `<div class="warn">Off the planned route. Autopilot will bring you back, or re-send the trip.</div>`;
+  if (trip.alarm) body += `<div class="alarm">${esc(trip.alarm.title)}<small>${esc(trip.alarm.detail)}</small>
+    <button id="ack">Got it</button></div>`;
+  if (trip.check) body += `<div class="check">${esc(trip.check)}</div>`;
   if (done) {
     const back = here && here.system === trip.home.id;
     body += `<div class="next"><div class="act buy">Trade stops done</div>
@@ -102,6 +179,8 @@ function render() {
       <div class="station">${esc(s.stationName)}</div>
       <div class="jumps">${dockedHere ? "" : j == null ? "jumps: unknown" : j === 0 ? "<b>in this system</b>, dock up" : `<b>${j}</b> jump${j === 1 ? "" : "s"} away`}</div>
       ${dockedHere ? `<div class="docked">Docked here: ${s.kind === "buy" ? "buy" : "sell"} now</div>` : ""}
+      ${dockedHere && s.kind === "buy" ? `<button class="load${s.loaded ? " ok" : ""}" id="loaded">${s.loaded
+        ? "Cargo loaded into the ship ✓" : "Bought and moved to my ship's cargo? Tap when loaded"}</button>` : ""}
       <table><tr><th>item</th><th style="text-align:right">qty</th><th style="text-align:right">${s.kind === "buy" ? "price each" : "buyers pay"}</th></tr>
       ${s.items.map(x => `<tr><td>${esc(x.name)}</td><td class="q">${x.n.toLocaleString()}</td><td class="p">${isk(x.each)}</td></tr>`).join("")}
       <tr class="sum"><td>${s.kind === "buy" ? `total, ${Math.round(s.m3).toLocaleString()} m3` : "you receive after tax"}</td><td></td>
@@ -114,6 +193,10 @@ function render() {
     `${i + 1}. ${x.kind === "buy" ? "Buy" : "Sell"} at ${esc(x.stationName)}</div>`).join("")}
     <div class="${done ? "cur" : ""}">${trip.stops.length + 1}. Home: ${esc(trip.home.name)}</div></div>`;
   root.innerHTML = body;
+  const ld = document.getElementById("loaded");
+  if (ld) ld.onclick = () => { s.loaded = !s.loaded; save(); render(); };
+  const ack = document.getElementById("ack");
+  if (ack) ack.onclick = () => { trip.alarm = null; save(); document.title = "Haul | New Eden Atlas"; render(); };
   document.getElementById("back").onclick = () => { trip.done = Math.max(0, trip.done - 1); save(); render(); };
   document.getElementById("next").onclick = () => {
     if (done) { localStorage.removeItem(KEY); trip = null; render(); return; }
@@ -137,7 +220,16 @@ async function poll() {
     try { ship = (await EveSSO.esiPublic(`/universe/types/${sh.ship_type_id}`)).name; } catch { ship = null; }
     online = on.online;
     const s = trip.stops[trip.done];
-    if (s && wasDockedAt === s.station && here.station !== s.station) { trip.done += 1; save(); }
+    if (s && wasDockedAt === s.station && here.station !== s.station) {
+      /* leaving a buy stop: was the cargo loaded? */
+      if (s.kind === "buy") {
+        if (!s.loaded) raise("Did you load the cargo?", `You undocked from ${s.stationName} without marking the goods as loaded. ` +
+          "Check your ship's cargo hold before you jump.");
+        checkLeftBehind(trip.done, s, dockedSince || Date.now() - 60e3);
+      }
+      trip.done += 1; save();
+    }
+    if (here.station && here.station !== wasDockedAt) dockedSince = Date.now();
     wasDockedAt = here.station;
     liveOk = true;
   } catch { liveOk = false; }
