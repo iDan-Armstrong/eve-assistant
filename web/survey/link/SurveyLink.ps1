@@ -44,7 +44,7 @@ function Add-Item([string]$kind, [hashtable]$data) {
 
 # ---- what counts as an EVE copy (same rules as the survey page) -------------
 $SigRow = [regex]'(?m)^[A-Z]{3}-\d{3}\t'
-$Dist = [regex]'^(-|[\d.,\s ]+\s?(m|km|AU))$'
+$Dist = [regex]'^(-|[\d.,\s\u00A0]+\s?(m|km|AU))$'
 function Get-EveKind([string]$text) {
   if ([string]::IsNullOrWhiteSpace($text) -or $text.Length -gt 200000) { return $null }
   if ($SigRow.IsMatch($text)) { return 'probe scan' }
