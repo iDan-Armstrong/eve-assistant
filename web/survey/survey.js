@@ -134,7 +134,7 @@ function announce(res) {
   for (const id of res.badges || []) {
     const b = X.BADGES.find(x => x.id === id);
     if (!b) continue;
-    feed(`Badge earned: ${b.name} (${b.desc})`, "badge");
+    feed(`Badge earned: ${b.name} (${b.desc})`, "medal");
     toast(`Badge earned: ${b.name}. ${b.desc}.`, 9000);
     chime();
   }
@@ -218,8 +218,15 @@ async function poll() {
       if (!w.online && w.system) { S.where[p.id] = w; continue; }
       const [loc, ship] = await Promise.all([EveSSO.esi(p.id, `/characters/${p.id}/location`),
                                              EveSSO.esi(p.id, `/characters/${p.id}/ship`)]);
-      const prev = w.system ?? S.logWhere[p.name], now = loc.solar_system_id;
       const docked = !!(loc.station_id || loc.structure_id);
+      /* when Survey Link reads this pilot's chat log, the log is the faster and
+         surer source: the API is only used for ship and docked state */
+      if (S.link.ok && S.link.logs && S.logWhere[p.name] !== undefined) {
+        Object.assign(w, { system: S.logWhere[p.name], ship: ship.ship_type_id, docked, name: p.name, err: "" });
+        S.where[p.id] = w;
+        continue;
+      }
+      const prev = w.system ?? S.logWhere[p.name], now = loc.solar_system_id;
       const becameCapsule = CAPSULES.has(ship.ship_type_id) && w.ship && !CAPSULES.has(w.ship);
       Object.assign(w, { system: now, ship: ship.ship_type_id, docked, name: p.name, err: "" });
       S.where[p.id] = w;
@@ -479,6 +486,9 @@ function setView(v) {
 const NW = 170, NH = 50, GX = 70, GY = 18, PAD = 20;
 const MASS_TONE = { stable: "var(--ink-dim)", destab: "var(--warn)", crit: "var(--bad)" };
 const SIZE_SHORT = { S: "S frigate", M: "M cruiser", L: "L battleship", XL: "XL capital" };
+/* the wording of the current client's Show Info, so a pilot can read and click */
+const LIFE_BTN = [["fresh", "More than 1 day"], ["decay", "Less than 1 day"], ["eol", "Less than 4 hours"]];
+const MASS_BTN = [["stable", "More than 50%"], ["destab", "Less than 50%"], ["crit", "Less than 10%"]];
 
 function setRoot(id) {
   S.root = id;
@@ -718,8 +728,12 @@ function linkCard(key, l, here, whSigs) {
       <select data-f="size">${opt("", l.size, "size")}${Object.entries(SIZE_SHORT).map(([k2, v]) => opt(k2, l.size, v)).join("")}</select>
     </div>
     <div class="row">
-      <select data-f="life">${opt("", l.life, "age")}${opt("fresh", l.life, "fresh")}${opt("decay", l.life, "under a day")}${opt("eol", l.life, "end of life")}</select>
-      <select data-f="mass">${opt("", l.mass, "mass")}${opt("stable", l.mass, "stable")}${opt("destab", l.mass, "reduced")}${opt("crit", l.mass, "critical")}</select>
+    </div>
+    <div class="row seg" title="Reliable Lifetime, from the hole's Show Info"><span class="hint">Lifetime</span>
+      ${LIFE_BTN.map(([v, t]) => `<button data-life="${v}" class="${l.life === v ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div class="row seg" title="Mass Stability, from the hole's Show Info"><span class="hint">Mass</span>
+      ${MASS_BTN.map(([v, t]) => `<button data-mass="${v}" class="${l.mass === v ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div class="row">
       ${S.pendingInfo ? `<button data-act="apply" class="primary">Apply Show Info</button>` : `<button data-act="pick" title="Show Info pastes go to this hole">${S.selLink === key ? "Show Info goes here" : "Show Info target"}</button>`}
       <button data-act="del" title="Remove this connection">Remove</button>
     </div>
@@ -736,6 +750,16 @@ function wireLinkCard(card) {
     if (b.dataset.act === "del") edit({ kind: "del", what: "link", key });
     if (b.dataset.act === "apply" && S.pendingInfo) applyInfo(key, S.pendingInfo);
     if (b.dataset.act === "pick") { S.selLink = S.selLink === key ? null : key; render(true); }
+  });
+  card.querySelectorAll("[data-life]").forEach(b => b.onclick = () => {
+    const v = b.dataset.life;
+    set({ life: v, lifeAt: Date.now() });
+    feed(`${pairName(key)}: lifetime set to ${LIFE_BTN.find(x => x[0] === v)[1].toLowerCase()} remaining`, "scan");
+  });
+  card.querySelectorAll("[data-mass]").forEach(b => b.onclick = () => {
+    const v = b.dataset.mass;
+    set({ mass: v });
+    feed(`${pairName(key)}: mass set to ${MASS_BTN.find(x => x[0] === v)[1].toLowerCase()} remaining`, v === "crit" ? "warn" : "scan");
   });
   card.querySelectorAll("[data-f]").forEach(f => f.onchange = () => {
     const v = f.value.trim().toUpperCase();

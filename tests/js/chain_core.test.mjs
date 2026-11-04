@@ -113,3 +113,14 @@ test("a new probe paste keeps a hole type the pilot added to a signature", () =>
   const again = C.mergeSigs(first.sigs, C.parseSigs("ABC-123\tCosmic Signature\tWormhole\tUnstable Wormhole\t100.0%\t1 AU"), 2);
   assert.equal(again.sigs["ABC-123"].code, "N110");
 });
+
+test("show info in the current client's labeled layout", () => {
+  const text = "An unstable wormhole, deep in space. Wormholes of this kind usually collapse after a few days, and can lead to anywhere.\r\n\r\n" +
+    "Destination: High-security systems\r\nMaximum Ship Size: Medium\r\n\r\n" +
+    "Reliable Lifetime: Less than 1 day remaining\r\nMass Stability: More than 50% remaining";
+  assert.deepEqual(C.parseShowInfo(text), { life: "decay", mass: "stable", size: "M", dest: "HS" });
+  const b = C.parseShowInfo("Reliable Lifetime: Less than 4 hours remaining\nMass Stability: Less than 10% remaining\nMaximum Ship Size: Very Large\nDestination: Class 5 wormhole space");
+  assert.deepEqual(b, { life: "eol", mass: "crit", size: "XL", dest: "C5" });
+  const c = C.parseShowInfo("Reliable Lifetime: More than 1 day remaining\nMass Stability: Less than 50% remaining\nMaximum Ship Size: Small\nDestination: Low-security systems");
+  assert.deepEqual(c, { life: "fresh", mass: "destab", size: "S", dest: "LS" });
+});

@@ -64,7 +64,7 @@
   #svFeed { grid-column: 1 / -1; }
   ul.feed { list-style: none; margin: 0; padding: 0; font-size: 13px; }
   ul.feed li { padding: 2px 0; border-bottom: 1px solid #111a2a; }
-  ul.feed li.pts { color: var(--ok); } ul.feed li.badge { color: #ffd34d; } ul.feed li.warn { color: var(--warn); }
+  ul.feed li.pts { color: var(--ok); } ul.feed li.medal { color: #ffd34d; } ul.feed li.warn { color: var(--warn); }
   ul.feed li.bad { color: var(--bad); font-weight: 600; } ul.feed li.jump { color: var(--focus); }
   ul.tight { margin: 4px 0 8px; padding-left: 18px; font-size: 13px; }
   .bar { height: 6px; background: #111a2a; border-radius: 3px; margin: 6px 0 10px; }
@@ -78,6 +78,10 @@
   .st-unscanned { color: var(--warn); } .st-to-finish { color: #ffd34d; } .st-identified { color: var(--ok); }
   .st-ready { color: var(--focus); }
   .link.picked { border-color: var(--focus); }
+  .seg { gap: 4px; }
+  .seg .hint { width: 58px; }
+  .seg button { padding: 2px 8px; font-size: 12px; }
+  .seg button.on { border-color: var(--focus); background: #15203a; color: #e8f1ff; }
   .modal { max-height: 85vh; overflow: auto; min-width: 380px; }
   #chainWrap { position: relative; overflow: auto; min-height: 0; }
   #chainBar { position: sticky; top: 0; left: 0; z-index: 2; display: flex; gap: 8px; align-items: center;

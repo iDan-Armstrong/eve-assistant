@@ -88,24 +88,74 @@ export function mergeSigs(existing, parsed, now, replace = true) {
 }
 
 /* ---- wormhole Show Info paste ----------------------------------------------
-   Matched on key phrases, so small wording changes still read. */
+   Two layouts are read. The current client lists labeled lines:
+     Destination: High-security systems
+     Maximum Ship Size: Medium
+     Reliable Lifetime: Less than 1 day remaining
+     Mass Stability: More than 50% remaining
+   Older clients wrote sentences ("has not yet begun its natural cycle of decay",
+   "stability has been critically disrupted"). Matched on key phrases, so small
+   wording changes still read. */
+const field = (t, name) => (t.match(new RegExp(`${name}\\s*:\\s*([^\\n\\r]+)`, "i")) || [])[1]?.trim().toLowerCase() || null;
+function lifeFromLabel(v) {
+  if (!v) return null;
+  const m = v.match(/(less|more) than\s+(\d+(?:\.\d+)?)\s*(hour|day)/);
+  if (!m) return /end of|collaps/.test(v) ? "eol" : null;
+  const hours = parseFloat(m[2]) * (m[3] === "day" ? 24 : 1);
+  if (m[1] === "more") return "fresh";
+  return hours <= 4 ? "eol" : "decay";
+}
+function massFromLabel(v) {
+  if (!v) return null;
+  const m = v.match(/(less|more) than\s+(\d+)\s*%/);
+  if (!m) return /critical/.test(v) ? "crit" : null;
+  const pct = +m[2];
+  if (m[1] === "more") return pct >= 50 ? "stable" : "destab";
+  return pct <= 10 ? "crit" : "destab";
+}
+function sizeFromLabel(v) {
+  if (!v) return null;
+  if (/very large|capital|freighter|x-?large|huge/.test(v)) return "XL";
+  if (/large/.test(v)) return "L";
+  if (/medium/.test(v)) return "M";
+  if (/small/.test(v)) return "S";
+  return null;
+}
+function destFromLabel(v) {
+  if (!v) return null;
+  if (/high/.test(v)) return "HS";
+  if (/low/.test(v)) return "LS";
+  if (/null/.test(v)) return "NS";
+  const c = v.match(/class\s*(\d+)/);
+  if (c) return `C${c[1]}`;
+  return v.replace(/\s*systems?$/, "");
+}
 export function parseShowInfo(text) {
-  const t = String(text || "").toLowerCase();
+  const raw = String(text || "");
+  const t = raw.toLowerCase();
   const r = {};
-  if (/end of its natural lifetime/.test(t)) r.life = "eol";
+  const life = lifeFromLabel(field(raw, "reliable lifetime"));
+  const mass = massFromLabel(field(raw, "mass stability"));
+  const size = sizeFromLabel(field(raw, "maximum ship size"));
+  const dest = destFromLabel(field(raw, "destination"));
+  if (life) r.life = life;
+  else if (/end of its natural lifetime/.test(t)) r.life = "eol";
   else if (/beginning to decay|probably won't last|probably will not last/.test(t)) r.life = "decay";
   else if (/not yet begun its natural cycle of decay/.test(t)) r.life = "fresh";
 
-  if (/critically/.test(t)) r.mass = "crit";
+  if (mass) r.mass = mass;
+  else if (/critically/.test(t)) r.mass = "crit";
   else if (/stability reduced|reduced by ships|not to a critical degree/.test(t)) r.mass = "destab";
   else if (/not yet had its stability significantly disrupted/.test(t)) r.mass = "stable";
 
-  if (/very large ships|capital|freighter/.test(t)) r.size = "XL";
+  if (size) r.size = size;
+  else if (/very large ships|capital|freighter/.test(t)) r.size = "XL";
   else if (/larger ships|battleship/.test(t)) r.size = "L";
   else if (/medium|cruiser/.test(t)) r.size = "M";
   else if (/smallest|very small|frigate/.test(t)) r.size = "S";
 
-  if (/high security/.test(t)) r.dest = "HS";
+  if (dest) r.dest = dest;
+  else if (/high security/.test(t)) r.dest = "HS";
   else if (/low security/.test(t)) r.dest = "LS";
   else if (/null security/.test(t)) r.dest = "NS";
   else if (/deadly unknown/.test(t)) r.dest = "C6";

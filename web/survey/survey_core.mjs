@@ -25,7 +25,7 @@ export function classifyPaste(text) {
   if (rows.length && rows.length >= Math.ceil(t.split(/\r?\n/).filter(Boolean).length * 0.6)) {
     return { kind: "dscan", rows };
   }
-  if (/wormhole/i.test(t) && /(natural lifetime|cycle of decay|stability|ships can pass|smallest ships)/i.test(t)) {
+  if (/wormhole/i.test(t) && /(reliable lifetime|mass stability|maximum ship size|natural lifetime|cycle of decay|stability|ships can pass|smallest ships)/i.test(t)) {
     const info = parseShowInfo(t);
     if (Object.keys(info).length) return { kind: "showinfo", info };
   }
