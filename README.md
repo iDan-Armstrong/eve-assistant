@@ -343,8 +343,8 @@ being mined now, and a dashed one where it was seen in the last 30 days.
 The same relay shares locations, also within a corporation only. Each
 pilot chooses separately (the sign-in prompt has two boxes, both
 unticked; either can be changed in the pilot menu). A pilot who shares
-location reports their system, ship and online status every 30 seconds
-while the Atlas is open, and corp mates' maps refresh every 20 seconds
+location reports their system, ship and online status every 60 seconds
+while the Atlas is open, and corp mates' maps refresh every 60 seconds
 (and at once when the tab comes back into view); corp mates see a
 dashed green ring with their name, and the system panel lists who is
 there and in what ship. Positions live in a Cloudflare Durable Object,

@@ -39,10 +39,10 @@ async function startPilots() {
   loadSightings();
   setInterval(loadSightings, 5 * 60e3);
   setInterval(reportReserves, 10 * 60e3);
-  /* corp-mate positions: report every 30 s, refresh every 20 s, and at once
-     when the tab comes back into view (browsers slow hidden tabs) */
-  setInterval(reportPresence, 30e3);
-  setInterval(loadCorpmates, 20e3);
+  /* corp-mate positions: report and refresh every 60 s, and at once when
+     the tab comes back into view (browsers slow hidden tabs) */
+  setInterval(reportPresence, 60e3);
+  setInterval(loadCorpmates, 60e3);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) { reportPresence(); loadCorpmates(); }
   });
@@ -551,7 +551,7 @@ function askToShare(pilot) {
 
 /* ---- corp mates' locations -------------------------------------------------
    Pilots who tick "location" report their system, ship and online status
-   every 30 seconds while the Atlas is open; the relay keeps them per
+   every 60 seconds while the Atlas is open; the relay keeps them per
    corporation and serves them only to verified members of that corp. */
 const corpmates = { list: new Map(), layer: L.layerGroup(), rings: [], corps: [], names: new Map(), focus: false };
 
