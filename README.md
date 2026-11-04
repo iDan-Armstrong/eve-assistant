@@ -343,12 +343,15 @@ being mined now, and a dashed one where it was seen in the last 30 days.
 The same relay shares locations, also within a corporation only. Each
 pilot chooses separately (the sign-in prompt has two boxes, both
 unticked; either can be changed in the pilot menu). A pilot who shares
-location reports their system, ship and online status every 2 minutes
-while the Atlas is open; corp mates see a dashed green ring with their
-name, and the system panel lists who is there and in what ship. The relay
-writes a record only when it changes or every 15 minutes (Cloudflare's
-free storage allows few writes a day), drops records older than 30
-minutes, and removes a pilot at once when they stop sharing.
+location reports their system, ship and online status every 30 seconds
+while the Atlas is open, and corp mates' maps refresh every 20 seconds
+(and at once when the tab comes back into view); corp mates see a
+dashed green ring with their name, and the system panel lists who is
+there and in what ship. Positions live in a Cloudflare Durable Object,
+one per corporation: a single always-current copy, unlike KV storage,
+which can serve values up to a minute old and allows few writes a day.
+Records older than 10 minutes are dropped, and a pilot is removed at once
+when they stop sharing.
 
 The **Corp** button (shown once a pilot is signed in) lists the corp mates
 sharing right now, with portrait, system, ship, whether they are online

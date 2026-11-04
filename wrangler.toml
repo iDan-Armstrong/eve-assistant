@@ -13,3 +13,13 @@ ALLOWED_ORIGINS = "https://idan-armstrong.github.io,http://localhost:8765"
 
 [[kv_namespaces]]
 binding = "SIGHTINGS"
+
+# corp-mate positions: one Durable Object per corporation (SQLite storage,
+# available on the free plan)
+[[durable_objects.bindings]]
+name = "CORP"
+class_name = "CorpRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CorpRoom"]

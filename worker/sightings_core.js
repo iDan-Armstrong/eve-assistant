@@ -57,12 +57,12 @@ export function prune(shared, today, days = 30) {
 }
 
 /* ---- corp-mate presence ----------------------------------------------------
-   presence: {characterId: {name, system, ship, online, at}} per corporation.
-   KV allows few writes a day on the free plan, so a pilot's record is
-   written only when it changes or every HEARTBEAT_MINUTES, and readers
-   drop records older than STALE_MINUTES. */
+   presence: {characterId: {name, system, ship, online, at}} per corporation,
+   held in a Durable Object (worker/index.js). Readers drop records older
+   than STALE_MINUTES; presenceChanged remains for callers that need to
+   save writes. */
 export const HEARTBEAT_MINUTES = 15;
-export const STALE_MINUTES = 30;
+export const STALE_MINUTES = 10;
 
 export function presenceChanged(old, rec, nowMs) {
   if (!old) return true;

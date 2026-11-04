@@ -27,7 +27,7 @@
    salt for pilot hashes is made on first use and kept in KV, which is
    private to the Worker; a SALT secret, if set, takes its place. */
 
-import { ACTIVE_MINUTES, diffLedger, freshPresence, mergeSightings, presenceChanged, prune,
+import { ACTIVE_MINUTES, diffLedger, freshPresence, mergeSightings, prune,
          reserveRows } from "./sightings_core.js";
 
 const JWKS_URL = "https://login.eveonline.com/oauth/jwks";
@@ -128,15 +128,32 @@ async function esiAuthed(path, token) {
   return r.json();
 }
 
+/* Corp-mate positions live in a Durable Object, one per corporation: a
+   single always-current copy (no KV edge-cache lag) with far more writes
+   allowed than KV, so pilots can report every 30 seconds. */
+export class CorpRoom {
+  constructor(state) { this.state = state; }
+  async fetch(req) {
+    const url = new URL(req.url), now = Date.now();
+    let map = (await this.state.storage.get("pilots")) || {};
+    if (url.pathname === "/set") {
+      const { id, rec } = await req.json();
+      if (rec) map[id] = rec; else delete map[id];
+      map = freshPresence(map, now);
+      await this.state.storage.put("pilots", map);
+      return new Response("ok");
+    }
+    return new Response(JSON.stringify(freshPresence(map, now)), { headers: { "Content-Type": "application/json" } });
+  }
+}
+const room = (env, corp) => env.CORP.get(env.CORP.idFromName(String(corp)));
+
 async function presence(req, env) {
   const { token, share } = await req.json();
   const who = await verify(token, env);
   const corp = await corporationOf(who.id);
-  const key = `presence:${corp}`;
-  const map = (await env.SIGHTINGS.get(key, "json")) || {};
-  const now = Date.now();
   if (!share) {
-    if (map[who.id]) { delete map[who.id]; await env.SIGHTINGS.put(key, JSON.stringify(freshPresence(map, now))); }
+    await room(env, corp).fetch("https://room/set", { method: "POST", body: JSON.stringify({ id: who.id, rec: null }) });
     return { shared: false };
   }
   for (const s of ["esi-location.read_location.v1", "esi-location.read_ship_type.v1", "esi-location.read_online.v1"]) {
@@ -146,11 +163,8 @@ async function presence(req, env) {
     esiAuthed(`/characters/${who.id}/location`, token), esiAuthed(`/characters/${who.id}/ship`, token),
     esiAuthed(`/characters/${who.id}/online`, token)]);
   const rec = { name: who.name, system: loc.solar_system_id, ship: ship.ship_type_id,
-                online: !!online.online, at: new Date(now).toISOString() };
-  if (presenceChanged(map[who.id], rec, now)) {
-    map[who.id] = rec;
-    await env.SIGHTINGS.put(key, JSON.stringify(freshPresence(map, now)));
-  }
+                online: !!online.online, at: new Date().toISOString() };
+  await room(env, corp).fetch("https://room/set", { method: "POST", body: JSON.stringify({ id: who.id, rec }) });
   return { shared: true };
 }
 
@@ -173,7 +187,7 @@ export default {
       if (req.method === "POST" && url.pathname === "/corpmates") {
         const { token } = await req.json();
         const corp = await corporationOf((await verify(token, env)).id);
-        const pilots = freshPresence(await env.SIGHTINGS.get(`presence:${corp}`, "json"), Date.now());
+        const pilots = await room(env, corp).fetch("https://room/get").then(r => r.json());
         return json({ corporation: corp, pilots }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/report") {
