@@ -148,7 +148,24 @@ function addLink(a, b, extra = {}) {
   const key = C.linkKey(a, b);
   const old = S.chain.links[key];
   if (old) {
-    if (extra.confirmed && !old.confirmed) edit({ kind: "link", key, rec: { confirmed: true } });
+    /* two systems can be joined by more than one hole: a jump through a tagged
+       signature that is not this connection's signature gets its own connection */
+    const side = extra.sigA !== undefined ? "sigA" : extra.sigB !== undefined ? "sigB" : null;
+    if (side && old[side] !== extra[side]) {
+      const twinKey = `${key}~${extra[side]}`;
+      if (!S.chain.links[twinKey]) {
+        const op = C.newLink(a, b, Date.now(), "", extra);
+        op.key = twinKey;
+        edit(op);
+        feed(`A second hole between ${nameOf(a)} and ${nameOf(b)} (${extra[side]}) was added as its own connection. ` +
+             `If it is really the same hole, remove one of them.`, "warn");
+      }
+      return;
+    }
+    const rec = {};
+    if (extra.confirmed && !old.confirmed) rec.confirmed = true;
+    for (const k of ["code", "codeAt", "size", "life", "lifeAt", "mass"]) if (extra[k] != null && old[k] == null) rec[k] = extra[k];
+    if (Object.keys(rec).length) edit({ kind: "link", key, rec });
     return;
   }
   edit(C.newLink(a, b, Date.now(), "", extra));
@@ -570,16 +587,21 @@ function renderChain(force) {
   for (const w of Object.values(S.where)) if (w.system) here.set(w.system, [...(here.get(w.system) || []), w.name]);
   if (S.here) here.set(S.here.system, [...new Set([...(here.get(S.here.system) || []), S.here.by || "you"])]);
 
+  const twins = new Map();
   const edge = (from, to, key, cross) => {
     const l = S.chain.links[key], a = pos.get(from), b = pos.get(to);
-    const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
+    /* a second hole between the same two systems bows away from the first */
+    const pk = C.linkKey(from, to), n = twins.get(pk) || 0;
+    twins.set(pk, n + 1);
+    const bow = n * 26;
+    const x1 = a.x + NW, y1 = a.y + NH / 2 + bow * 0.3, x2 = b.x, y2 = b.y + NH / 2 + bow * 0.3, mx = (x1 + x2) / 2;
     const tone = MASS_TONE[l.mass] || "var(--ink-faint)";
     const width = { S: 1.5, M: 2.5, L: 3.5, XL: 5 }[l.size || sizeOf(l)] || 2;
     const dash = !l.confirmed ? "6 4" : cross ? "2 4" : "";
     const lab = [l.code || "", l.life === "eol" ? "EOL" : "", lifeShort(l)].filter(Boolean).join(" ");
-    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${tone}" stroke-width="${width}"
-              ${dash ? `stroke-dasharray="${dash}"` : ""} opacity="${cross ? .55 : 1}"/>
-            <text x="${mx}" y="${(y1 + y2) / 2 - 5}" text-anchor="middle" font-size="11"
+    return `<path d="M${x1},${y1} C${mx},${y1 + bow} ${mx},${y2 + bow} ${x2},${y2}" fill="none" stroke="${tone}" stroke-width="${width}"
+              ${dash ? `stroke-dasharray="${dash}"` : ""} opacity="${cross && !n ? .55 : 1}"/>
+            <text x="${mx}" y="${(y1 + y2) / 2 - 5 + bow}" text-anchor="middle" font-size="11"
               fill="${l.life === "eol" ? "var(--bad)" : "var(--ink-dim)"}">${esc(lab)}</text>`;
   };
   const node = n => {
