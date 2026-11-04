@@ -157,6 +157,8 @@ function setHere(system, by) {
   S.here = { system, by: by || S.here?.by || "", at: Date.now() };
   store.set(K_HERE, S.here);
   if (!moved) return;
+  const L = label(system);
+  feed(`${by || "You"}: now in ${L.name} (${L.cls})`, "jump");
   if (C.isJ(system)) kbEdit({ kind: "visit", system, by });
   if (!S.root || !inChain(S.root)) setRoot(system);
   S.sel = null;

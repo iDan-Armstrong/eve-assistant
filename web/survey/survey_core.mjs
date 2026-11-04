@@ -12,7 +12,7 @@ const DAY = 24 * HOUR;
 /* ---- paste router -------------------------------------------------------
    One paste box (and the Survey Link helper) take whatever the pilot copied
    and work out what it is. Anything that is not one of these is ignored. */
-const SIG_ROW = /^[A-Z]{3}-\d{3}\t/m;
+const SIG_ROW = /(^|\t)[A-Z]{3}-\d{3}\t/m;
 const DIST = /^(-|[\d.,\s ]+\s?(m|km|AU))$/;
 export function classifyPaste(text) {
   const t = String(text || "").trim();

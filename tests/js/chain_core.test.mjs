@@ -96,3 +96,13 @@ test("tree layout walks out from the root and keeps loops as cross links", () =>
   assert.equal(t.rows, 2);
   assert.deepEqual([...C.kspaceExits(c).keys()], [JITA]);
 });
+
+test("probe scan rows are found even when the columns are reordered", () => {
+  const s = C.parseSigs("4.21 AU\tABC-123\tCosmic Signature\tWormhole\tUnstable Wormhole\t100.0%\n" +
+                        "XYZ-987\tCosmic Anomaly\tCombat Site\tAngel Hideaway\t100,0 %\t2 AU");
+  assert.equal(s.length, 2);
+  assert.equal(s[0].id, "ABC-123");
+  assert.equal(s[0].type, "Wormhole");
+  assert.equal(s[1].pct, 100);
+  assert.equal(s[1].name, "Angel Hideaway");
+});

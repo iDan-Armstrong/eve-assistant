@@ -21,7 +21,7 @@
 param([int]$Port = 47321)
 
 $ErrorActionPreference = 'Stop'
-$Version = '1.0'
+$Version = '1.1'
 $Allowed = @('https://idan-armstrong.github.io', 'http://localhost:8799')
 $KeepMs = 10 * 60 * 1000
 
@@ -43,7 +43,7 @@ function Add-Item([string]$kind, [hashtable]$data) {
 }
 
 # ---- what counts as an EVE copy (same rules as the survey page) -------------
-$SigRow = [regex]'(?m)^[A-Z]{3}-\d{3}\t'
+$SigRow = [regex]'(?m)(^|\t)[A-Z]{3}-\d{3}\t'
 $Dist = [regex]'^(-|[\d.,\s\u00A0]+\s?(m|km|AU))$'
 function Get-EveKind([string]$text) {
   if ([string]::IsNullOrWhiteSpace($text) -or $text.Length -gt 200000) { return $null }

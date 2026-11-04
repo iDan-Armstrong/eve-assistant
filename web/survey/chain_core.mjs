@@ -43,13 +43,19 @@ export function sizeFromJump(kg) {
      ID  Group  Type  Name  Signal  Distance
    Unscanned rows leave Type and Name blank. */
 const SIG_ID = /^[A-Z]{3}-\d{3}$/;
+const PCT = /^\d+([.,]\d+)?\s?%$/;
 export function parseSigs(text) {
   const out = [];
   for (const raw of String(text || "").split(/\r?\n/)) {
-    const cols = raw.split("\t").map(c => c.trim());
-    if (!SIG_ID.test(cols[0] || "")) continue;
-    const pct = parseFloat(String(cols[4] || "").replace(",", ".").replace("%", ""));
-    out.push({ id: cols[0], group: cols[1] || "", type: cols[2] || "", name: cols[3] || "",
+    const all = raw.split("\t").map(c => c.trim());
+    /* the ID is normally first; if the window's columns were rearranged, start at it */
+    const at = all.findIndex(c => SIG_ID.test(c));
+    if (at < 0) continue;
+    const cols = all.slice(at).concat(all.slice(0, at));
+    const pctCol = cols.findIndex((c, i) => i > 0 && PCT.test(c));
+    const pct = pctCol > 0 ? parseFloat(cols[pctCol].replace(",", ".").replace("%", "")) : 0;
+    const text3 = cols.slice(1, pctCol > 0 ? pctCol : 4);
+    out.push({ id: cols[0], group: text3[0] || "", type: text3[1] || "", name: text3[2] || "",
                pct: Number.isFinite(pct) ? pct : 0 });
   }
   return out;
