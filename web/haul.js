@@ -49,7 +49,7 @@ function buildLegs(cargo, budget, tax) {
   for (const [tid, a, asys, b, bsys, units, cost, gross] of haul.data.pairs) {
     const v = haul.data.volumes[tid];
     if (!v || !state.byId.has(asys) || !state.byId.has(bsys)) continue;
-    const per = { tid, units, c: cost / units, net: gross / units * (1 - tax) - cost / units, v };
+    const per = { tid, units, c: cost / units, g: gross / units, net: gross / units * (1 - tax) - cost / units, v };
     if (per.net <= 0) continue;
     const key = a + ">" + b;
     (groups.get(key) || groups.set(key, { a, b, asys, bsys, items: [] }).get(key)).items.push(per);
@@ -63,7 +63,7 @@ function buildLegs(cargo, budget, tax) {
       const n = Math.floor(Math.min(it.units, (cargo - m3) / it.v, (budget - isk) / it.c));
       if (n <= 0) continue;
       m3 += n * it.v; isk += n * it.c; profit += n * it.net;
-      take.push({ tid: it.tid, n, profit: n * it.net, cost: n * it.c });
+      take.push({ tid: it.tid, n, profit: n * it.net, cost: n * it.c, c: it.c, g: it.g, m3: n * it.v });
     }
     if (profit > 0) legs.push({ ...g, take, m3, isk, profit });
   }
@@ -142,7 +142,10 @@ function drawHauls() {
     ${o.L2 ? leg(o.L2, "Back", haul.ctx.tree(o.L1.bsys).dist.get(o.L2.asys))
            : `<div class="h-leg m-meta">Back: no profitable return leg nearby; fly home empty.</div>`}
   </li>`).join("") || `<li class="m-meta">No profitable loops within reach. Widen the reach, raise the budget, or allow lowsec.</li>`;
-  list.querySelectorAll("li[data-i]").forEach(li => li.onclick = () => showLoop(loops[+li.dataset.i], li));
+  list.querySelectorAll("li[data-i]").forEach(li => li.onclick = e => {
+    if (e.target.closest(".h-stops")) return;          /* reading the tables, not choosing a trip */
+    showLoop(loops[+li.dataset.i], li);
+  });
 }
 
 /* the whole circuit on the map: home, buy, sell, buy, sell, home */
@@ -168,7 +171,20 @@ function showLoop(o, li) {
     });
   haul.layer.addTo(map);
   map.fitBounds(L.latLngBounds(lls).pad(.2), { maxZoom: 7, paddingTopLeft: [document.getElementById("haul").getBoundingClientRect().right + 20, 60] });
-  document.querySelectorAll("#hList li").forEach(x => x.classList.toggle("on", x === li));
+  document.querySelectorAll("#hList li").forEach(x => {
+    x.classList.toggle("on", x === li);
+    const d = x.querySelector(".h-stops");
+    if (d) d.remove();
+  });
+  li.insertAdjacentHTML("beforeend", stopsHtml(o));
+  li.querySelectorAll("[data-copy]").forEach(b => b.onclick = async ev => {
+    ev.stopPropagation();
+    const L = b.dataset.copy === "1" ? o.L1 : o.L2;
+    /* one "name quantity" per line: pastes straight into the in-game Multibuy window */
+    const text = L.take.map(x => `${haulName(x.tid)}\t${x.n}`).join("\n");
+    try { await navigator.clipboard.writeText(text); b.textContent = "Copied: paste into Multibuy in game"; }
+    catch { b.textContent = "Copy failed: browser blocked the clipboard"; }
+  });
   const btn = document.getElementById("hDest");
   btn.hidden = !(typeof pilotState !== "undefined" && pilotState.data.size);
   btn.onclick = async () => {
@@ -265,3 +281,32 @@ function wireHaul() {
   });
 }
 wireHaul();
+
+const haulName = t => (haul.names && haul.names.get(+t)) || `item ${t}`;
+
+/* stop by stop: exactly what to buy and sell, at what price, for how much */
+function stopsHtml(o) {
+  const tax = haul.ctx.tax;
+  const where = (station, sys) => esc(stationName(station) || state.byId.get(sys).name);
+  const buyTable = L => `<table class="h-tab"><tr><th>item</th><th>qty</th><th>each</th><th>total</th></tr>` +
+    L.take.map(x => `<tr><td>${esc(haulName(x.tid))}</td><td>${x.n.toLocaleString()}</td>` +
+      `<td>${fmtPrice(x.c)}</td><td>${fmtPrice(x.n * x.c)}</td></tr>`).join("") +
+    `<tr class="h-sum"><td>total</td><td></td><td>${Math.round(L.m3).toLocaleString()} m3</td><td>${fmtPrice(L.isk)}</td></tr></table>`;
+  const sellTable = L => `<table class="h-tab"><tr><th>item</th><th>qty</th><th>each</th><th>after tax</th></tr>` +
+    L.take.map(x => `<tr><td>${esc(haulName(x.tid))}</td><td>${x.n.toLocaleString()}</td>` +
+      `<td>${fmtPrice(x.g)}</td><td>${fmtPrice(x.n * x.g * (1 - tax))}</td></tr>`).join("") +
+    `<tr class="h-sum"><td>profit</td><td></td><td></td><td class="h-profit">+${fmtPrice(L.profit)}</td></tr></table>`;
+  const stop = (n, kind, station, sys, body, copy) =>
+    `<div class="h-stop"><div class="h-stop-head"><span class="h-n ${kind}">${n}</span>` +
+    `<b>${kind === "buy" ? "Buy" : "Sell"}</b> at ${where(station, sys)}` +
+    `${copy ? `<button class="h-copy" data-copy="${copy}">Copy buy list</button>` : ""}</div>${body}</div>`;
+  let html = `<div class="h-stops">` +
+    stop(1, "buy", o.L1.a, o.L1.asys, buyTable(o.L1), "1") +
+    stop(2, "sell", o.L1.b, o.L1.bsys, sellTable(o.L1));
+  if (o.L2) {
+    html += stop(3, "buy", o.L2.a, o.L2.asys, buyTable(o.L2), "2") +
+            stop(4, "sell", o.L2.b, o.L2.bsys, sellTable(o.L2));
+  }
+  return html + `<div class="m-meta">Buy from sell orders, sell into buy orders. Prices are this hour's best;
+    check each in game before you commit.</div></div>`;
+}
