@@ -23,11 +23,15 @@
    POST /corpmates  body {"token": ...} -> {"corporation", "pilots": {id: {name, system, ship, online, at}}}
      Corp mates seen in the last 30 minutes, for a verified member only.
 
-   POST /chain      body {"token": ...} -> {"corporation", "chain"}
-   POST /chain/ops  body {"token": ..., "ops": [...]} -> {"corporation", "chain"}
+   POST /chain      body {"token": ...} -> {"corporation", "chain", "board", "me"}
+   POST /chain/ops  body {"token": ..., "ops": [...]} -> the same, plus "awards" and "kb"
      The J-Space Survey wormhole chain, shared inside one corporation and
      returned only to a verified member. Ops and merge rules come from
      web/survey/chain_core.mjs, the same module the survey page runs.
+     Knowledge-base ops (visit, static, dscan) keep what stays true about a
+     system; points for every op go to the verified pilot only
+     (web/survey/survey_core.mjs).
+   POST /kb         body {"token": ..., "systems": [ids]} -> {"kb": {id: record}}
 
    Bindings: SIGHTINGS (KV), CLIENT_ID and ALLOWED_ORIGINS (vars). The
    salt for pilot hashes is made on first use and kept in KV, which is
@@ -36,8 +40,13 @@
 import { ACTIVE_MINUTES, diffLedger, freshPresence, mergeSightings, prune,
          reserveRows } from "./sightings_core.js";
 import { applyOp, emptyChain, prune as pruneChain } from "../web/survey/chain_core.mjs";
+import { applyKbOp, award, chainEvents, leaderboard } from "../web/survey/survey_core.mjs";
 import WORMHOLES from "../web/data/jspace/wormholes.json";
+import JSYSTEMS from "../web/data/jspace/systems.json";
+import CLASSES from "../web/data/jspace/classes.json";
 
+const KB_KINDS = new Set(["visit", "static", "dscan"]);
+const classOf = id => { const j = JSYSTEMS[id]; return j ? CLASSES[j[1]] || null : null; };
 const MAX_OPS = 200;
 const MAX_LINKS = 3000;
 
@@ -167,22 +176,52 @@ export class CorpRoom {
 
   async fetch(req) {
     const url = new URL(req.url), now = Date.now();
+    const st = this.state.storage;
+    if (url.pathname === "/kb-get") {
+      const { systems } = await req.json();
+      const out = {};
+      for (const sys of (systems || []).slice(0, 100)) {
+        const rec = await st.get(`kb:${sys}`);
+        if (rec) out[sys] = rec;
+      }
+      return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" } });
+    }
     if (url.pathname === "/chain-get" || url.pathname === "/chain-ops") {
+      const body = await req.json();
+      const pilot = body.pilot || {};
       const c = await this.loadChain();
+      const ledger = (await st.get("scores")) || {};
       const before = new Set(Object.keys(c.sigs));
+      const out = { chain: c, kb: {}, awards: null };
       if (url.pathname === "/chain-ops") {
-        const { ops } = await req.json();
-        const touched = new Set();
-        for (const op of (ops || []).slice(0, MAX_OPS)) {
+        const touched = new Set(), kbTouched = new Map();
+        const events = [];
+        for (const op of (body.ops || []).slice(0, MAX_OPS)) {
+          if (KB_KINDS.has(op.kind)) {
+            const sys = String(op.system);
+            const kb = { [sys]: kbTouched.get(sys) || (await st.get(`kb:${sys}`)) || undefined };
+            if (!kb[sys]) delete kb[sys];
+            events.push(...applyKbOp(kb, op, now).events);
+            kbTouched.set(sys, kb[sys]);
+            continue;
+          }
           if (op.system !== undefined) touched.add(String(op.system));
+          events.push(...chainEvents(c, op));
           applyOp(c, op, WORMHOLES);
         }
         pruneChain(c, now);
         if (Object.keys(c.links).length > MAX_LINKS) throw new Error("chain is too large");
         for (const sys of before) if (!c.sigs[sys]) touched.add(sys);
         await this.saveChain(c, touched);
+        for (const [sys, rec] of kbTouched) { await st.put(`kb:${sys}`, rec); out.kb[sys] = rec; }
+        if (pilot.id && events.length) {
+          out.awards = award(ledger, String(pilot.id), pilot.name, events, now, { classOf });
+          await st.put("scores", ledger);
+        }
       }
-      return new Response(JSON.stringify(c), { headers: { "Content-Type": "application/json" } });
+      out.board = leaderboard(ledger).slice(0, 25);
+      out.me = pilot.id ? ledger[String(pilot.id)] || null : null;
+      return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" } });
     }
     let map = (await this.state.storage.get("pilots")) || {};
     if (url.pathname === "/set") {
@@ -247,9 +286,16 @@ export default {
           rec: op.rec ? { ...op.rec, by: who.name } : op.rec }));
         const path = url.pathname === "/chain" ? "/chain-get" : "/chain-ops";
         const r = await room(env, corp).fetch(`https://room${path}`,
-          { method: "POST", body: JSON.stringify({ ops }) });
+          { method: "POST", body: JSON.stringify({ ops, pilot: { id: who.id, name: who.name } }) });
         if (!r.ok) throw new Error(await r.text());
-        return json({ corporation: corp, chain: await r.json() }, 200, { ...headers, "Cache-Control": "no-store" });
+        return json({ corporation: corp, ...(await r.json()) }, 200, { ...headers, "Cache-Control": "no-store" });
+      }
+      if (req.method === "POST" && url.pathname === "/kb") {
+        const body = await req.json();
+        const corp = await corporationOf((await verify(body.token, env)).id);
+        const r = await room(env, corp).fetch("https://room/kb-get",
+          { method: "POST", body: JSON.stringify({ systems: (body.systems || []).map(Number).filter(Boolean) }) });
+        return json({ corporation: corp, kb: await r.json() }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/report") {
         return json(await report(req, env), 200, headers);
