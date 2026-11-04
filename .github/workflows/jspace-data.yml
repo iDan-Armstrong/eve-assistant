@@ -1,12 +1,12 @@
 name: J-space reference data
 
-# Run by hand when CCP publishes a new SDE. Builds web/data/jspace/*.json and
-# uploads them as an artifact to be reviewed and committed.
+# Run by hand when CCP publishes a new SDE. Rebuilds web/data/jspace/*.json and
+# commits them to master if anything changed.
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -24,7 +24,11 @@ jobs:
           unzip -l sde.zip | head -60
       - name: Build J-space data
         run: python tools/build_jspace.py sde.zip web/data/jspace
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jspace
-          path: web/data/jspace/
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/data/jspace/systems.json web/data/jspace/wormholes.json web/data/jspace/classes.json
+          git diff --cached --quiet && echo "no change" && exit 0
+          git commit -m "J-space reference data from the latest SDE"
+          git push

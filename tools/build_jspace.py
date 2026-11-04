@@ -157,7 +157,7 @@ def main(src_path: Path, out: Path) -> None:
             if key:
                 rec[key] = a.get("value")
         code = wh_types[tid].replace("Wormhole ", "").strip()
-        if not code or "to" not in rec:
+        if not code or not rec:      # K162 (the exit side) has no target class; keep it anyway
             continue
         if "life" in rec:
             rec["life"] = round(rec["life"] / 60, 1)      # minutes -> hours
