@@ -1,0 +1,4 @@
+{
+ "about": "Trade structures to try besides CCP's public market list (/universe/structures?filter=market), which leaves out some of the largest hubs. Add structure IDs here; the collector reads any the pilot can dock at and skips the rest.",
+ "ids": [1028858195912]
+}

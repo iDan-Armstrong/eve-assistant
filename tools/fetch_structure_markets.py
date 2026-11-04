@@ -117,6 +117,8 @@ def main() -> None:
 
     started = time.time()
     ids = esi("/universe/structures?filter=market")
+    extra = json.loads((Path(__file__).resolve().parent / "data" / "trade_structures.json").read_text())["ids"]
+    ids = list(dict.fromkeys([*extra, *ids]))          # curated hubs first, no duplicates
     known = json.loads((hist / "structures.json").read_text()) if (hist / "structures.json").exists() else {}
     seen: dict[str, list] = {}
     all_orders: list[dict] = []
