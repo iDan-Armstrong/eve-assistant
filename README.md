@@ -211,7 +211,15 @@ each leg fills the hold with the items that earn the most per m3 between
 the same two stations. A loop is one leg out from home and the leg that
 best brings you back, ranked by ISK per jump over the whole circuit, with
 a highsec-only option. Click a loop to draw it on the map and send the
-first buy stop to your autopilot.
+first buy stop to your autopilot, or send the whole trip: every jump of
+the circuit as a waypoint, docking at each trade station.
+
+Sending a trip opens a **haul window** (`web/hud.html`), a small pop-out
+to keep beside the game. It asks CCP where the pilot is every 10 seconds
+and shows the next stop in large type: buy or sell, the station, how many
+jumps away, and the item list with quantities and prices. Docking at the
+stop's station shows "docked here"; undocking from it marks the stop done
+and moves to the next one.
 
 The trades are instant (buy from sell orders, sell into buy orders), so
 the only fee is sales tax. The password is a soft gate on a public site:

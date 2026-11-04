@@ -202,6 +202,10 @@ function showLoop(o, li) {
   first.textContent = "Set destination: first buy stop only";
   btn.onclick = async () => {
     btn.disabled = true;
+    /* open the pop-out first: browsers allow a new window only straight
+       from a click, before any waiting */
+    const hud = window.open("hud.html", "atlasHaulHud", "width=460,height=720");
+    saveActiveHaul(o, stops, path);
     try {
       for (let i = 0; i < waypoints.length; i++) {
         btn.textContent = `Sending waypoint ${i + 1} of ${waypoints.length}…`;
@@ -209,6 +213,7 @@ function showLoop(o, li) {
           `&clear_other_waypoints=${i === 0}&destination_id=${waypoints[i]}`, { method: "POST" });
       }
       btn.textContent = `Trip sent: ${waypoints.length} waypoints, docking at each trade stop`;
+      if (!hud) btn.textContent += ". Your browser blocked the haul window; use Open haul window.";
     } catch (e) { btn.textContent = `Failed (${e.message}); is the pilot in game?`; }
     btn.disabled = false;
   };
@@ -292,6 +297,9 @@ function askHaulPassword() {
 }
 
 function wireHaul() {
+  const hudBtn = document.getElementById("hHud");
+  try { hudBtn.hidden = !localStorage.getItem("atlas.activeHaul"); } catch { /* none */ }
+  hudBtn.onclick = () => window.open("hud.html", "atlasHaulHud", "width=460,height=720");
   document.getElementById("haulBtn").onclick = () => openHaul(document.getElementById("haul").hidden);
   document.getElementById("haulClose").onclick = () => openHaul(false);
   document.getElementById("hGo").onclick = () => { if (haul.data) planHauls(); };
@@ -333,4 +341,26 @@ function stopsHtml(o) {
   }
   return html + `<div class="m-meta">Buy from sell orders, sell into buy orders. Prices are this hour's best;
     check each in game before you commit.</div></div>`;
+}
+
+/* the active haul, for the pop-out window (hud.html): every stop with
+   exactly what to do there, and the jump-by-jump path to track progress */
+function saveActiveHaul(o, stops, path) {
+  const tax = haul.ctx.tax;
+  const sys = id => { const p = state.byId.get(id); return { id, name: p.name, sec: +p.sec.toFixed(1) }; };
+  const stop = (kind, L) => ({
+    kind, station: kind === "buy" ? L.a : L.b, system: kind === "buy" ? L.asys : L.bsys,
+    stationName: stationName(kind === "buy" ? L.a : L.b) || state.byId.get(kind === "buy" ? L.asys : L.bsys).name,
+    items: L.take.map(x => ({ name: haulName(x.tid), n: x.n,
+      each: kind === "buy" ? x.c : x.g, total: kind === "buy" ? x.n * x.c : x.n * x.g * (1 - tax) })),
+    m3: L.m3, isk: L.isk, profit: L.profit,
+  });
+  const active = {
+    pilot: pilotState.active, pilotName: (pilotState.data.get(pilotState.active) || {}).name,
+    started: new Date().toISOString(), tax, total: o.total,
+    stops: [stop("buy", o.L1), stop("sell", o.L1), ...(o.L2 ? [stop("buy", o.L2), stop("sell", o.L2)] : [])],
+    home: sys(stops[0]), path: path.map(sys), done: 0,
+  };
+  try { localStorage.setItem("atlas.activeHaul", JSON.stringify(active)); } catch { /* private mode */ }
+  document.getElementById("hHud").hidden = false;
 }
