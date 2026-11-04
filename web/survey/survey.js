@@ -167,10 +167,36 @@ function setHere(system, by) {
 }
 const inChain = id => Object.values(S.chain.links).some(l => l.a === id || l.b === id);
 
+/* the hole a pilot just jumped: the wormhole signature in the system they left
+   that was tagged with a type most recently (within the last hour) and is not
+   already tied to a connection */
+function taggedHole(from) {
+  const used = new Set();
+  for (const l of Object.values(S.chain.links)) {
+    if (l.a === from && l.sigA) used.add(l.sigA);
+    if (l.b === from && l.sigB) used.add(l.sigB);
+  }
+  let best = null;
+  for (const [sid, sg] of Object.entries(S.chain.sigs[from] || {})) {
+    if (!sg.code || used.has(sid) || Date.now() - (sg.codeAt || 0) > 3600e3) continue;
+    if (!best || sg.codeAt > best[1].codeAt) best = [sid, sg];
+  }
+  return best;
+}
+function linkExtra(from, to) {
+  const hit = taggedHole(from);
+  if (!hit) return {};
+  const [sid, sg] = hit;
+  const size = sg.code !== "K162" ? C.sizeFromJump(S.WH[sg.code]?.jump) : null;
+  return { code: sg.code, codeAt: from, ...(from < to ? { sigA: sid } : { sigB: sid }), ...(size ? { size } : {}) };
+}
+
 function onMove(who, from, to, opts) {
   const kind = C.classifyMove(from, to, S.K.g, opts);
   if (kind === "wormhole") {
-    addLink(from, to, { confirmed: true, source: "jump" });
+    const extra = linkExtra(from, to);
+    addLink(from, to, { confirmed: true, source: "jump", ...extra });
+    if (extra.code) feed(`Type ${extra.code} carried over from the signature you tagged in ${nameOf(from)}`, "scan");
     feed(`${who}: ${nameOf(from)} to ${nameOf(to)}, wormhole added to the chain`, "jump");
   } else if (kind === "unsure") {
     addLink(from, to, { confirmed: false, source: "jump" });
@@ -602,8 +628,15 @@ function sigsHtml(id, withPaste) {
      warped to, tagged and jumped */
   const isHole = s => /wormhole/i.test(s.type);
   const state = s => (!s.type ? "unscanned" : isHole(s) ? (s.pct < 100 ? "to finish" : "ready") : "identified");
+  const holeCell = (sid, s) => {
+    if (!isHole(s)) return esc(s.name);
+    const w = s.code && S.WH[s.code];
+    const lead = w && !w.exit ? `to ${S.CL[w.to] || "?"}, ${SIZE_SHORT[C.sizeFromJump(w.jump)] || ""}` : s.code === "K162" ? "exit side" : "";
+    return `<input data-sigcode="${esc(sid)}" list="whCodes" size="6" placeholder="type" value="${esc(s.code || "")}"
+      title="Show Info on the wormhole: the window title says Wormhole XXXX. Type XXXX here."> <span class="hint">${esc(lead)}</span>`;
+  };
   const rows = sigs.map(([sid, s]) => `<tr class="${fresh.has(sid) ? "fresh" : ""}">
-      <td>${esc(sid)}</td><td>${esc(s.type || "?")}</td><td>${esc(s.name)}</td>
+      <td>${esc(sid)}</td><td>${esc(s.type || "?")}</td><td>${holeCell(sid, s)}</td>
       <td><span class="st st-${state(s).replace(" ", "-")}">${state(s)}</span>${used.has(sid) ? ` to ${esc(nameOf(used.get(sid)))}` : ""}</td>
       <td>${age(s.first)}</td>
       <td class="x"><button class="xbtn" data-delsig="${esc(sid)}" title="Remove">x</button></td></tr>`).join("");
@@ -632,6 +665,20 @@ function notesHtml(id) {
 function wirePanel(root, id) {
   const go = root.querySelector("#sigGo");
   if (go) go.onclick = () => routePasteFor(id, root.querySelector("#sigPaste").value);
+  root.querySelectorAll("[data-sigcode]").forEach(inp => inp.onchange = () => {
+    const sid = inp.dataset.sigcode, v = inp.value.trim().toUpperCase();
+    if (v && !S.WH[v]) { toast(`${v} is not a known wormhole type.`); return; }
+    const cur = S.chain.sigs[id]?.[sid] || {};
+    edit({ kind: "sig", system: id, id: sid, rec: { ...cur, code: v || null, codeAt: v ? Date.now() : null } });
+    if (v && v !== "K162" && C.isJ(id)) kbEdit({ kind: "static", system: id, code: v });
+    /* a connection already tied to this signature gets the type too */
+    for (const [key, l] of Object.entries(S.chain.links)) {
+      if ((l.a === id && l.sigA === sid) || (l.b === id && l.sigB === sid)) {
+        edit({ kind: "link", key, rec: { code: v || null, codeAt: v ? id : null } });
+      }
+    }
+    if (v) feed(`${sid} in ${nameOf(id)} tagged ${v}${S.WH[v]?.exit ? "" : `: leads to ${S.CL[S.WH[v].to] || "?"}`}`, "scan");
+  });
   root.querySelectorAll("[data-delsig]").forEach(b => b.onclick = () =>
     edit({ kind: "del", what: "sig", system: id, id: b.dataset.delsig }));
   const note = root.querySelector("#note");

@@ -106,3 +106,10 @@ test("probe scan rows are found even when the columns are reordered", () => {
   assert.equal(s[1].pct, 100);
   assert.equal(s[1].name, "Angel Hideaway");
 });
+
+test("a new probe paste keeps a hole type the pilot added to a signature", () => {
+  const first = C.mergeSigs({}, C.parseSigs("ABC-123\tCosmic Signature\tWormhole\tUnstable Wormhole\t100.0%\t1 AU"), 1);
+  first.sigs["ABC-123"].code = "N110";
+  const again = C.mergeSigs(first.sigs, C.parseSigs("ABC-123\tCosmic Signature\tWormhole\tUnstable Wormhole\t100.0%\t1 AU"), 2);
+  assert.equal(again.sigs["ABC-123"].code, "N110");
+});

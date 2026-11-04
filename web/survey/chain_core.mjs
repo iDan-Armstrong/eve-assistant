@@ -72,6 +72,7 @@ export function mergeSigs(existing, parsed, now, replace = true) {
     const old = sigs[p.id];
     const better = (a, b) => (b && b.length ? b : a);
     sigs[p.id] = {
+      ...(old || {}),                 /* keeps what a pilot added, like a hole's type code */
       group: better(old?.group || "", p.group),
       type: better(old?.type || "", p.type),
       name: better(old?.name || "", p.name),

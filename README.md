@@ -405,7 +405,10 @@ Info sets a hole's age, mass and size.
   30 minutes, 10 minutes and zero.
 - Signature checklist: unscanned (no type yet), identified (a site whose type
   shows, which is all a survey needs), "to finish" (a wormhole under 100%) and
-  ready (a wormhole you can warp to), plus which hole each one is, connections with their timers, directional scan history and every
+  ready (a wormhole you can warp to), plus which hole each one is. A
+  wormhole row has its own type box: tag it from the hole's Show Info title
+  ("Wormhole N110") before you jump, and the connection your jump creates
+  carries the type over, connections with their timers, directional scan history and every
   structure ever seen in the system, and an activity feed.
 
 **Points and badges.** Surveying earns points: 10 for a wormhole found by
