@@ -21,7 +21,7 @@
 param([int]$Port = 47321)
 
 $ErrorActionPreference = 'Stop'
-$Version = '1.1'
+$Version = '1.2'
 $Allowed = @('https://idan-armstrong.github.io', 'http://localhost:8799')
 $KeepMs = 10 * 60 * 1000
 
@@ -62,10 +62,19 @@ function Get-EveKind([string]$text) {
   return $null
 }
 
+# Windows numbers every copy, so copying the same text twice still counts as new
+Add-Type -Namespace SurveyLink -Name Native -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern uint GetClipboardSequenceNumber();
+'@
+$script:lastSeqNo = [SurveyLink.Native]::GetClipboardSequenceNumber()
+
 function Check-Clipboard {
+  $n = [SurveyLink.Native]::GetClipboardSequenceNumber()
+  if ($n -eq $script:lastSeqNo) { return }
+  $script:lastSeqNo = $n
   try { $text = Get-Clipboard -Raw } catch { return }
   if ($null -eq $text) { return }
-  if ($text -eq $script:lastClip) { return }
   $script:lastClip = $text
   $kind = Get-EveKind $text
   if ($kind) {
