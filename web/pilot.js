@@ -362,8 +362,20 @@ function pilotTagBoxes() {
     const p = d.loc && state.byId.get(d.loc.system);
     if (!p || !document.getElementById("tPilots").checked) continue;
     const pt = map.latLngToContainerPoint(p.ll);
-    const w = textWidth(d.name, '600 11px "Chakra Petch", sans-serif') + 16;
-    out.push({ x: pt.x - w / 2, y: pt.y - 16 - 22, w, h: 22 });
+    const w = textWidth(d.name, '700 12.5px "Chakra Petch", sans-serif') + 22;
+    out.push({ x: pt.x - w / 2, y: pt.y - 16 - 26, w, h: 26 });
+  }
+  /* corp mates' tags hang below their system */
+  if (typeof corpmates !== "undefined" && document.getElementById("tPilots").checked) {
+    const seen = new Set();
+    for (const r of corpmates.list.values()) {
+      const p = state.byId.get(r.system);
+      if (!p || seen.has(r.system)) continue;
+      seen.add(r.system);
+      const pt = map.latLngToContainerPoint(p.ll);
+      const w = textWidth(r.name + " +9", '700 12.5px "Chakra Petch", sans-serif') + 22;
+      out.push({ x: pt.x - w / 2, y: pt.y + 12, w, h: 26 });
+    }
   }
   return out;
 }
@@ -571,7 +583,7 @@ function drawCorpmates() {
     const p = state.byId.get(sys);
     if (!p) continue;
     const m = L.circleMarker(p.ll, { renderer: canvas, interactive: false, fill: false,
-      color: "#7ef0c8", weight: 2, opacity: .95, dashArray: "2 3" });
+      color: "#5cf2c0", weight: 2.4, opacity: 1, dashArray: "3 3" });
     m.bindTooltip(esc(mates.length > 1 ? `${mates[0].name} +${mates.length - 1}` : mates[0].name),
       { permanent: true, direction: "bottom", offset: [0, 14], className: "pilot-tag corp-tag" });
     corpmates.layer.addLayer(m);
@@ -589,6 +601,7 @@ function drawCorpmates() {
   if (state.selected) renderPilotHere(state.byId.get(state.selected));
   renderCorpMenu();
   applyCorpFocus();
+  map.fire("moveend");                       /* re-place labels around the new tags */
 }
 function corpmatesLine(p) {
   const here = [...corpmates.list.values()].filter(r => r.system === p.id);

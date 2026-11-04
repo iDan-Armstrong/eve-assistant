@@ -233,7 +233,6 @@
   .consent .c-opt input { margin-top: 3px; }
   .pm-shares { padding: 0 10px 6px 50px; font-size: 11px; color: var(--ink-dim); display: flex; gap: 10px; align-items: center; }
   .pm-shares label { display: flex; gap: 4px; align-items: center; cursor: pointer; color: var(--ink); }
-  .leaflet-tooltip.corp-tag { border-color: #7ef0c855; color: #bff7e2; }
   .corp-menu { width: 320px; }
   .corp-menu .cm-head { padding: 4px 12px 8px; border-bottom: 1px solid var(--panel-edge); margin-bottom: 4px; }
   .corp-menu .cm-head b { font-size: 14px; }
@@ -245,9 +244,15 @@
     background: #7ef0c8; color: #06231a; font-size: 11px; font-weight: 700; text-align: center; }
   #corpBtn.focus-on { background: #123a2f; border-color: #7ef0c8; }
   .pm-share { display: flex; gap: 6px; align-items: center; padding: 7px 10px 0; font-size: 12px; cursor: pointer; }
-  .leaflet-tooltip.pilot-tag { background: rgba(6,10,18,.85); border: 1px solid #ffffff55; color: #fff;
-    font: 600 11px "Chakra Petch", sans-serif; padding: 1px 6px; box-shadow: none; }
+  /* pilot name tags sit above every label: gold for your own pilots,
+     mint green for corp mates, both solid so they read at any zoom */
+  .leaflet-tooltip-pane { z-index: 700; }
+  .leaflet-tooltip.pilot-tag { background: #ffd24a; border: 1px solid #fff3c4; color: #1d1400;
+    font: 700 12.5px "Chakra Petch", sans-serif; padding: 2px 8px; border-radius: 3px; letter-spacing: .02em;
+    box-shadow: 0 0 0 2px rgba(6,10,18,.85), 0 0 14px rgba(255,210,74,.55); }
   .leaflet-tooltip.pilot-tag::before { display: none; }
+  .leaflet-tooltip.pilot-tag.corp-tag { background: #5cf2c0; border-color: #d6fff0; color: #00261a;
+    box-shadow: 0 0 0 2px rgba(6,10,18,.85), 0 0 14px rgba(92,242,192,.55); }
   .route .r-pilot { display: flex; gap: 6px; }
   .route .r-pilot[hidden] { display: none; }
   .route .r-pilot button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
