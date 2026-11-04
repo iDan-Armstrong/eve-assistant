@@ -175,6 +175,20 @@ jumps, and the safer-route cost the route planner uses. Sort by best
 price, nearest, or safest; the best five show their price on the map,
 and clicking a row plans the safer route there.
 
+CCP's region feed covers NPC stations only. Orders inside player-built
+structures (citadels, trade towers, Keepstars) are served per structure,
+to a signed-in character with docking access, and each structure can
+only be downloaded whole, so they cannot be searched live from a browser.
+`tools/fetch_structure_markets.py` does it hourly instead, as one
+opted-in pilot: it walks CCP's public list of structures that run a
+market, downloads each one that pilot may dock at, and publishes the 25
+best sell and buy orders per item (sharded by item ID) plus per-system
+totals. Find item merges those with the live NPC results and labels them
+with the structure's name. The pilot's refresh token lives in a GitHub
+Actions secret; if CCP issues a new one, the job keeps it on the
+live-data branch encrypted with a second secret. It is read-only and
+used for markets and structure names only.
+
 ### Hourly traffic
 
 CCP publishes, for every system, the stargate jumps and kills of the last

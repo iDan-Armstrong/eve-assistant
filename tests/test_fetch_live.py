@@ -114,3 +114,20 @@ def test_market_aggregate_per_system():
     out = fetch_market.aggregate(orders)
     assert out["30000142"] == [2, 1, 2, 1000500, 200]
     assert out["30002187"] == [1, 0, 1, 60, 0]
+
+
+def test_structure_best_orders_per_type():
+    import fetch_structure_markets as fsm
+    orders = [{"type_id": 34, "is_buy_order": False, "price": p, "volume_remain": 1, "location_id": 9}
+              for p in range(40, 0, -1)] + \
+             [{"type_id": 34, "is_buy_order": True, "price": 3.0, "volume_remain": 5, "location_id": 9}]
+    out = fsm.best_per_type(orders)[34]
+    assert len(out["s"]) == fsm.KEEP and out["s"][0][0] == 1          # cheapest first
+    assert out["b"] == [[3.0, 5, 9]]
+
+
+def test_token_encryption_round_trip():
+    import fetch_structure_markets as fsm
+    blob = fsm.crypt(b"refresh-token", "a-test-key", False)
+    assert blob != b"refresh-token"
+    assert fsm.crypt(blob, "a-test-key", True) == b"refresh-token"

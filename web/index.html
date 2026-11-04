@@ -234,6 +234,9 @@
   .pm-foot button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
     color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .pm-note { padding: 5px 10px 2px; font-size: 10.5px; color: var(--ink-faint); }
+  .pm-collector { padding: 6px 10px 0; }
+  .pm-collector button { width: 100%; background: #121b2c; border: 1px dashed var(--panel-edge); border-radius: 3px;
+    color: var(--ink-dim); font: inherit; font-size: 11.5px; padding: 5px; cursor: pointer; }
   .consent { position: fixed; inset: 0; z-index: 2000; background: rgba(3,6,12,.6);
     display: flex; align-items: center; justify-content: center; padding: 16px; }
   .consent .c-card { max-width: 420px; background: var(--panel); border: 1px solid var(--panel-edge);
@@ -608,7 +611,7 @@
     <div class="r-sum" id="mSum">Pick an item. Every region's NPC market is searched live from CCP.</div>
   </div>
   <ol id="mList" class="m-list"></ol>
-  <div class="r-note">Prices from CCP's public NPC market. Player structures are left out. Click a row to plan the safer route.</div>
+  <div class="r-note">NPC-station orders live from CCP; player-structure orders from the hourly collector (public trade structures). Click a row to plan the safer route.</div>
 </section>
 
 <div class="legend">
@@ -788,8 +791,9 @@ function pvpFor(p, layer) {
     (riskData.activity && riskData.activity.systems[p.id]) || [];
   const hist = pvpHist(p);
   const mk = (riskData.market && riskData.market.systems[p.id]) || [0, 0];
+  const ms = (riskData.market && riskData.market.structures && riskData.market.structures[p.id]) || [0, 0];
   const value = layer === "ratting" ? npc : layer === "ambush" ? hist.g
-              : layer === "market" ? mk[0] + mk[1] : ship + pod;
+              : layer === "market" ? mk[0] + mk[1] + ms[0] + ms[1] : ship + pod;
   const levels = PVP_LEVELS[layer];
   const level = [...levels].reverse().find(l => value >= l.min);
   return { level, ship, pod, npc, jumps, live: !!riskData.activity, hist };
@@ -1254,8 +1258,13 @@ function renderPvp(p) {
   }
   const mk = riskData.market && riskData.market.systems[p.id];
   if (mk) {
-    lines.push(`Market: <b>${mk[0].toLocaleString()}</b> sell and ${mk[1].toLocaleString()} buy orders, ` +
+    lines.push(`Market (NPC stations): <b>${mk[0].toLocaleString()}</b> sell and ${mk[1].toLocaleString()} buy orders, ` +
                `${mk[2].toLocaleString()} items; ${fmtIsk(mk[3])} ISK for sale, ${fmtIsk(mk[4])} ISK in buy orders`);
+  }
+  const ms = riskData.market && riskData.market.structures && riskData.market.structures[p.id];
+  if (ms) {
+    lines.push(`Market (player structures): <b>${ms[0].toLocaleString()}</b> sell and ${ms[1].toLocaleString()} buy orders, ` +
+               `${ms[2].toLocaleString()} items; ${fmtIsk(ms[3])} ISK for sale`);
   }
   if (riskData.pvp && p.sec < 0.5) {
     const h = r.hist, days = riskData.pvp.windowDays;

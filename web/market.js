@@ -46,6 +46,18 @@ function distancesFrom(from) {
   return { jumps, safe };
 }
 
+async function structureOrders(typeId, side) {
+  try {
+    if (!market.structures) market.structures = await fetch("data/live/structures.json").then(r => r.ok ? r.json() : {});
+    const shard = await fetch(`data/live/structure_orders/${typeId % 64}.json`).then(r => r.ok ? r.json() : {});
+    const rec = shard[typeId];
+    if (!rec) return [];
+    return rec[side === "sell" ? "s" : "b"].map(([price, qty, sid]) => ({
+      price, volume_remain: qty, location_id: sid, system_id: (market.structures[sid] || [])[1] }))
+      .filter(o => o.system_id);
+  } catch { return []; }
+}
+
 async function marketRegions() {
   if (!market.regions) {
     const r = await fetch("data/regions.json").then(x => x.json());
@@ -89,6 +101,10 @@ async function runMarketSearch() {
   list.innerHTML = "";
   const orders = await fetchItemOrders(market.item[0], market.side,
     (n, of) => { sum.textContent = `Searching ${market.item[1]}: region ${n} of ${of}…`; });
+  /* player-structure orders: collected hourly by tools/fetch_structure_markets.py
+     (CCP serves those only per structure, to a pilot with access) */
+  const extra = await structureOrders(market.item[0], market.side);
+  orders.push(...extra);
   const dist = origin ? distancesFrom(origin.id) : null;
   market.rows = orders.filter(o => state.byId.has(o.system_id)).map(o => ({
     price: o.price, qty: o.volume_remain, min: o.min_volume || 1, range: o.range,
@@ -123,7 +139,8 @@ function drawMarket() {
     `. Sign in or pick a system to see distances.`);
   list.innerHTML = rows.map((r, i) => {
     const p = state.byId.get(r.system);
-    const where = stationName(r.location) || "player structure";
+    const st = market.structures && market.structures[r.location];
+    const where = stationName(r.location) || (st ? `${st[0]} (player structure)` : "player structure");
     const dist = r.jumps == null ? "" : `${r.jumps} jump${r.jumps === 1 ? "" : "s"}` +
       (r.safe != null && r.jumps ? `, safer-route cost ${r.safe.toFixed(0)}` : "");
     const pct = bestPrice ? Math.round(100 * (r.price - bestPrice) / bestPrice) : 0;

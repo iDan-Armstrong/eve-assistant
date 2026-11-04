@@ -307,6 +307,9 @@ function renderPilotMenu(note = "") {
         <label><input type="checkbox" data-kind="location"${shareFor(p.id, "location") ? " checked" : ""}> location</label></div>` : "");
   }).join("") +
   `<div class="pm-foot"><button data-act="add">Add a character</button><button data-act="refresh">Refresh</button></div>` +
+  (act.scopes.includes("esi-markets.structure_markets.v1")
+    ? `<div class="pm-collector"><button data-act="collector">Copy ${esc(act.name)}'s token for the market collector</button>
+       <div class="pm-note">Only for the GitHub secret EVE_MARKET_REFRESH_TOKEN. Treat it like a password.</div></div>` : "") +
   (reserves.relay ? `<div class="pm-note">Sharing sends that pilot's login to the Atlas relay, which checks it ` +
     `with CCP and keeps no token. Only members of the same corporation see shared reserves (no names) or ` +
     `locations (name, system, ship).</div>` : "") +
@@ -330,6 +333,12 @@ function renderPilotMenu(note = "") {
     };
   });
   menu.querySelector('[data-act="add"]').onclick = () => EveSSO.login();
+  const coll = menu.querySelector('[data-act="collector"]');
+  if (coll) coll.onclick = async () => {
+    const p = JSON.parse(localStorage.getItem("atlas.pilots") || "{}")[act.id];
+    try { await navigator.clipboard.writeText(p.refresh); coll.textContent = "Copied. Paste it into GitHub, then clear your clipboard."; }
+    catch { coll.textContent = "Copy failed: your browser blocked clipboard access"; }
+  };
   menu.querySelector('[data-act="refresh"]').onclick = () => refreshPilots();
 }
 

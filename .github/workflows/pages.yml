@@ -84,6 +84,14 @@ jobs:
         timeout-minutes: 15
         continue-on-error: true
 
+      - name: Player-structure markets (one opted-in pilot's access)
+        env:
+          EVE_MARKET_REFRESH_TOKEN: ${{ secrets.EVE_MARKET_REFRESH_TOKEN }}
+          MARKET_TOKEN_KEY: ${{ secrets.MARKET_TOKEN_KEY }}
+        run: python tools/fetch_structure_markets.py --history ledger
+        timeout-minutes: 15
+        continue-on-error: true
+
       - name: Save risk history
         run: |
           cd ledger

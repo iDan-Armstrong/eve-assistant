@@ -29,6 +29,7 @@
     "esi-industry.read_character_jobs.v1",
     "esi-industry.read_character_mining.v1",
     "esi-ui.write_waypoint.v1",
+    "esi-markets.structure_markets.v1",
   ];
 
   const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)))
