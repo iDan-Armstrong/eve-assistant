@@ -32,7 +32,8 @@ const store = {
 };
 const K_CHAIN = "atlas.survey.chain", K_ROOT = "atlas.survey.root", K_HOME = "atlas.survey.home",
       K_SHARE = "atlas.survey.share", K_TRACK = "atlas.survey.track", K_KB = "atlas.survey.kb",
-      K_SCORE = "atlas.survey.score", K_VIEW = "atlas.survey.view", K_HERE = "atlas.survey.here";
+      K_SCORE = "atlas.survey.score", K_VIEW = "atlas.survey.view", K_HERE = "atlas.survey.here",
+      K_PIN = "atlas.survey.pin";
 const CAPSULES = new Set([670, 33328]);
 const POLL_MS = 10e3, SYNC_MS = 15e3;
 const LINK_URL = "http://localhost:47321/events";
@@ -50,6 +51,8 @@ const S = {
   where: {},                               // pilotId -> {system, ship, docked, online, name}
   logWhere: {},                            // character name -> system id, from Survey Link
   here: store.get(K_HERE, null),           // {system, by, at}: where the surveyor is
+  pin: store.get(K_PIN, ""),               // character the view follows ("" = whoever jumps)
+  auto: null,                              // in auto mode, the last character seen jumping
   root: store.get(K_ROOT, null), sel: null,
   view: store.get(K_VIEW, "surveyor"),
   feed: [], alerted: new Set(), pendingInfo: null,
@@ -202,8 +205,11 @@ function onMove(who, from, to, opts) {
     addLink(from, to, { confirmed: false, source: "jump" });
     feed(`${who}: ${nameOf(from)} to ${nameOf(to)} with no gate between them. Confirm it if it was a wormhole.`, "warn");
   }
-  setHere(to, who);
+  /* every character's jumps map holes; only the surveyor being followed moves the view */
+  if (S.pin ? who === S.pin : true) { S.auto = who; setHere(to, who); }
 }
+/* may a location report (not a jump) for this character set "You are in"? */
+const follows = name => (S.pin ? name === S.pin : !S.auto || S.auto === name);
 
 /* CCP location API, every 10 seconds */
 async function poll() {
@@ -215,7 +221,7 @@ async function poll() {
         w.online = !!(await EveSSO.esi(p.id, `/characters/${p.id}/online`)).online;
         w.onlineAt = Date.now();
       }
-      if (!w.online && w.system) { S.where[p.id] = w; continue; }
+      if (!w.online) { S.where[p.id] = w; continue; }        // offline pilots never set a location
       const [loc, ship] = await Promise.all([EveSSO.esi(p.id, `/characters/${p.id}/location`),
                                              EveSSO.esi(p.id, `/characters/${p.id}/ship`)]);
       const docked = !!(loc.station_id || loc.structure_id);
@@ -232,7 +238,7 @@ async function poll() {
       S.where[p.id] = w;
       S.logWhere[p.name] = now;
       if (prev && now !== prev) onMove(p.name, prev, now, { becameCapsule, dockedOnArrival: docked });
-      else if (!S.here || S.here.by === p.name || !S.link.ok) { if (S.here?.system !== now) setHere(now, p.name); }
+      else if (follows(p.name) && S.here?.system !== now) setHere(now, p.name);
     } catch (e) {
       S.where[p.id] = { ...(S.where[p.id] || { name: p.name }), err: e.message };
     }
@@ -292,7 +298,22 @@ function onLogSystem(it) {
   S.logWhere[it.char] = id;
   if (entry) entry.system = id;
   if (!it.initial && prev && prev !== id) onMove(it.char, prev, id, {});
-  else if (S.here?.system !== id) setHere(id, it.char);
+  else if (it.initial) {
+    /* where each character was last seen in its log: only the pinned surveyor
+       is followed from these; others wait for a real jump */
+    if (S.pin === it.char && S.here?.system !== id) setHere(id, it.char);
+  } else if (S.pin ? it.char === S.pin : true) { S.auto = it.char; if (S.here?.system !== id) setHere(id, it.char); }
+  renderWho();
+}
+function knownChars() {
+  return [...new Set([...pilots().map(p => p.name), ...Object.keys(S.logWhere)])].sort();
+}
+function renderWho() {
+  const sel = document.querySelector("#svWho");
+  if (!sel || sel === document.activeElement) return;
+  const names = knownChars();
+  sel.innerHTML = `<option value="">auto (whoever jumps)</option>` +
+    names.map(n => `<option value="${esc(n)}"${n === S.pin ? " selected" : ""}>${esc(n)}</option>`).join("");
 }
 
 /* ---- pastes ------------------------------------------------------------------- */
@@ -792,21 +813,40 @@ function renderSurveyor(force) {
   if (!id) {
     $("#svSystem").innerHTML = `<div class="hint">Where are you?</div><p>Start <b>Survey Link</b> or log in with tracking on,
       and your system appears here as soon as you jump. Or type a system in the box.</p>
-      <div class="row"><input id="svWhere" placeholder="system name" autocomplete="off" size="16"></div>`;
+      <div class="row"><input id="svWhere" placeholder="system name" autocomplete="off" size="16">
+        <span class="hint">or follow</span> <select id="svWho"></select></div>`;
     attachSuggest($("#svWhere"), () => { const s = lookup($("#svWhere").value); if (s) setHere(s, surveyor().name); });
+    renderWho();
+    $("#svWho").onchange = e => {
+      S.pin = e.target.value; store.set(K_PIN, S.pin);
+      const sys = S.pin && S.logWhere[S.pin];
+      if (sys) setHere(sys, S.pin);
+    };
     for (const k of ["#svSigs", "#svLinks", "#svDscan"]) $(k).innerHTML = "";
     return;
   }
   const L = label(id);
   const probe = S.lastProbe?.system === id ? `last probe scan ${age(S.lastProbe.at)} ago` : "no probe scan yet this visit";
   $("#svSystem").innerHTML = `
-    <div class="hint">You are in${S.here.by ? ` (${esc(S.here.by)})` : ""}</div>
+    <div class="row hint">You are in${S.here.by ? ` (${esc(S.here.by)})` : ""}
+      <span class="spacer"></span>following <select id="svWho" title="Which character this screen follows"></select></div>
     <div class="big" style="color:${L.tone}">${esc(L.name)} <span class="cls">${esc(L.cls)}</span></div>
     <div class="meta">${systemMeta(id)}</div>
     <div class="row" style="margin-top:6px">${C.isJ(id) ? `<span class="hint">Statics:</span> ${staticsHtml(id)}` : ""}</div>
     <div class="hint" style="margin-top:6px">${esc(probe)}</div>
     <div class="row" style="margin-top:8px"><button id="svChain">Show in chain</button>
       <button id="svHomeBtn" title="Your way-home timer counts down to here">${S.home === id ? "This is home" : "Set as home"}</button></div>`;
+  renderWho();
+  $("#svWho").onchange = e => {
+    S.pin = e.target.value;
+    store.set(K_PIN, S.pin);
+    if (S.pin) {
+      const sys = S.logWhere[S.pin] ?? Object.values(S.where).find(w => w.name === S.pin)?.system;
+      if (sys) setHere(sys, S.pin);
+      feed(`Following ${S.pin}`, "jump");
+    } else feed("Following whoever jumps", "jump");
+    render(true);
+  };
   $("#svChain").onclick = () => { setRoot(store.get(K_HOME, null) || id); S.sel = id; setView("chain"); };
   $("#svHomeBtn").onclick = () => { store.set(K_HOME, id); S.home = id; toast(`Home set: ${L.name}.`); render(true); };
   $("#svSigs").innerHTML = `<h3>Signatures</h3>${sigsHtml(id, false)}`;

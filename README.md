@@ -383,7 +383,13 @@ client's memory or send it input, so the survey uses three allowed channels:
   only the survey page's origin, keeps copies in memory for ten minutes and
   writes nothing.
 - **CCP's location API** every 10 seconds for signed-in pilots, as a backup
-  and for pilots without the helper.
+  and for pilots without the helper. Offline pilots never set a location.
+
+Survey Link sees every character on the PC (all accounts), so the Surveyor
+view has a "following" picker: auto follows whoever actually jumps, or pin
+one character. Every character's jumps still map wormholes; only the
+followed one moves the view, and old log entries from when the helper
+starts never do.
 - **Paste anywhere** on the page (Ctrl+V outside a text box) when the helper
   is not running.
 
