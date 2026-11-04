@@ -64,8 +64,10 @@ function buildLegs(cargo, budget, tax) {
 
 /* fill the hold with the items that earn the most per m3, within budget */
 function fillHold(items, cargo, budget) {
-  /* only items with at least this many units on the market at a profit:
-     thin stock is likely gone by the time you arrive */
+  /* only items with at least this many units that are both for sale at the
+     buy stop AND wanted by buyers at the sell stop, at a profit (the walked
+     quantity is capped by both books): thin stock or thin demand is likely
+     gone by the time you arrive */
   const minStock = Math.max(1, +document.getElementById("hMin").value || 1);
   items = [...items].sort((x, y) => y.net / y.v - x.net / x.v);
   let m3 = 0, isk = 0, profit = 0;
