@@ -6,7 +6,10 @@ per-system totals for the Market layer, and publishes the list of traded
 item names the browser's item picker searches. Item lookups ("where to buy
 X") run live in the browser against one item at a time, which is small.
 
-    python tools/fetch_market.py        # writes web/data/live/market.json, market_types.json
+    python tools/fetch_market.py [--history DIR]   # market.json, market_types.json, haul.json
+
+The same pass builds the haul planner's station-to-station trade pairs
+(tools/haul.py) and their item volumes (cached in DIR between runs).
 
 Per system: [sellOrders, buyOrders, distinctItems, sellIsk, buyIsk]
 """
@@ -21,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import haul  # noqa: E402
 from fetch_live import ESI, OUT, http  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[1] / "web" / "data"
@@ -91,6 +95,7 @@ def main() -> None:
                if r["systems"] and r["id"] < 11000000]          # k-space only
     status = {"regions": len(regions)}
     systems: dict[str, list] = {}
+    book: dict = {}
     failed = []
     with ThreadPoolExecutor(WORKERS) as pool:
         for region, result in zip(regions, pool.map(lambda r: _safe(region_orders, r["id"]), regions)):
@@ -98,6 +103,7 @@ def main() -> None:
                 failed.append(region["name"])
                 continue
             systems.update(aggregate(result))
+            haul.merge(book, haul.region_book(result))
     status.update({"systemsWithMarkets": len(systems), "failedRegions": failed,
                    "seconds": round(time.time() - started)})
 
@@ -110,10 +116,47 @@ def main() -> None:
     except Exception as exc:                         # noqa: BLE001
         status["types"] = f"error: {exc}"
 
+    try:
+        write_haul(book)
+        status["haulPairs"] = "ok"
+    except Exception as exc:                         # noqa: BLE001
+        status["haulPairs"] = f"error: {exc}"
+
     (OUT / "market.json").write_text(json.dumps(
         {"generated": _now(), "schema": ["sellOrders", "buyOrders", "items", "sellIsk", "buyIsk"],
          "systems": systems, "status": status}, separators=(",", ":")))
     print(json.dumps(status, indent=1))
+
+
+def write_haul(book: dict) -> None:
+    hist = Path(sys.argv[sys.argv.index("--history") + 1]) if "--history" in sys.argv else None
+    known = {f["properties"]["id"] for f in json.loads((DATA / "systems.geojson").read_text())["features"]}
+    rows = haul.pairs(book, known)
+    vol_path = hist / "type_volumes.json" if hist else None
+    volumes = json.loads(vol_path.read_text()) if vol_path and vol_path.exists() else {}
+    need = sorted({str(r[0]) for r in rows} - set(volumes))
+
+    def vol(tid):
+        try:
+            t = get(f"/universe/types/{tid}")
+            return tid, t.get("packaged_volume") or t.get("volume")
+        except Exception:                            # noqa: BLE001
+            return tid, None
+    with ThreadPoolExecutor(WORKERS) as pool:
+        for tid, v in pool.map(vol, need):
+            if v is not None:
+                volumes[tid] = v
+    if vol_path:
+        vol_path.write_text(json.dumps(volumes, separators=(",", ":")))
+    rows = [r for r in rows if str(r[0]) in volumes]
+    (OUT / "haul.json").write_text(json.dumps({
+        "generated": _now(),
+        "schema": ["typeId", "fromStation", "fromSystem", "toStation", "toSystem", "units", "cost", "gross"],
+        "tax": {"base": 0.075, "perAccountingLevel": 0.11,
+                "note": "instant trades: buy from sell orders, sell into buy orders; sales tax only"},
+        "pairs": rows, "volumes": {str(r[0]): volumes[str(r[0])] for r in rows}},
+        separators=(",", ":")))
+    print(f"haul: {len(rows)} pairs, {len(need)} new item volumes")
 
 
 def _safe(fn, *args):

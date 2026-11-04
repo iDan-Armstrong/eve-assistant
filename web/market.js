@@ -230,6 +230,7 @@ function openMarket(open) {
   document.getElementById("marketBtn").setAttribute("aria-expanded", String(open));
   if (open) {
     openRoute(false);
+    document.getElementById("haul").hidden = true;
     document.body.classList.add("route-open");          /* zoom buttons step aside */
     loadMarketTypes();
     document.getElementById("mItem").focus();

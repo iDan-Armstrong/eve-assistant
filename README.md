@@ -198,6 +198,25 @@ Actions secret; if CCP issues a new one, the job keeps it on the
 live-data branch encrypted with a second secret. It is read-only and
 used for markets and structure names only.
 
+### Haul planner
+
+**Haul** (behind a password) plans round trips that make ISK in both
+directions. Each hour `tools/haul.py` keeps every NPC station's five
+cheapest sell orders and five highest buy orders for every item, pairs the
+cheapest-selling stations with the highest-buying ones, and walks both
+order books until the margin runs out. In the browser those pairs become
+legs sized to your ship's cargo hold (read from the ship you are flying),
+your budget and your sales tax (7.5%, less 11% per Accounting level):
+each leg fills the hold with the items that earn the most per m3 between
+the same two stations. A loop is one leg out from home and the leg that
+best brings you back, ranked by ISK per jump over the whole circuit, with
+a highsec-only option. Click a loop to draw it on the map and send the
+first buy stop to your autopilot.
+
+The trades are instant (buy from sell orders, sell into buy orders), so
+the only fee is sales tax. The password is a soft gate on a public site:
+only its hash is in the code, and the data underneath is public.
+
 ### Hourly traffic
 
 CCP publishes, for every system, the stargate jumps and kills of the last

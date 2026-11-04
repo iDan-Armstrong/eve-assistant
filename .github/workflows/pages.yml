@@ -76,10 +76,10 @@ jobs:
 
       - name: Market summaries (ESI, every region)
         run: |
-          if python tools/fetch_market.py; then
-            cp web/data/live/market.json web/data/live/market_types.json ledger/
+          if python tools/fetch_market.py --history ledger; then
+            cp web/data/live/market.json web/data/live/market_types.json web/data/live/haul.json ledger/
           elif [ -f ledger/market.json ]; then
-            cp ledger/market.json ledger/market_types.json web/data/live/   # keep the last good copy
+            cp ledger/market.json ledger/market_types.json ledger/haul.json web/data/live/ 2>/dev/null || true   # keep the last good copy
           fi
         timeout-minutes: 15
         continue-on-error: true
