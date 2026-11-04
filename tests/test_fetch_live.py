@@ -143,3 +143,14 @@ def test_station_shelves_best_prices_and_depth():
         {"location_id": 1, "type_id": 35, "is_buy_order": True, "price": 9.0, "volume_remain": 1}])
     assert shelves[1][34] == [4.5, 13, 4.0, 7]
     assert shelves[1][35] == [None, 0, 9.0, 1]
+
+
+def test_sell_index_keeps_cheapest_stations():
+    import fetch_market
+    shelves = {}
+    fetch_market.add_shelves(shelves, [
+        {"location_id": 1, "system_id": 10, "type_id": 34, "is_buy_order": False, "price": 5.0, "volume_remain": 10},
+        {"location_id": 2, "system_id": 20, "type_id": 34, "is_buy_order": False, "price": 4.0, "volume_remain": 3},
+        {"location_id": 3, "system_id": 30, "type_id": 34, "is_buy_order": True, "price": 9.0, "volume_remain": 3}])
+    idx = fetch_market.sell_index(shelves)
+    assert idx[34] == [[2, 20, 4.0, 3], [1, 10, 5.0, 10]]       # buy-only station left out

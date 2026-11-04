@@ -206,6 +206,16 @@ hourly job writes one small file per station from the regions it already
 downloads. Clicking an item hands it to Find item to compare across New
 Eden.
 
+**Fit** shops for a ship fit. Pick one of the pilot's saved fittings, or
+paste a fit in EFT format (the fitting window's "Copy to clipboard"). The
+pilot's assets are counted first (loose items, and optionally modules
+fitted to other ships), so only what is still missing is shopped for. The
+hourly job publishes the 40 cheapest NPC stations for every item
+(`data/live/sell_index`); stations that stock every missing item in the
+needed quantity are ranked by total cost or by jumps, next to the price of
+buying each item at its own cheapest station. Pick a station for the
+shopping list, a Multibuy copy, and the autopilot destination.
+
 ### Haul planner
 
 **Haul** (behind a password) plans round trips that make ISK in both

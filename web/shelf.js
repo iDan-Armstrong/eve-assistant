@@ -9,7 +9,7 @@ const shelf = { station: null, items: [], sort: "name", names: null };
 async function openShelf(stationId, label) {
   const box = document.getElementById("shelf");
   openRoute(false);
-  ["market", "haul"].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
+  ["market", "haul", "fitbox"].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
   box.hidden = false;
   document.body.classList.add("route-open");
   document.getElementById("sTitle").textContent = label;

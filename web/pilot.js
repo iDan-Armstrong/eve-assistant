@@ -128,6 +128,13 @@ async function loadPilot(pilot) {
     ship: ship && { type: ship.ship_type_id, name: ship.ship_name },
     online: online && online.online,
     assets: roll, assetCount: (assets || []).length,
+    /* what the pilot owns, per item and place (for the fit shopper) */
+    owned: (assets || []).reduce((m, a) => {
+      const loc = roots.get(a.item_id);
+      const list = m.get(a.type_id) || m.set(a.type_id, []).get(a.type_id);
+      list.push({ loc, n: a.quantity, fitted: /Slot|DroneBay|Cargo/.test(a.location_flag || "") && a.location_type === "item" });
+      return m;
+    }, new Map()),
     home: clones && clones.home_location && {
       system: placeSystem(clones.home_location.location_id), label: placeLabel(clones.home_location.location_id) },
     clones: ((clones && clones.jump_clones) || []).map(c => ({

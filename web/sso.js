@@ -79,7 +79,8 @@
     configured() { return !!EveSSO.clientId; },
     pilots() { return Object.values(load()).sort((a, b) => a.name.localeCompare(b.name)); },
 
-    async login() {
+    /* extra: optional scopes asked for only when a feature needs them */
+    async login(extra = []) {
       if (!EveSSO.configured()) throw new Error("no client id configured");
       const verifier = randomString(32), state = randomString(16);
       const challenge = b64url(await crypto.subtle.digest("SHA-256",
@@ -87,7 +88,7 @@
       sessionStorage.setItem(PENDING, JSON.stringify({ verifier, state, back: location.hash }));
       location.assign(`${LOGIN}/v2/oauth/authorize?` + new URLSearchParams({
         response_type: "code", redirect_uri: redirectUri(), client_id: EveSSO.clientId,
-        scope: SCOPES.join(" "), state,
+        scope: [...SCOPES, ...extra].join(" "), state,
         code_challenge: challenge, code_challenge_method: "S256",
       }));
     },

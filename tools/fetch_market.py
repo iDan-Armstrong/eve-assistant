@@ -120,6 +120,7 @@ def main() -> None:
 
     try:
         write_shelves(shelves)
+        write_sell_index(shelves)
         status["stationFiles"] = len(shelves)
     except Exception as exc:                         # noqa: BLE001
         status["stationFiles"] = f"error: {exc}"
@@ -136,9 +137,13 @@ def main() -> None:
     print(json.dumps(status, indent=1))
 
 
+STATION_SYSTEM: dict[int, int] = {}
+
+
 def add_shelves(shelves: dict, orders: list[dict]) -> None:
     """Per station and item: [lowest sell, units for sale, highest buy, units wanted]."""
     for o in orders:
+        STATION_SYSTEM[o["location_id"]] = o.get("system_id")
         row = shelves.setdefault(o["location_id"], {}).setdefault(o["type_id"], [None, 0, None, 0])
         if o["is_buy_order"]:
             row[2] = o["price"] if row[2] is None else max(row[2], o["price"])
@@ -157,6 +162,33 @@ def write_shelves(shelves: dict) -> None:
     for loc, items in shelves.items():
         rows = [[tid, *row] for tid, row in items.items()]
         (out / f"{loc}.json").write_text(json.dumps({"generated": _now(), "items": rows}, separators=(",", ":")))
+
+
+SELL_SHARDS = 64
+SELL_KEEP = 40
+
+
+def sell_index(shelves: dict) -> dict[int, list]:
+    """Per item, the SELL_KEEP cheapest stations: [[stationId, systemId, lowest price, units for sale]]."""
+    idx: dict[int, list] = {}
+    for loc, items in shelves.items():
+        for tid, (sell, qty, _b, _bq) in items.items():
+            if sell is not None and qty:
+                idx.setdefault(tid, []).append([loc, STATION_SYSTEM.get(loc), sell, qty])
+    for tid in idx:
+        idx[tid] = sorted(idx[tid], key=lambda r: r[2])[:SELL_KEEP]
+    return idx
+
+
+def write_sell_index(shelves: dict) -> None:
+    """web/data/live/sell_index/<typeId % 64>.json, for the fit shopper."""
+    out = OUT / "sell_index"
+    out.mkdir(parents=True, exist_ok=True)
+    shards: dict[int, dict] = {}
+    for tid, rows in sell_index(shelves).items():
+        shards.setdefault(tid % SELL_SHARDS, {})[str(tid)] = rows
+    for n in range(SELL_SHARDS):
+        (out / f"{n}.json").write_text(json.dumps(shards.get(n, {}), separators=(",", ":")))
 
 
 def write_haul(book: dict) -> None:
