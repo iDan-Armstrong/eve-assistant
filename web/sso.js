@@ -80,12 +80,13 @@
     pilots() { return Object.values(load()).sort((a, b) => a.name.localeCompare(b.name)); },
 
     /* extra: optional scopes asked for only when a feature needs them */
-    async login(extra = []) {
+    async login(extra = [], opts = {}) {
       if (!EveSSO.configured()) throw new Error("no client id configured");
       const verifier = randomString(32), state = randomString(16);
       const challenge = b64url(await crypto.subtle.digest("SHA-256",
         new TextEncoder().encode(verifier)));
-      sessionStorage.setItem(PENDING, JSON.stringify({ verifier, state, back: location.hash }));
+      sessionStorage.setItem(PENDING, JSON.stringify({ verifier, state, back: location.hash,
+                                                       collector: !!opts.collector }));
       location.assign(`${LOGIN}/v2/oauth/authorize?` + new URLSearchParams({
         response_type: "code", redirect_uri: redirectUri(), client_id: EveSSO.clientId,
         scope: [...SCOPES, ...extra].join(" "), state,
@@ -105,6 +106,13 @@
       if (!pending || q.get("state") !== pending.state) throw new Error("login state mismatch");
       const tok = await tokenRequest({ grant_type: "authorization_code",
         code: q.get("code"), code_verifier: pending.verifier });
+      /* a login made only for the hourly market collector: its own token
+         chain, never used by this browser, handed over once and forgotten */
+      if (pending.collector) {
+        const c = claims(tok.access_token);
+        return { collector: true, name: c.name, refresh: tok.refresh_token,
+                 scopes: [].concat(c.scp || []) };
+      }
       return store(tok);
     },
 

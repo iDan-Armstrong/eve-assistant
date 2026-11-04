@@ -43,7 +43,8 @@ async function startPilots() {
   let note = "";
   try {
     const p = await EveSSO.init();
-    if (p) {
+    if (p && p.collector) { showCollectorToken(p); }
+    else if (p) {
       pilotState.active = p.id; note = `Signed in as ${p.name}`;
     }
   } catch (e) { note = e.message; }
@@ -315,8 +316,9 @@ function renderPilotMenu(note = "") {
   }).join("") +
   `<div class="pm-foot"><button data-act="add">Add a character</button><button data-act="refresh">Refresh</button></div>` +
   (act.scopes.includes("esi-markets.structure_markets.v1")
-    ? `<div class="pm-collector"><button data-act="collector">Copy ${esc(act.name)}'s token for the market collector</button>
-       <div class="pm-note">Only for the GitHub secret EVE_MARKET_REFRESH_TOKEN. Treat it like a password.</div></div>` : "") +
+    ? `<div class="pm-collector"><button data-act="collector">Make a login for the market collector</button>
+       <div class="pm-note">A separate CCP login just for the hourly structure-market job, so signing in or out
+       here never breaks it. For the GitHub secret EVE_MARKET_REFRESH_TOKEN.</div></div>` : "") +
   (reserves.relay ? `<div class="pm-note">Sharing sends that pilot's login to the Atlas relay, which checks it ` +
     `with CCP and keeps no token. Only members of the same corporation see shared reserves (no names) or ` +
     `locations (name, system, ship).</div>` : "") +
@@ -341,11 +343,7 @@ function renderPilotMenu(note = "") {
   });
   menu.querySelector('[data-act="add"]').onclick = () => EveSSO.login();
   const coll = menu.querySelector('[data-act="collector"]');
-  if (coll) coll.onclick = async () => {
-    const p = JSON.parse(localStorage.getItem("atlas.pilots") || "{}")[act.id];
-    try { await navigator.clipboard.writeText(p.refresh); coll.textContent = "Copied. Paste it into GitHub, then clear your clipboard."; }
-    catch { coll.textContent = "Copy failed: your browser blocked clipboard access"; }
-  };
+  if (coll) coll.onclick = () => EveSSO.login(["esi-markets.structure_markets.v1"], { collector: true });
   menu.querySelector('[data-act="refresh"]').onclick = () => refreshPilots();
 }
 
@@ -768,3 +766,23 @@ document.addEventListener("contextmenu", e => {
     setTimeout(closeCtx, 1600);
   });
 });
+
+/* the collector's own login: shown once to copy into GitHub, never stored */
+function showCollectorToken(c) {
+  const box = document.createElement("div");
+  box.className = "consent";
+  box.innerHTML = `<div class="c-card"><h3>Market collector login for ${esc(c.name)}</h3>
+    <p>This login belongs to the hourly structure-market job only. It is not saved in this browser.</p>
+    <p><b>1.</b> Click Copy. <b>2.</b> Open
+      <a href="https://github.com/iDan-Armstrong/eve-assistant/settings/secrets/actions/EVE_MARKET_REFRESH_TOKEN" target="_blank" rel="noopener">the
+      EVE_MARKET_REFRESH_TOKEN secret on GitHub</a>, click <b>Update</b> (or create it), paste with Ctrl+V and save.
+      <b>3.</b> Copy any other text to clear your clipboard.</p>
+    <p class="c-small">Treat it like a password. It allows reading structure markets only.</p>
+    <div class="c-buttons"><button data-act="copy">Copy</button><button data-act="done">Done</button></div></div>`;
+  document.body.appendChild(box);
+  box.querySelector("[data-act=copy]").onclick = async e => {
+    try { await navigator.clipboard.writeText(c.refresh); e.target.textContent = "Copied"; }
+    catch { e.target.textContent = "Copy blocked by the browser"; }
+  };
+  box.querySelector("[data-act=done]").onclick = () => { c.refresh = ""; box.remove(); };
+}

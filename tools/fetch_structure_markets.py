@@ -25,6 +25,7 @@ and per-system totals merged into market.json under "structures".
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -99,21 +100,36 @@ def best_per_type(orders: list[dict]) -> dict[int, dict]:
 def main() -> None:
     hist = Path(sys.argv[sys.argv.index("--history") + 1])
     key = os.environ.get("MARKET_TOKEN_KEY", "")
-    stored = hist / "market_token.enc"
-    token = ""
-    if stored.exists() and key:
-        try:
-            token = crypt(stored.read_bytes(), key, True).decode()
-        except subprocess.CalledProcessError:
-            token = ""
-    token = token or os.environ.get("EVE_MARKET_REFRESH_TOKEN", "")
-    if not token or not key:
+    secret = os.environ.get("EVE_MARKET_REFRESH_TOKEN", "")
+    stored, origin = hist / "market_token.enc", hist / "market_token.src"
+    if not secret or not key:
         print("structure markets: secrets not set, skipping")
         return
-    tok = refresh(token)
+    # a rotated token kept from an earlier run wins, unless the secret has
+    # been replaced since (a new collector login starts a new chain)
+    src = hashlib.sha256(secret.encode()).hexdigest()[:16]
+    token = secret
+    if stored.exists() and origin.exists() and origin.read_text().strip() == src:
+        try:
+            token = crypt(stored.read_bytes(), key, True).decode() or secret
+        except subprocess.CalledProcessError:
+            token = secret
+    try:
+        tok = refresh(token)
+    except Exception as exc:                          # noqa: BLE001 - revoked or expired login
+        note = {"error": f"collector login rejected by CCP ({exc}); make a new collector login "
+                         "from the pilot menu and update EVE_MARKET_REFRESH_TOKEN"}
+        mpath = OUT / "market.json"
+        if mpath.exists():
+            doc = json.loads(mpath.read_text())
+            doc["structureStatus"] = note
+            mpath.write_text(json.dumps(doc, separators=(",", ":")))
+        print(json.dumps(note))
+        return
     access = tok["access_token"]
     if tok.get("refresh_token") and tok["refresh_token"] != token:
         stored.write_bytes(crypt(tok["refresh_token"].encode(), key, False))
+        origin.write_text(src)
 
     started = time.time()
     ids = esi("/universe/structures?filter=market")
