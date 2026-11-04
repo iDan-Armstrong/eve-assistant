@@ -21,6 +21,7 @@ resolved by NAME (wormholeTargetSystemClass and friends), never by hard-coded id
 from __future__ import annotations
 
 import io
+import re
 import json
 import sys
 import zipfile
@@ -81,9 +82,10 @@ def name(row: dict, field: str = "name") -> str:
 
 
 def effect_name(type_name: str) -> str:
-    """'Wolf-Rayet Effect Beacon Class 4' -> 'Wolf-Rayet'"""
-    n = type_name.split(" Effect Beacon")[0]
-    return n.replace("Star", "").strip() or type_name
+    """'Class 2 Red Giant Effects' or 'Wolf-Rayet Effect Beacon Class 4' -> 'Red Giant', 'Wolf-Rayet'"""
+    n = re.sub(r"^Class \d+\s+", "", type_name)
+    n = re.sub(r"\s*Effect(s| Beacon.*)?$", "", n)
+    return n.replace(" Star", "").strip() or type_name
 
 
 def main(src_path: Path, out: Path) -> None:
@@ -111,14 +113,16 @@ def main(src_path: Path, out: Path) -> None:
         print("note: no mapSecondarySuns file; effects left blank")
 
     planets_per, moons_per = {}, {}
-    for stem, bucket in (("mapPlanets", planets_per), ("mapMoons", moons_per)):
-        try:
-            for row in src.rows(stem):
-                sid = row.get("solarSystemID")
-                if sid and 31000000 <= sid < 32000000:
-                    bucket[sid] = bucket.get(sid, 0) + 1
-        except FileNotFoundError:
-            print(f"note: no {stem} file")
+    try:
+        for i, row in enumerate(src.rows("mapPlanets")):
+            if i == 0:
+                print("mapPlanets keys:", sorted(row.keys()))
+            sid = row.get("solarSystemID")
+            if sid and 31000000 <= sid < 32000000:
+                planets_per[sid] = planets_per.get(sid, 0) + 1
+                moons_per[sid] = moons_per.get(sid, 0) + len(row.get("moonIDs") or [])
+    except FileNotFoundError:
+        print("note: no mapPlanets file")
 
     systems = {}
     first = True
@@ -164,6 +168,9 @@ def main(src_path: Path, out: Path) -> None:
         wormholes[code] = {k: (int(v) if isinstance(v, float) and v.is_integer() else v)
                            for k, v in rec.items()}
 
+    # K162 is the exit side of every hole: it has no limits of its own in the SDE,
+    # it takes them from the hole it belongs to
+    wormholes.setdefault("K162", {"exit": True})
     (out / "systems.json").write_text(json.dumps(systems, separators=(",", ":")))
     (out / "wormholes.json").write_text(json.dumps(dict(sorted(wormholes.items())), separators=(",", ":")))
     (out / "classes.json").write_text(json.dumps(CLASS_LABELS, separators=(",", ":")))
