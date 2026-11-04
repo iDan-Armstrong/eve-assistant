@@ -13,6 +13,11 @@
      the relay and covered by tests. */
 import * as C from "./chain_core.mjs";
 
+/* In development: the page asks for a password first. A soft gate on a
+   public site, not security; only a hash of the password is in the code. */
+const GATE_HASH = "939c2a01242240f3140e9b33ef9791957361435131a8d544cc0a2cca4224c876";
+const GATE_KEY = "atlas.survey.unlocked";
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = {
@@ -528,4 +533,36 @@ async function start() {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(); sync(); } });
   sync();
 }
-start().catch(e => { document.body.insertAdjacentHTML("beforeend", `<div class="toast">J-Space Survey failed to start: ${esc(e.message)}</div>`); });
+async function sha256hex(text) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function gate() {
+  let ok = false;
+  try { ok = sessionStorage.getItem(GATE_KEY) === "1"; } catch { /* private mode */ }
+  if (ok) return Promise.resolve();
+  return new Promise(resolve => {
+    const box = document.createElement("div");
+    box.className = "consent";
+    box.style.background = "var(--bg)";
+    box.innerHTML = `<div>
+      <h3 style="margin-top:0">J-Space Survey is in development</h3>
+      <p>Testers only for now. Enter the password to continue, or go <a href="../">back to the Atlas</a>.</p>
+      <form class="row" id="gateForm"><input type="password" id="gatePw" autocomplete="off" placeholder="password" autofocus>
+        <button class="primary">Open</button></form>
+      <div id="gateMsg" class="hint"></div></div>`;
+    document.body.appendChild(box);
+    box.querySelector("#gateForm").onsubmit = async e => {
+      e.preventDefault();
+      if (await sha256hex("new-eden-atlas:" + box.querySelector("#gatePw").value) === GATE_HASH) {
+        try { sessionStorage.setItem(GATE_KEY, "1"); } catch { /* private mode */ }
+        box.remove();
+        resolve();
+      } else {
+        box.querySelector("#gateMsg").textContent = "That is not the password.";
+        box.querySelector("#gatePw").select();
+      }
+    };
+  });
+}
+gate().then(start).catch(e => { document.body.insertAdjacentHTML("beforeend", `<div class="toast">J-Space Survey failed to start: ${esc(e.message)}</div>`); });

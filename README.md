@@ -366,6 +366,8 @@ Wormhole space has no stargates, no local chat until someone speaks, and
 connections that open and close every day, so no public feed can map it.
 [J-Space Survey](https://idan-armstrong.github.io/eve-assistant/survey/) is a
 companion page for mapping it by hand while you fly, and it feeds the Atlas.
+While it is in development the page asks testers for a password (a soft
+gate: only a hash of it is in the code).
 
 - **Jumps draw themselves.** Signed-in pilots with tracking on are polled
   every 10 seconds while the page is open. A move into, out of or inside
