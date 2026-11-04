@@ -7,7 +7,8 @@ const H = C.HOUR;
 const HOME = 30000142, J1 = 31000005, J2 = 31000006, J3 = 31000007;
 const WH = { B274: { to: 7, life: 24, jump: 375e6 }, N110: { to: 7, life: 24, jump: 62e6 }, K162: { exit: true } };
 const SCAN = { 587: ["Rifter", "Frigate", "S"], 12011: ["Proteus", "Strategic Cruiser", "S"],
-               35832: ["Astrahus", "Citadel", "U"], 16213: ["Caldari Control Tower", "Control Tower", "P"] };
+               35832: ["Astrahus", "Citadel", "U"], 16213: ["Caldari Control Tower", "Control Tower", "P"],
+               17167: ["Small Pulse Laser Battery", "Energy Weapon Battery", "P"] };
 
 test("the router tells probe scans, d-scans and Show Info apart, and ignores other text", () => {
   assert.equal(S.classifyPaste("ABC-123\tCosmic Signature\tWormhole\tUnstable Wormhole\t100.0%\t4.21 AU").kind, "sigs");
@@ -33,11 +34,13 @@ test("d-scan summary counts ships, structures and holes, with or without type id
     "12011\tTengu thing\tProteus\t2.1 AU",
     "Some Tower\tCaldari Control Tower\t-",
     "30583\tUnstable Wormhole\tWormhole B274\t-",
+    "17167\tSmall Pulse Laser Battery\tSmall Pulse Laser Battery\t-",
   ].join("\n"));
-  assert.equal(rows.length, 5);
+  assert.equal(rows.length, 6);
   const byName = new Map(Object.entries(SCAN).map(([id, v]) => [v[0].toLowerCase(), +id]));
   const s = S.summarizeDscan(rows, SCAN, byName);
-  assert.equal(s.total, 5);
+  assert.equal(s.total, 6);
+  assert.equal(s.posModules, 1, "POS modules are counted, not listed as structures");
   assert.equal(s.cats.S, 2);
   assert.deepEqual(s.structures, [["Astrahus", "Home Sweet Home"], ["Caldari Control Tower", "Some Tower"]]);
   assert.equal(s.holes, 1);

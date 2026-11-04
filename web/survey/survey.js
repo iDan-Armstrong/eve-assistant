@@ -369,7 +369,8 @@ const pl = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function dscanLine(sum) {
   const ships = Object.entries(sum.ships || {}).slice(0, 4).map(([t, n]) => `${n} ${t}`).join(", ");
   return pl(sum.total, "object") + (sum.cats?.S ? `, ${pl(sum.cats.S, "ship")} (${ships})` : ", no ships") +
-         (sum.structures?.length ? `, ${pl(sum.structures.length, "structure")}` : "") + (sum.holes ? `, ${pl(sum.holes, "hole")}` : "");
+         (sum.structures?.length ? `, ${pl(sum.structures.length, "structure")}` : "") +
+         (sum.posModules ? ` (${pl(sum.posModules, "POS module")})` : "") + (sum.holes ? `, ${pl(sum.holes, "hole")}` : "");
 }
 
 /* ---- corp sharing via the Atlas relay ------------------------------------------ */
@@ -1074,6 +1075,15 @@ async function start() {
   S.relay = (cfg.relay || "").replace(/\/$/, "");
   S.home = store.get(K_HOME, null);
   await loadData();
+  /* earlier versions saved POS modules as structures; keep only towers and Upwell structures */
+  let fixed = false;
+  for (const rec of Object.values(S.kb)) {
+    for (const [k, st] of Object.entries(rec.structures || {})) {
+      const info = S.ST[S.typeByName.get(String(st.type).toLowerCase())];
+      if (info && info[2] === "P" && info[1] !== "Control Tower") { delete rec.structures[k]; fixed = true; }
+    }
+  }
+  if (fixed) saveKb();
 
   const dl = document.createElement("datalist");
   dl.id = "whCodes";

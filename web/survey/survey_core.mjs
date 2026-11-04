@@ -75,8 +75,10 @@ export function summarizeDscan(rows, scanTypes, typeByName) {
     if (cat === "S") {
       s.ships[tname] = (s.ships[tname] || 0) + 1;
       s.groups[group] = (s.groups[group] || 0) + 1;
-    } else if (cat === "U" || cat === "P") {
-      s.structures.push([tname, r.name]);
+    } else if (cat === "U" || (cat === "P" && group === "Control Tower")) {
+      s.structures.push([tname, r.name]);       // citadels and other Upwell structures, POS towers
+    } else if (cat === "P") {
+      s.posModules = (s.posModules || 0) + 1;   // batteries, arrays, hangars: part of a tower
     }
   }
   return s;
