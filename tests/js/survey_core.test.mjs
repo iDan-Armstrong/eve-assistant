@@ -120,3 +120,28 @@ test("points add up, daily caps hold, badges and ranks unlock", () => {
   assert.ok(L["2"].badges.streak_7);
   assert.deepEqual(S.leaderboard(L).map(x => x.name), ["Dan", "Bo"]);
 });
+
+test("survey batch: nearest unscanned systems in visiting order, skipping fresh scans and others' claims", () => {
+  // a line of systems 1-2-3-4-5-6-7 plus a lowsec spur 3-9
+  const gates = { 1: [2], 2: [1, 3], 3: [2, 4, 9], 4: [3, 5], 5: [4, 6], 6: [5, 7], 7: [6], 9: [3] };
+  const sec = { 1: 0.9, 2: 0.9, 3: 0.8, 4: 0.7, 5: 0.6, 6: 0.5, 7: 0.5, 9: 0.2 };
+  const now = 100 * H;
+  const kb = { 2: { probedAt: now - 2 * H }, 4: { claim: { by: "Other", until: now + H } }, 5: { claim: { by: "Me", until: now + H } } };
+  const b = S.surveyBatch({ from: 1, gates, secOf: id => sec[id], kb, now, me: "Me", n: 4 });
+  assert.deepEqual(b.systems, [1, 3, 5, 6], "1 itself, then 3 (2 is fresh), 5 (4 claimed by another, own claim ok), 6");
+  assert.deepEqual(b.route, [1, 2, 3, 4, 5, 6]);
+  const low = S.surveyBatch({ from: 3, gates, secOf: id => sec[id], kb: {}, now, me: "Me", n: 2, highsecOnly: false });
+  assert.deepEqual(low.systems, [3, 2], "lowsec allowed when asked; ties go to either neighbour");
+  const kb2 = { 1: { probedAt: now - 30 * H } };
+  assert.equal(S.surveyBatch({ from: 1, gates, secOf: id => sec[id], kb: kb2, now, me: "Me", n: 1 }).systems[0], 1, "a stale scan is due again");
+});
+
+test("knowledge base records probe scans and claims", () => {
+  const kb = {};
+  S.applyKbOp(kb, { kind: "probe", system: 30000142, by: "A" }, 5);
+  S.applyKbOp(kb, { kind: "claim", system: 30000142, by: "A", until: 99 }, 5);
+  assert.equal(kb[30000142].probedAt, 5);
+  assert.deepEqual(kb[30000142].claim, { by: "A", until: 99 });
+  S.applyKbOp(kb, { kind: "claim", system: 30000142, by: "A", until: null }, 6);
+  assert.equal(kb[30000142].claim, undefined);
+});

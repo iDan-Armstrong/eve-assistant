@@ -162,7 +162,12 @@ export function applyKbOp(kb, op, now = op.at ?? Date.now()) {
   const rec = kb[sys] = kb[sys] || { statics: {}, structures: {}, dscans: [] };
   rec.statics = rec.statics || {}; rec.structures = rec.structures || {}; rec.dscans = rec.dscans || [];
   const events = [];
-  if (op.kind === "visit") {
+  if (op.kind === "probe") {
+    rec.probedAt = now;                       // a probe scan of the whole system
+    rec.probedBy = op.by || "";
+  } else if (op.kind === "claim") {
+    rec.claim = op.until ? { by: op.by || "", until: op.until } : undefined;   // reserved in a survey batch
+  } else if (op.kind === "visit") {
     if (!rec.visit) { rec.visit = { at: now, by: op.by || "" }; if (isJ(+sys)) events.push({ a: "first_visit" }); }
     events.push({ a: "arrive", system: +sys });
   } else if (op.kind === "static") {
@@ -305,4 +310,55 @@ export function rankOf(pts) {
 export function leaderboard(ledger) {
   return Object.entries(ledger).map(([id, r]) => ({ id, name: r.name, pts: r.pts, rank: rankOf(r.pts).name,
     badges: Object.keys(r.badges).length })).sort((a, b) => b.pts - a.pts);
+}
+
+/* ---- survey batches -------------------------------------------------------
+   The next N known-space systems to probe-scan, in visiting order: nearest
+   first, then nearest to that one (gate jumps), from systems nobody has
+   probe-scanned within freshHours and nobody else has claimed.
+   gates: {id: [ids]}; secOf(id) -> security; kb: knowledge base records */
+export const BATCH_FRESH_H = 24;
+export function surveyBatch({ from, gates, secOf, kb, now, me, n = 5, highsecOnly = true,
+                              freshHours = BATCH_FRESH_H, maxJumps = 20 }) {
+  const ok = id => {
+    const sec = secOf(id);
+    if (sec == null || (highsecOnly && sec < 0.45)) return false;
+    const r = kb[id] || kb[String(id)];
+    if (r?.probedAt && now - r.probedAt < freshHours * HOUR) return false;
+    if (r?.claim && r.claim.until > now && r.claim.by !== me) return false;
+    return true;
+  };
+  const bfs = start => {
+    const dist = new Map([[start, 0]]), prev = new Map(), q = [start];
+    for (let i = 0; i < q.length; i++) {
+      const v = q[i];
+      if (dist.get(v) >= maxJumps) continue;
+      for (const w of gates[String(v)] || []) {
+        if (dist.has(w)) continue;
+        if (highsecOnly && (secOf(w) ?? 0) < 0.45) continue;
+        dist.set(w, dist.get(v) + 1); prev.set(w, v); q.push(w);
+      }
+    }
+    return { dist, prev };
+  };
+  const pathTo = (t, to) => { const p = [to]; while (t.prev.has(p[0])) p.unshift(t.prev.get(p[0])); return p; };
+  const picked = [], legs = [];
+  const taken = new Set();
+  let cur = from;
+  if (ok(cur)) { picked.push(cur); taken.add(cur); legs.push([cur]); }
+  while (picked.length < n) {
+    const t = bfs(cur);
+    let best = null;
+    for (const [id, d] of t.dist) {
+      if (taken.has(id) || id === cur || !ok(id)) continue;
+      const age = kb[id]?.probedAt ? now - kb[id].probedAt : Infinity;      // never scanned beats stale
+      if (!best || d < best.d || (d === best.d && age > best.age)) best = { id, d, age };
+    }
+    if (!best) break;
+    picked.push(best.id); taken.add(best.id);
+    legs.push(pathTo(t, best.id).slice(1));
+    cur = best.id;
+  }
+  const route = legs.flat();
+  return { systems: picked, route, jumps: route.length - (picked[0] === from ? 1 : 0) };
 }

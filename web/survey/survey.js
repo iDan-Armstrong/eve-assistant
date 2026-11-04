@@ -33,7 +33,7 @@ const store = {
 const K_CHAIN = "atlas.survey.chain", K_ROOT = "atlas.survey.root", K_HOME = "atlas.survey.home",
       K_SHARE = "atlas.survey.share", K_TRACK = "atlas.survey.track", K_KB = "atlas.survey.kb",
       K_SCORE = "atlas.survey.score", K_VIEW = "atlas.survey.view", K_HERE = "atlas.survey.here",
-      K_PIN = "atlas.survey.pin";
+      K_PIN = "atlas.survey.pin", K_BATCH = "atlas.survey.batch";
 const CAPSULES = new Set([670, 33328]);
 const POLL_MS = 10e3, SYNC_MS = 15e3;
 const LINK_URL = "http://localhost:47321/events";
@@ -53,6 +53,7 @@ const S = {
   here: store.get(K_HERE, null),           // {system, by, at}: where the surveyor is
   pin: store.get(K_PIN, ""),               // character the view follows ("" = whoever jumps)
   auto: null,                              // in auto mode, the last character seen jumping
+  batch: store.get(K_BATCH, null),         // {systems, created, highsec, jspace}: current survey batch
   root: store.get(K_ROOT, null), sel: null,
   view: store.get(K_VIEW, "surveyor"),
   feed: [], alerted: new Set(), pendingInfo: null,
@@ -359,8 +360,9 @@ function routePaste(text, source) {
   if (r.kind === "sigs") {
     const known = S.chain.sigs[sys] || {};
     const fresh = r.sigs.filter(s => !known[s.id]).map(s => s.id);
-    edit({ kind: "sigs", system: sys, parsed: r.sigs, replace: true });
     S.lastProbe = { system: sys, at: Date.now(), fresh };
+    edit({ kind: "sigs", system: sys, parsed: r.sigs, replace: true });
+    kbEdit({ kind: "probe", system: sys });
     feed(`Probe scan in ${where}: ${pl(r.sigs.length, "signature")}${fresh.length ? `, ${fresh.length} new (${fresh.join(", ")})` : ", nothing new"}`, "scan");
     if (fresh.length && Object.keys(known).length) chime();
   } else if (r.kind === "dscan") {
@@ -881,7 +883,8 @@ function renderSurveyor(force) {
     <div class="row" style="margin-top:6px">${C.isJ(id) ? `<span class="hint">Statics:</span> ${staticsHtml(id)}` : ""}</div>
     <div class="hint" style="margin-top:6px">${esc(probe)}</div>
     <div class="row" style="margin-top:8px"><button id="svChain">Show in chain</button>
-      <button id="svHomeBtn" title="Your way-home timer counts down to here">${S.home === id ? "This is home" : "Set as home"}</button></div>`;
+      <button id="svHomeBtn" title="Your way-home timer counts down to here">${S.home === id ? "This is home" : "Set as home"}</button></div>
+    <div id="svBatch" class="batch">${batchHtml(id)}</div>`;
   renderWho();
   $("#svWho").onchange = e => {
     S.pin = e.target.value;
@@ -893,12 +896,103 @@ function renderSurveyor(force) {
     } else feed("Following whoever jumps", "jump");
     render(true);
   };
+  wireBatch(id);
   $("#svChain").onclick = () => { setRoot(store.get(K_HOME, null) || id); S.sel = id; setView("chain"); };
   $("#svHomeBtn").onclick = () => { store.set(K_HOME, id); S.home = id; toast(`Home set: ${L.name}.`); render(true); };
   $("#svSigs").innerHTML = `<h3>Signatures</h3>${sigsHtml(id, false)}`;
   $("#svLinks").innerHTML = `<h3>Connections from here</h3>${linksHtml(id)}`;
   $("#svDscan").innerHTML = `<h3>Directional scans</h3>${dscanHtml(id)}`;
   for (const k of ["#svSigs", "#svLinks", "#svDscan"]) wirePanel($(k), id);
+}
+
+/* ---- survey batches: the next systems to probe-scan ----------------------------- */
+const BATCH_N = 5, CLAIM_H = 2;
+const secOf = id => (C.isJ(id) ? null : S.K.s[id]?.[1] ?? null);
+const scannedSince = (id, t) => (S.kb[id]?.probedAt || 0) >= t;
+function batchHtml(here) {
+  const b = S.batch;
+  const hs = b ? b.highsec : store.get("atlas.survey.batchHs", true);
+  if (!b) {
+    return `<div class="hint">Survey batch</div>
+      <div class="row"><button id="bNew" class="primary">Give me ${BATCH_N} systems to survey</button>
+      <label class="hint"><input type="checkbox" id="bHs"${hs ? " checked" : ""}> highsec only</label></div>`;
+  }
+  const done = b.systems.filter(id => scannedSince(id, b.created)).length;
+  const rows = b.systems.map((id, i) => {
+    const ok = scannedSince(id, b.created), L = label(id);
+    return `<li class="${ok ? "done" : ""}${id === here ? " here" : ""}">${ok ? "&#10003;" : i + 1}.
+      <span style="color:${L.tone}">${esc(L.name)}</span> <span class="hint">${esc(L.cls)}</span></li>`;
+  }).join("");
+  return `<div class="hint">Survey batch: ${done} of ${b.systems.length} done${b.jspace ? " (through your chain; no autopilot in J-space)" : ""}</div>
+    <ol class="blist">${rows}</ol>
+    <div class="row">${b.jspace ? "" : `<button id="bRoute" class="primary">Send route to autopilot</button>`}
+      <button id="bNew">${done === b.systems.length ? `Next ${BATCH_N}` : "New batch"}</button>
+      <button id="bDrop">Clear</button>
+      <label class="hint"><input type="checkbox" id="bHs"${hs ? " checked" : ""}> highsec only</label></div>
+    <div id="bMsg" class="hint"></div>`;
+}
+function wireBatch(here) {
+  const q = s2 => document.querySelector(`#svBatch ${s2}`);
+  if (q("#bHs")) q("#bHs").onchange = e => store.set("atlas.survey.batchHs", e.target.checked);
+  if (q("#bNew")) q("#bNew").onclick = () => newBatch(here, q("#bHs")?.checked ?? true);
+  if (q("#bDrop")) q("#bDrop").onclick = () => { releaseClaims(); S.batch = null; store.set(K_BATCH, null); render(true); };
+  if (q("#bRoute")) q("#bRoute").onclick = () => sendRoute(q("#bRoute"), q("#bMsg"));
+}
+function releaseClaims() {
+  if (!S.batch) return;
+  for (const id of S.batch.systems) if (!scannedSince(id, S.batch.created)) kbEdit({ kind: "claim", system: id, until: null });
+}
+function newBatch(here, highsec) {
+  releaseClaims();
+  const me = surveyor().name, now = Date.now();
+  let systems = [], jspace = false;
+  if (C.isJ(here)) {
+    /* in wormhole space: nearest systems through the mapped chain not scanned in a day */
+    jspace = true;
+    const adj = new Map();
+    for (const l of Object.values(S.chain.links)) {
+      for (const [x, y] of [[l.a, l.b], [l.b, l.a]]) { if (!adj.has(x)) adj.set(x, []); adj.get(x).push(y); }
+    }
+    const seen = new Set([here]), q = [here];
+    for (let i = 0; i < q.length && systems.length < BATCH_N; i++) {
+      const v = q[i];
+      const r = S.kb[v];
+      const fresh = r?.probedAt && now - r.probedAt < X.BATCH_FRESH_H * C.HOUR;
+      const claimed = r?.claim && r.claim.until > now && r.claim.by !== me;
+      if (!fresh && !claimed) systems.push(v);
+      for (const w of adj.get(v) || []) if (!seen.has(w)) { seen.add(w); q.push(w); }
+    }
+  } else {
+    systems = X.surveyBatch({ from: here, gates: S.K.g, secOf, kb: S.kb, now, me, n: BATCH_N, highsecOnly: highsec }).systems;
+  }
+  if (!systems.length) { toast(jspace ? "Every system in your chain was scanned in the last day. Find a new hole." : "No unscanned systems nearby with those settings."); return; }
+  S.batch = { systems, created: now, highsec, jspace };
+  store.set(K_BATCH, S.batch);
+  for (const id of systems) kbEdit({ kind: "claim", system: id, until: now + CLAIM_H * C.HOUR });
+  feed(`New survey batch: ${systems.map(nameOf).join(", ")}`, "jump");
+  render(true);
+}
+async function sendRoute(btn, msg) {
+  const b = S.batch;
+  const pilot = pilots().find(p => p.name === (S.pin || S.here?.by)) || pilots()[0];
+  if (!pilot) { msg.textContent = "Log in with EVE (top right) to send routes to your autopilot."; return; }
+  const stops = b.systems.filter(id => !scannedSince(id, b.created) && id !== S.here?.system);
+  if (!stops.length) { msg.textContent = "Nothing left to route to."; return; }
+  btn.disabled = true;
+  try {
+    for (let i = 0; i < stops.length; i++) {
+      btn.textContent = `Sending ${i + 1} of ${stops.length}...`;
+      await EveSSO.esi(pilot.id, `/ui/autopilot/waypoint?add_to_beginning=false&clear_other_waypoints=${i === 0}` +
+        `&destination_id=${stops[i]}`, { method: "POST" });
+    }
+    btn.textContent = "Route sent";
+    msg.textContent = `${stops.length} waypoints set for ${pilot.name}. Probe-scan each system when you arrive.`;
+    feed(`Survey route sent to ${pilot.name}'s autopilot: ${stops.map(nameOf).join(", ")}`, "jump");
+  } catch (e) {
+    btn.textContent = "Send route to autopilot";
+    msg.textContent = `Could not set the route (${e.message}). Is ${pilot.name} logged in to the game?`;
+  }
+  btn.disabled = false;
 }
 
 /* the way-home countdown and its alarm, every second */

@@ -45,7 +45,7 @@ import WORMHOLES from "../web/data/jspace/wormholes.json";
 import JSYSTEMS from "../web/data/jspace/systems.json";
 import CLASSES from "../web/data/jspace/classes.json";
 
-const KB_KINDS = new Set(["visit", "static", "dscan"]);
+const KB_KINDS = new Set(["visit", "static", "dscan", "probe", "claim"]);
 const classOf = id => { const j = JSYSTEMS[id]; return j ? CLASSES[j[1]] || null : null; };
 const MAX_OPS = 200;
 const MAX_LINKS = 3000;

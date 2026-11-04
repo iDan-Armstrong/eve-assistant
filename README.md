@@ -417,6 +417,14 @@ Info sets a hole's age, mass and size.
   carries the type over, connections with their timers, directional scan history and every
   structure ever seen in the system, and an activity feed.
 
+**Survey batches.** "Give me 5 systems to survey" picks the nearest known-space
+systems nobody has probe-scanned in the last day, in visiting order (nearest
+first, then nearest to that), highsec only unless unticked, and sends them to
+the pilot's autopilot as waypoints. Each system in a batch is claimed for two
+hours so corp surveyors are not sent to the same place, and ticks off when its
+probe scan arrives. In wormhole space the autopilot cannot route, so a batch
+there lists the nearest unscanned systems through the mapped chain.
+
 **Points and badges.** Surveying earns points: 10 for a wormhole found by
 flying it, 25 for the corp's first survey of a J-system, 2 per new signature,
 5 for naming a hole's type, 3 for a Show Info check, 15 for the first record of
