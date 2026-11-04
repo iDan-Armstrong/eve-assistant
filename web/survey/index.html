@@ -43,6 +43,41 @@
   .status.err { color: var(--bad); }
 
   main { display: grid; grid-template-columns: 1fr 430px; min-height: 0; }
+  main[hidden] { display: none; }
+  button.chip { background: transparent; cursor: pointer; }
+  .chip.ok { border-color: var(--ok); color: var(--ok); }
+  .views { display: inline-flex; border: 1px solid var(--panel-edge); border-radius: 6px; overflow: hidden; }
+  .views button { border: 0; border-radius: 0; background: transparent; }
+  .views button[aria-pressed="true"] { background: #15203a; color: #e8f1ff; }
+
+  /* surveyor view: built for a second screen */
+  .sv { grid-template-columns: 1.15fr 1fr 0.9fr; grid-template-rows: auto minmax(0, 1fr) 190px; gap: 10px; padding: 10px; overflow: hidden; }
+  .card { background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 8px; padding: 12px; overflow: auto; min-height: 0; }
+  .card h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+  .card .big { font-size: 34px; font-weight: 600; line-height: 1.15; margin: 2px 0 4px; }
+  .card .big .cls { font-size: 20px; font-weight: 400; }
+  .card.ok { border-color: #1f5a35; } .card.warn { border-color: var(--warn); } .card.bad { border-color: var(--bad); animation: pulse 1s infinite alternate; }
+  .card.ok .countdown { color: var(--ok); } .card.warn .countdown { color: var(--warn); } .card.bad .countdown { color: var(--bad); }
+  .big.ok { color: var(--ok); }
+  .countdown { font-variant-numeric: tabular-nums; font-size: 44px !important; }
+  @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(224,82,79,.0); } to { box-shadow: 0 0 18px 2px rgba(224,82,79,.55); } }
+  #svFeed { grid-column: 1 / -1; }
+  ul.feed { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  ul.feed li { padding: 2px 0; border-bottom: 1px solid #111a2a; }
+  ul.feed li.pts { color: var(--ok); } ul.feed li.badge { color: #ffd34d; } ul.feed li.warn { color: var(--warn); }
+  ul.feed li.bad { color: var(--bad); font-weight: 600; } ul.feed li.jump { color: var(--focus); }
+  ul.tight { margin: 4px 0 8px; padding-left: 18px; font-size: 13px; }
+  .bar { height: 6px; background: #111a2a; border-radius: 3px; margin: 6px 0 10px; }
+  .bar span { display: block; height: 100%; background: var(--ink-dim); border-radius: 3px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .badge { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 10px; font-weight: 600;
+           border: 1px dashed var(--panel-edge); color: #3a4560; }
+  .badge.got { border: 2px solid #ffd34d; color: #ffd34d; background: #2a2410; }
+  tr.fresh td { color: #ffd34d; }
+  .st { font-size: 11px; padding: 0 5px; border-radius: 6px; border: 1px solid currentColor; }
+  .st-unscanned { color: var(--warn); } .st-partial { color: var(--ink-dim); } .st-scanned { color: var(--ok); }
+  .link.picked { border-color: var(--focus); }
+  .modal { max-height: 85vh; overflow: auto; min-width: 380px; }
   #chainWrap { position: relative; overflow: auto; min-height: 0; }
   #chainBar { position: sticky; top: 0; left: 0; z-index: 2; display: flex; gap: 8px; align-items: center;
               padding: 8px 12px; background: rgba(6,10,18,.92); border-bottom: 1px solid var(--panel-edge); flex-wrap: wrap; }
@@ -83,6 +118,10 @@
   .node.root rect { stroke-dasharray: 4 3; }
   .node { cursor: pointer; }
 
+  @media (max-width: 1100px) {
+    .sv { grid-template-columns: 1fr 1fr; grid-template-rows: auto; overflow: auto; }
+    #svFeed { grid-column: 1 / -1; }
+  }
   @media (max-width: 860px) {
     main { grid-template-columns: 1fr; grid-template-rows: 55vh auto; overflow: auto; }
     body { overflow: auto; }
@@ -94,13 +133,25 @@
 <header>
   <div class="wordmark">J-Space Survey<small>wormhole chain mapper for the New Eden Atlas</small></div>
   <a href="../">Back to Atlas</a>
+  <nav class="views"><button data-view="surveyor" aria-pressed="true">Surveyor</button><button data-view="chain" aria-pressed="false">Chain</button></nav>
   <span class="spacer"></span>
+  <button id="linkChip" class="chip off">Survey Link off</button>
+  <button id="scoreChip" class="chip" title="Your survey rank and points">Cadet · 0 pts</button>
   <span id="pilots"></span>
   <label class="chip" id="shareWrap" hidden><input type="checkbox" id="share"> share map with corp</label>
   <button id="login" class="primary">Log in with EVE</button>
   <span id="sync" class="status"></span>
 </header>
-<main>
+<main id="surveyorView" class="sv">
+  <section id="svSystem" class="card"></section>
+  <section id="svHome" class="card"></section>
+  <section id="svScore" class="card"></section>
+  <section id="svSigs" class="card"></section>
+  <section id="svLinks" class="card"></section>
+  <section id="svDscan" class="card"></section>
+  <section id="svFeed" class="card"></section>
+</main>
+<main id="chainView" hidden>
   <section id="chainWrap">
     <div id="chainBar">
       <span class="hint">Root</span>

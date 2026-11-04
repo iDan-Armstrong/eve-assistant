@@ -365,45 +365,86 @@ your own pilots and assets, and the corp's reserve sightings.
 Wormhole space has no stargates, no local chat until someone speaks, and
 connections that open and close every day, so no public feed can map it.
 [J-Space Survey](https://idan-armstrong.github.io/eve-assistant/survey/) is a
-companion page for mapping it by hand while you fly, and it feeds the Atlas.
-While it is in development the page asks testers for a password (a soft
-gate: only a hash of it is in the code).
+companion page for mapping it while you fly, built for a second screen, and
+it feeds the Atlas. While it is in development the page asks testers for a
+password (a soft gate: only a hash of it is in the code). It needs Chrome or
+Edge.
 
-- **Jumps draw themselves.** Signed-in pilots with tracking on are polled
-  every 10 seconds while the page is open. A move into, out of or inside
-  wormhole space becomes a link at once. A move between two known-space
-  systems with no stargate between them is offered as an unconfirmed link,
-  since it could also be a cyno jump, a jump clone or a filament.
-- **Signatures:** select all in the probe scanner, copy, paste. Each system
-  keeps its own table with first-seen times; a full paste removes
-  signatures that are gone.
-- **Holes:** type the wormhole code (B274, K162 and so on) and its target
-  class, lifetime, total mass and per-jump mass limit come from the SDE.
-  Pasting a hole's Show Info text sets its age, mass state and size from
-  CCP's descriptive phrases. Links expire on the type's lifetime, sooner once
-  marked as decaying or end of life.
-- **Chain view:** a tree from any root (where you are, a saved home, or any
-  system), colored by class, with line width for hole size, color for mass
-  state and a dashed line for unconfirmed links. Each system has class,
-  effect, planets and moons, connections, signatures and notes.
-- **Sharing:** the map stays in your browser unless you tick "share map with
-  corp". The relay then keeps one copy per corporation in the same Durable
-  Object as corp-mate positions, readable only by verified members of that
-  corporation. Every record carries an edit time and deletions leave a
-  short-lived tombstone, so copies from several pilots merge the same way on
-  every client and on the relay (`web/survey/chain_core.mjs`, shared by both
-  and covered by `node --test`).
-- **On the Atlas:** the **J-Space** button opens the survey, and the
-  "J-Space Survey chain" overlay rings known-space systems with a hole into
-  wormhole space and draws links between two known-space systems.
+**How it collects data.** CCP does not allow tools that read the game
+client's memory or send it input, so the survey uses three allowed channels:
 
-The survey uses the Atlas login: CCP returns to the Atlas page, which hands
-the pilot straight back to the survey. Reference data comes from the SDE:
-`tools/build_jspace.py` writes `web/data/jspace/systems.json` (2,604
-wormhole systems with class and effect) and `wormholes.json` (every wormhole
-type), refreshed by the manual "J-space reference data" workflow;
-`tools/build_kspace_index.py` writes a 0.4 MB known-space name and gate index
-so the page does not load the full basemap.
+- **Survey Link**, a small PowerShell helper for Windows
+  (`web/survey/link/`, double-click `Start-SurveyLink.bat`, nothing to
+  install). It watches the clipboard and passes on only copies shaped like the
+  probe scanner, the directional scanner or a wormhole's Show Info; anything
+  else on the clipboard never leaves it. It also reads the Local chat log EVE
+  writes in `Documents\EVE\logs\Chatlogs`, so a jump reaches the survey about
+  a second after it happens. It serves only `http://localhost:47321`, answers
+  only the survey page's origin, keeps copies in memory for ten minutes and
+  writes nothing.
+- **CCP's location API** every 10 seconds for signed-in pilots, as a backup
+  and for pilots without the helper.
+- **Paste anywhere** on the page (Ctrl+V outside a text box) when the helper
+  is not running.
+
+Every copy goes through one router (`classifyPaste`): probe scans update the
+system's signatures and flag new ones, directional scans are summarized
+(ships by type and class, structures, holes) and kept as history, and Show
+Info sets a hole's age, mass and size.
+
+**Surveyor view (second screen).**
+
+- Current system, large: class, effect, statics and the time since your last
+  probe scan.
+- **Way home:** a minimum-life countdown to your saved home system. Show Info
+  gives each hole a band read at a known time ("fresh" at least about 24
+  hours, "beginning to decay" 4 to 24 hours, "end of life" under 4 hours), so
+  the survey knows the time each hole is guaranteed open and the latest it can
+  last. The countdown is the weakest guarantee along the path home; holes with
+  no Show Info read and holes at critical mass are called out. Alarms sound at
+  30 minutes, 10 minutes and zero.
+- Signature checklist (unscanned, partial, scanned, and which hole each one
+  is), connections with their timers, directional scan history and every
+  structure ever seen in the system, and an activity feed.
+
+**Points and badges.** Surveying earns points: 10 for a wormhole found by
+flying it, 25 for the corp's first survey of a J-system, 2 per new signature,
+5 for naming a hole's type, 3 for a Show Info check, 15 for the first record of
+a static, 3 for a directional scan and 10 per new structure, with daily caps on
+the repeatable ones. Ranks run from Cadet to Survey Master, and 17 badges
+cover milestones (First Light, Cartographer I to III, Deep Diver, Full
+Spectrum, Night Shift, Seven Days Out and more). With sharing on, the relay
+awards points to the verified pilot only, so the corp board cannot be faked
+from a browser.
+
+**Chain view.** A tree from any root, colored by class, with line width for
+hole size, color for mass state and the guaranteed life on each link. Each
+system has class, effect, statics, connections, signatures, directional
+scans and notes.
+
+**Where the data lives.**
+
+| Data | Where | Who sees it | How long |
+| --- | --- | --- | --- |
+| Your working copy | this browser | you | until cleared |
+| Live chain (holes, signatures, notes) | Atlas relay, one Durable Object per corporation | verified corp members | expires with the holes |
+| Knowledge base (statics, structures, directional scan history, first visits) | same Durable Object, one record per system | verified corp members | kept; scans trimmed to the last 40 or 30 days |
+| Points and badges | same Durable Object | corp board | kept |
+
+Nothing is shared until a pilot ticks "share map with corp" (an unticked
+consent box). Merging, expiry, parsing, life bounds and scoring live in
+`web/survey/chain_core.mjs` and `web/survey/survey_core.mjs`, shared by the
+page and the relay and covered by `node --test`.
+
+**On the Atlas:** the **J-Space** button opens the survey, and the "J-Space
+Survey chain" overlay rings known-space systems with a hole into wormhole
+space and draws links between two known-space systems.
+
+Reference data comes from the SDE: `tools/build_jspace.py` writes 2,604
+wormhole systems with class and effect, every wormhole type, and the ship,
+structure, starbase, deployable, drone and fighter types that appear on
+directional scan, refreshed by the manual "J-space reference data" workflow;
+`tools/build_kspace_index.py` writes a 0.4 MB known-space name and gate index.
 
 ### Live data
 

@@ -2,16 +2,22 @@
 
    - Logins are the Atlas's own (shared localStorage on this origin); CCP
      returns to the Atlas page, which hands the pilot back here.
-   - Tracked pilots are polled every 10 seconds while this page is open. A
-     move between systems with no stargate between them becomes a link: in
-     wormhole space at once, between two known-space systems only after the
-     pilot confirms it (it could be a cyno, a clone jump or a filament).
-   - The chain lives in this browser. With "share map with corp" ticked it
-     is merged with the corp's copy on the Atlas relay, where only verified
-     members of the same corporation can read it.
-   - Rules for merging, expiry and parsing are in chain_core.mjs, shared with
-     the relay and covered by tests. */
+   - Where the surveyor is comes from three places: Survey Link (the helper
+     reads Local chat logs, about a second after a jump), CCP's location API
+     every 10 seconds, and the Root box. A move with no stargate between the
+     systems becomes a link: in wormhole space at once, between two known-space
+     systems only after the pilot confirms it.
+   - Copies from EVE arrive through Survey Link (no click needed) or a paste
+     anywhere on the page, and are routed by what they are: probe scan,
+     directional scan, wormhole Show Info.
+   - The chain, the knowledge base and points live in this browser. With
+     "share map with corp" ticked they merge with the corp's copy on the Atlas
+     relay, readable only by verified members of the same corporation, and the
+     relay awards points to the verified pilot.
+   - Rules for merging, expiry, parsing, life bounds and points live in
+     chain_core.mjs and survey_core.mjs, shared with the relay and tested. */
 import * as C from "./chain_core.mjs";
+import * as X from "./survey_core.mjs";
 
 /* In development: the page asks for a password first. A soft gate on a
    public site, not security; only a hash of the password is in the code. */
@@ -22,26 +28,36 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* full or private mode */ } },
 };
 const K_CHAIN = "atlas.survey.chain", K_ROOT = "atlas.survey.root", K_HOME = "atlas.survey.home",
-      K_SHARE = "atlas.survey.share", K_TRACK = "atlas.survey.track";
+      K_SHARE = "atlas.survey.share", K_TRACK = "atlas.survey.track", K_KB = "atlas.survey.kb",
+      K_SCORE = "atlas.survey.score", K_VIEW = "atlas.survey.view", K_HERE = "atlas.survey.here";
 const CAPSULES = new Set([670, 33328]);
 const POLL_MS = 10e3, SYNC_MS = 15e3;
+const LINK_URL = "http://localhost:47321/events";
+const ALARMS = [[30 * 60e3, "30 minutes"], [10 * 60e3, "10 minutes"], [0, "now"]];
 
 const S = {
-  J: {}, K: { s: {}, g: {} }, WH: {}, CL: {},
+  J: {}, K: { s: {}, g: {} }, WH: {}, CL: {}, ST: {}, typeByName: new Map(),
   byName: new Map(),
   chain: C.prune(store.get(K_CHAIN, C.emptyChain()), Date.now()),
+  kb: store.get(K_KB, {}),
+  ledger: store.get(K_SCORE, {}),
+  board: [], me: null,
   pending: [], relay: "", corp: null,
   track: store.get(K_TRACK, {}),          // pilotId -> bool (default on)
   where: {},                               // pilotId -> {system, ship, docked, online, name}
+  logWhere: {},                            // character name -> system id, from Survey Link
+  here: store.get(K_HERE, null),           // {system, by, at}: where the surveyor is
   root: store.get(K_ROOT, null), sel: null,
+  view: store.get(K_VIEW, "surveyor"),
+  feed: [], alerted: new Set(), pendingInfo: null,
+  link: { ok: false, seq: 0, next: 0, err: "", logs: false },
   syncing: false, lastSync: null, syncErr: "",
 };
 
 /* ---- reference data ----------------------------------------------------- */
-const classOf = id => (C.isJ(id) ? S.J[id]?.[1] : null);
 function label(id) {
   if (C.isJ(id)) {
     const j = S.J[id];
@@ -53,43 +69,115 @@ function label(id) {
   const sec = k[1], cls = sec >= 0.45 ? "HS" : sec > 0 ? "LS" : "NS";
   return { name: k[0], cls: `${cls} ${sec.toFixed(1)}`, sub: k[2], tone: `var(--${cls.toLowerCase()})` };
 }
-function classTone(c) {
-  return c >= 1 && c <= 6 ? `var(--c${c})` : "var(--sp)";
-}
+const classTone = c => (c >= 1 && c <= 6 ? `var(--c${c})` : "var(--sp)");
 const nameOf = id => label(id).name;
+const classLabelOf = id => { const j = S.J[id]; return j ? S.CL[j[1]] || null : null; };
 
 async function loadData() {
   const get = p => fetch(p).then(r => { if (!r.ok) throw new Error(`${p}: ${r.status}`); return r.json(); });
-  [S.J, S.K, S.WH, S.CL] = await Promise.all([get("../data/jspace/systems.json"), get("../data/jspace/kspace.json"),
-    get("../data/jspace/wormholes.json"), get("../data/jspace/classes.json")]);
+  [S.J, S.K, S.WH, S.CL, S.ST] = await Promise.all([get("../data/jspace/systems.json"), get("../data/jspace/kspace.json"),
+    get("../data/jspace/wormholes.json"), get("../data/jspace/classes.json"), get("../data/jspace/scan_types.json")]);
   for (const [id, v] of Object.entries(S.J)) S.byName.set(v[0].toLowerCase(), +id);
   for (const [id, v] of Object.entries(S.K.s)) S.byName.set(v[0].toLowerCase(), +id);
+  for (const [id, v] of Object.entries(S.ST)) S.typeByName.set(v[0].toLowerCase(), +id);
 }
 
-/* ---- chain edits ---------------------------------------------------------- */
+/* ---- who is surveying ------------------------------------------------------- */
+const pilots = () => (window.EveSSO && EveSSO.configured() ? EveSSO.pilots() : []);
+const tracked = id => S.track[id] !== false;
+function surveyor() {
+  const p = pilots().find(x => tracked(x.id)) || pilots()[0];
+  return p ? { id: String(p.id), name: p.name } : { id: "local", name: S.here?.by || "You" };
+}
+
+/* ---- edits: chain, knowledge base, points ------------------------------------ */
+const sharing = () => !!(S.relay && store.get(K_SHARE, false) && pilots().length);
+
 function edit(op) {
   op.at = op.at ?? Date.now();
+  const events = X.chainEvents(S.chain, op);
   C.applyOp(S.chain, op, S.WH);
-  if (sharing()) S.pending.push(op);
   saveLocal();
+  if (sharing()) { S.pending.push(op); sync(); } else localAward(events);
   render(true);
-  if (sharing()) sync();
+}
+function kbEdit(op) {
+  op.at = op.at ?? Date.now();
+  op.by = op.by || surveyor().name;
+  const { events } = X.applyKbOp(S.kb, op, op.at);
+  saveKb();
+  if (sharing()) { S.pending.push(op); sync(); } else localAward(events);
+  render(true);
 }
 function saveLocal() { store.set(K_CHAIN, S.chain); }
+function saveKb() {
+  /* browser storage is a few MB: trim the oldest d-scans if it ever gets big */
+  let txt = JSON.stringify(S.kb);
+  if (txt.length > 2e6) {
+    for (const rec of Object.values(S.kb)) rec.dscans = (rec.dscans || []).slice(0, 10);
+    txt = JSON.stringify(S.kb);
+  }
+  try { localStorage.setItem(K_KB, txt); } catch { /* full */ }
+}
+function localAward(events) {
+  if (!events.length) return;
+  const me = surveyor();
+  const res = X.award(S.ledger, me.id, me.name, events, Date.now(), { classOf: classLabelOf });
+  store.set(K_SCORE, S.ledger);
+  S.me = S.ledger[me.id];
+  S.board = X.leaderboard(S.ledger);
+  announce(res);
+}
+function announce(res) {
+  if (!res) return;
+  if (res.points > 0) feed(`+${res.points} survey points`, "pts");
+  for (const id of res.badges || []) {
+    const b = X.BADGES.find(x => x.id === id);
+    if (!b) continue;
+    feed(`Badge earned: ${b.name} (${b.desc})`, "badge");
+    toast(`Badge earned: ${b.name}. ${b.desc}.`, 9000);
+    chime();
+  }
+  renderScore();
+}
 
 function addLink(a, b, extra = {}) {
   const key = C.linkKey(a, b);
-  if (S.chain.links[key]) {
-    if (extra.confirmed && !S.chain.links[key].confirmed) edit({ kind: "link", key, rec: { confirmed: true } });
+  const old = S.chain.links[key];
+  if (old) {
+    if (extra.confirmed && !old.confirmed) edit({ kind: "link", key, rec: { confirmed: true } });
     return;
   }
   edit(C.newLink(a, b, Date.now(), "", extra));
 }
 
-/* ---- pilots: login and tracking ---------------------------------------------- */
-const pilots = () => (window.EveSSO && EveSSO.configured() ? EveSSO.pilots() : []);
-const tracked = id => S.track[id] !== false;
+/* ---- where the surveyor is ---------------------------------------------------- */
+function setHere(system, by) {
+  const moved = S.here?.system !== system;
+  S.here = { system, by: by || S.here?.by || "", at: Date.now() };
+  store.set(K_HERE, S.here);
+  if (!moved) return;
+  if (C.isJ(system)) kbEdit({ kind: "visit", system, by });
+  if (!S.root || !inChain(S.root)) setRoot(system);
+  S.sel = null;
+  fetchKb([system]);
+  render(true);
+}
+const inChain = id => Object.values(S.chain.links).some(l => l.a === id || l.b === id);
 
+function onMove(who, from, to, opts) {
+  const kind = C.classifyMove(from, to, S.K.g, opts);
+  if (kind === "wormhole") {
+    addLink(from, to, { confirmed: true, source: "jump" });
+    feed(`${who}: ${nameOf(from)} to ${nameOf(to)}, wormhole added to the chain`, "jump");
+  } else if (kind === "unsure") {
+    addLink(from, to, { confirmed: false, source: "jump" });
+    feed(`${who}: ${nameOf(from)} to ${nameOf(to)} with no gate between them. Confirm it if it was a wormhole.`, "warn");
+  }
+  setHere(to, who);
+}
+
+/* CCP location API, every 10 seconds */
 async function poll() {
   for (const p of pilots()) {
     if (!tracked(p.id)) continue;
@@ -102,12 +190,14 @@ async function poll() {
       if (!w.online && w.system) { S.where[p.id] = w; continue; }
       const [loc, ship] = await Promise.all([EveSSO.esi(p.id, `/characters/${p.id}/location`),
                                              EveSSO.esi(p.id, `/characters/${p.id}/ship`)]);
-      const prev = w.system, now = loc.solar_system_id;
+      const prev = w.system ?? S.logWhere[p.name], now = loc.solar_system_id;
       const docked = !!(loc.station_id || loc.structure_id);
       const becameCapsule = CAPSULES.has(ship.ship_type_id) && w.ship && !CAPSULES.has(w.ship);
-      if (prev && now !== prev) onMove(p, prev, now, { becameCapsule, dockedOnArrival: docked });
       Object.assign(w, { system: now, ship: ship.ship_type_id, docked, name: p.name, err: "" });
       S.where[p.id] = w;
+      S.logWhere[p.name] = now;
+      if (prev && now !== prev) onMove(p.name, prev, now, { becameCapsule, dockedOnArrival: docked });
+      else if (!S.here || S.here.by === p.name || !S.link.ok) { if (S.here?.system !== now) setHere(now, p.name); }
     } catch (e) {
       S.where[p.id] = { ...(S.where[p.id] || { name: p.name }), err: e.message };
     }
@@ -116,39 +206,129 @@ async function poll() {
   render();
 }
 
-function onMove(p, from, to, opts) {
-  const kind = C.classifyMove(from, to, S.K.g, opts);
-  if (kind === "wormhole") {
-    addLink(from, to, { confirmed: true });
-    toast(`${p.name}: ${nameOf(from)} to ${nameOf(to)} added to the chain.`);
-  } else if (kind === "unsure") {
-    addLink(from, to, { confirmed: false });
-    toast(`${p.name} moved ${nameOf(from)} to ${nameOf(to)} with no gate between them. ` +
-          `If it was a wormhole, confirm it in the system panel.`);
+/* ---- Survey Link: the clipboard and chat-log helper on this computer --------- */
+async function linkPoll() {
+  if (S.link.busy || Date.now() < S.link.next) return;
+  S.link.busy = true;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 1500);
+  try {
+    const r = await fetch(`${LINK_URL}?since=${S.link.seq}`, { signal: ctl.signal, cache: "no-store" });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.status);
+    if (!S.link.ok) feed("Survey Link connected: copies from EVE now arrive here on their own", "link");
+    S.link.ok = true; S.link.err = ""; S.link.logs = !!body.logs;
+    const items = [].concat(body.items || []);
+    if (body.seq < S.link.seq) S.link.seq = 0;               // helper restarted
+    for (const it of items) {
+      if (it.seq <= S.link.seq) continue;
+      S.link.seq = it.seq;
+      if (it.kind === "paste") routePaste(it.text, "Survey Link");
+      else if (it.kind === "system") onLogSystem(it);
+    }
+    S.link.next = Date.now() + 700;
+  } catch (e) {
+    if (S.link.ok) feed("Survey Link disconnected", "warn");
+    S.link.ok = false; S.link.err = e.name === "AbortError" ? "no answer" : e.message;
+    S.link.next = Date.now() + 5000;
+  } finally {
+    clearTimeout(t);
+    S.link.busy = false;
+    renderLinkChip();
   }
-  if (!S.root || !S.chain.links || !inChain(S.root)) setRoot(to);
 }
-const inChain = id => Object.values(S.chain.links).some(l => l.a === id || l.b === id);
+function onLogSystem(it) {
+  const id = lookup(it.system);
+  if (!id) return;
+  const entry = Object.values(S.where).find(w => w.name === it.char);
+  const prev = entry?.system ?? S.logWhere[it.char];
+  S.logWhere[it.char] = id;
+  if (entry) entry.system = id;
+  if (!it.initial && prev && prev !== id) onMove(it.char, prev, id, {});
+  else if (S.here?.system !== id) setHere(id, it.char);
+}
 
-/* ---- corp sharing via the Atlas relay --------------------------------------- */
-const sharing = () => !!(S.relay && store.get(K_SHARE, false) && pilots().length);
+/* ---- pastes ------------------------------------------------------------------- */
+function routePaste(text, source) {
+  const r = X.classifyPaste(text);
+  if (!r) {
+    if (source === "paste") toast("That paste is not a probe scan, directional scan or wormhole Show Info.");
+    return;
+  }
+  const sys = S.here?.system ?? S.sel ?? S.root;
+  if (!sys) { toast("Where are you? Log in with tracking on, start Survey Link, or type a system in the Root box."); return; }
+  const where = nameOf(sys);
+  if (r.kind === "sigs") {
+    const known = S.chain.sigs[sys] || {};
+    const fresh = r.sigs.filter(s => !known[s.id]).map(s => s.id);
+    edit({ kind: "sigs", system: sys, parsed: r.sigs, replace: true });
+    S.lastProbe = { system: sys, at: Date.now(), fresh };
+    feed(`Probe scan in ${where}: ${pl(r.sigs.length, "signature")}${fresh.length ? `, ${fresh.length} new (${fresh.join(", ")})` : ", nothing new"}`, "scan");
+    if (fresh.length && Object.keys(known).length) chime();
+  } else if (r.kind === "dscan") {
+    const sum = X.summarizeDscan(r.rows, S.ST, S.typeByName);
+    sum.ships = Object.fromEntries(Object.entries(sum.ships).sort((a, b) => b[1] - a[1]).slice(0, 20));
+    sum.structures = sum.structures.slice(0, 30);
+    kbEdit({ kind: "dscan", system: sys, sum });
+    feed(`D-scan in ${where}: ${dscanLine(sum)}`, sum.cats.S ? "warn" : "scan");
+  } else if (r.kind === "showinfo") {
+    const here = Object.entries(S.chain.links).filter(([, l]) => l.a === sys || l.b === sys);
+    const target = S.selLink && S.chain.links[S.selLink] ? S.selLink : here.length === 1 ? here[0][0] : null;
+    if (target) applyInfo(target, r.info);
+    else {
+      S.pendingInfo = r.info;
+      feed(`Show Info read (${infoText(r.info)}). Pick which hole it was in Connections.`, "warn");
+      toast("Show Info read. Click the hole it belongs to in Connections, then use 'Apply Show Info'.");
+    }
+  }
+}
+function infoText(info) {
+  const life = { fresh: "fresh", decay: "under a day", eol: "end of life" }[info.life];
+  const mass = { stable: "mass stable", destab: "mass reduced", crit: "mass critical" }[info.mass];
+  return [life, mass, info.size && `size ${info.size}`, info.dest && `leads to ${info.dest}`].filter(Boolean).join(", ");
+}
+function applyInfo(key, info) {
+  const rec = {};
+  if (info.size) rec.size = info.size;
+  if (info.mass) rec.mass = info.mass;
+  if (info.life) { rec.life = info.life; rec.lifeAt = Date.now(); }
+  edit({ kind: "link", key, rec });
+  const l = S.chain.links[key];
+  feed(`Show Info applied to ${nameOf(l.a)} - ${nameOf(l.b)}: ${infoText(info)}`, "scan");
+  S.pendingInfo = null;
+}
+const pl = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+function dscanLine(sum) {
+  const ships = Object.entries(sum.ships || {}).slice(0, 4).map(([t, n]) => `${n} ${t}`).join(", ");
+  return pl(sum.total, "object") + (sum.cats?.S ? `, ${pl(sum.cats.S, "ship")} (${ships})` : ", no ships") +
+         (sum.structures?.length ? `, ${pl(sum.structures.length, "structure")}` : "") + (sum.holes ? `, ${pl(sum.holes, "hole")}` : "");
+}
+
+/* ---- corp sharing via the Atlas relay ------------------------------------------ */
+async function relayPost(path, extra) {
+  const p = pilots()[0];
+  const r = await fetch(`${S.relay}${path}`, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: await EveSSO.token(p.id), ...extra }) });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error || r.status);
+  return body;
+}
 async function sync() {
   if (!sharing() || S.syncing) return;
   S.syncing = true;
   const sent = S.pending.splice(0);
   try {
-    const p = pilots()[0];
-    const r = await fetch(`${S.relay}/chain${sent.length ? "/ops" : ""}`, { method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: await EveSSO.token(p.id), ops: sent }) });
-    const body = await r.json();
-    if (!r.ok) throw new Error(body.error || r.status);
+    const body = await relayPost(`/chain${sent.length ? "/ops" : ""}`, { ops: sent });
     S.corp = body.corporation;
-    /* the corp copy is the base; edits made while this request was out go back on top */
     S.chain = body.chain;
-    for (const op of S.pending) C.applyOp(S.chain, op, S.WH);
+    for (const op of S.pending) if (!["visit", "static", "dscan"].includes(op.kind)) C.applyOp(S.chain, op, S.WH);
     C.prune(S.chain, Date.now());
     saveLocal();
+    for (const [sys, rec] of Object.entries(body.kb || {})) S.kb[sys] = rec;
+    if (body.kb && Object.keys(body.kb).length) saveKb();
+    S.board = body.board || [];
+    S.me = body.me || null;
+    announce(body.awards);
     S.lastSync = new Date();
     S.syncErr = "";
   } catch (e) {
@@ -157,24 +337,30 @@ async function sync() {
   } finally {
     S.syncing = false;
     renderStatus();
+    renderScore();
     render();
   }
 }
+async function fetchKb(systems) {
+  if (!sharing() || !systems.length) return;
+  try {
+    const body = await relayPost("/kb", { systems });
+    for (const [sys, rec] of Object.entries(body.kb || {})) S.kb[sys] = rec;
+    saveKb();
+    render();
+  } catch { /* the local copy still shows */ }
+}
 
 function askShare() {
-  const box = document.createElement("div");
-  box.className = "consent";
-  box.innerHTML = `<div>
+  const box = modal(`
     <h3 style="margin-top:0">Share this map with your corporation?</h3>
-    <p>Sharing sends the chain in this browser (systems, wormholes, signatures and notes) to the Atlas relay.
-       It is kept for your corporation only, and only pilots the relay verifies as members of that corporation can read it.
-       Links found from your jumps carry your pilot's name, so corp mates will see where you have been in wormhole space.</p>
+    <p>Sharing sends what this browser has surveyed (wormholes, signatures, notes, statics and directional scans)
+       to the Atlas relay. It is kept for your corporation only, and only pilots the relay verifies as members
+       of that corporation can read it. Your finds carry your pilot's name, and survey points go on the corp board.</p>
     <p>Nothing is shared until you tick the box. You can untick it at any time.</p>
     <label class="row"><input type="checkbox" id="cs"> Yes, share my survey map with my corporation</label>
-    <div class="row" style="justify-content:flex-end"><button id="cc">Cancel</button><button id="ok" class="primary">Save</button></div>
-  </div>`;
-  document.body.appendChild(box);
-  box.querySelector("#cc").onclick = () => { box.remove(); $("#share").checked = store.get(K_SHARE, false); };
+    <div class="row" style="justify-content:flex-end"><button data-close>Cancel</button><button id="ok" class="primary">Save</button></div>`,
+    () => { $("#share").checked = store.get(K_SHARE, false); });
   box.querySelector("#ok").onclick = () => {
     const yes = box.querySelector("#cs").checked;
     store.set(K_SHARE, yes);
@@ -192,10 +378,15 @@ function snapshotOps() {
     for (const [id, s] of Object.entries(table)) ops.push({ kind: "sig", system: sys, id, rec: s, at: s.updated });
   }
   for (const [sys, n] of Object.entries(S.chain.notes)) ops.push({ kind: "note", system: sys, text: n.text, at: n.updated });
-  return ops;
+  for (const [sys, rec] of Object.entries(S.kb)) {
+    if (rec.visit) ops.push({ kind: "visit", system: +sys, at: rec.visit.at });
+    for (const code of Object.keys(rec.statics || {})) ops.push({ kind: "static", system: +sys, code, at: rec.statics[code].first });
+    for (const d of (rec.dscans || []).slice().reverse()) ops.push({ kind: "dscan", system: +sys, sum: d.sum, at: d.at });
+  }
+  return ops.slice(0, 200);
 }
 
-/* ---- rendering: header ---------------------------------------------------- */
+/* ---- header ----------------------------------------------------------------- */
 function renderPilots() {
   const ps = pilots();
   $("#login").textContent = ps.length ? "Add pilot" : "Log in with EVE";
@@ -223,11 +414,31 @@ function renderStatus() {
   el.textContent = S.syncErr ? `corp sync failed: ${S.syncErr}`
     : S.lastSync ? `corp map synced ${S.lastSync.toLocaleTimeString()}` : "syncing...";
 }
+function renderLinkChip() {
+  const c = $("#linkChip");
+  c.className = `chip ${S.link.ok ? "ok" : "off"}`;
+  c.textContent = S.link.ok ? `Survey Link on${S.link.logs ? "" : " (no chat logs)"}` : "Survey Link off";
+  c.title = S.link.ok ? "Copies from EVE arrive here on their own" : "Start Survey Link on this computer";
+}
+function renderScore() {
+  const me = S.me || S.ledger[surveyor().id];
+  const pts = me?.pts || 0, rank = X.rankOf(pts);
+  $("#scoreChip").textContent = `${rank.name} · ${pts} pts`;
+  if (S.view === "surveyor") renderScoreCard();
+}
+function setView(v) {
+  S.view = v;
+  store.set(K_VIEW, v);
+  document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+  $("#chainView").hidden = v !== "chain";
+  $("#surveyorView").hidden = v !== "surveyor";
+  render(true);
+}
 
-/* ---- rendering: chain ------------------------------------------------------- */
+/* ---- rendering: chain view ---------------------------------------------------------- */
 const NW = 170, NH = 50, GX = 70, GY = 18, PAD = 20;
-const SIZE_SHORT = { S: "S frigate", M: "M cruiser", L: "L battleship", XL: "XL capital" };
 const MASS_TONE = { stable: "var(--ink-dim)", destab: "var(--warn)", crit: "var(--bad)" };
+const SIZE_SHORT = { S: "S frigate", M: "M cruiser", L: "L battleship", XL: "XL capital" };
 
 function setRoot(id) {
   S.root = id;
@@ -236,8 +447,13 @@ function setRoot(id) {
   render(true);
 }
 
-/* force=false (timers) leaves the side panel alone while the pilot is typing in it */
+/* force=false (timers) leaves panels alone while the pilot is typing in them */
 function render(force = false) {
+  if (S.view === "surveyor") renderSurveyor(force);
+  else renderChain(force);
+}
+
+function renderChain(force) {
   const svg = $("#chain");
   const links = Object.values(S.chain.links);
   $("#counts").textContent = `${links.length} link${links.length === 1 ? "" : "s"} · ` +
@@ -246,10 +462,8 @@ function render(force = false) {
     svg.innerHTML = "";
     svg.setAttribute("width", 0); svg.setAttribute("height", 0);
     $("#empty").hidden = false;
-    $("#empty").innerHTML = `<p><b>No chain yet.</b> Log in with EVE and fly through a wormhole: with tracking on,
-      each jump draws itself here. You can also type a system in the Root box and add connections by hand.</p>
-      <p>In each system, open the probe scanner, select all, copy, and paste into <b>Signatures</b>.
-      Tag a wormhole with its type (B274, K162 and so on) or paste its Show Info text to record size, age and mass.</p>`;
+    $("#empty").innerHTML = `<p><b>No chain yet.</b> Start Survey Link or log in with tracking on, then fly through a
+      wormhole: each jump draws itself here. You can also type a system in the Root box and add connections by hand.</p>`;
     renderSide(force);
     return;
   }
@@ -261,16 +475,15 @@ function render(force = false) {
   svg.setAttribute("width", W); svg.setAttribute("height", H);
   const here = new Map();
   for (const w of Object.values(S.where)) if (w.system) here.set(w.system, [...(here.get(w.system) || []), w.name]);
+  if (S.here) here.set(S.here.system, [...new Set([...(here.get(S.here.system) || []), S.here.by || "you"])]);
 
   const edge = (from, to, key, cross) => {
     const l = S.chain.links[key], a = pos.get(from), b = pos.get(to);
-    const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2;
-    const mx = (x1 + x2) / 2;
+    const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
     const tone = MASS_TONE[l.mass] || "var(--ink-faint)";
     const width = { S: 1.5, M: 2.5, L: 3.5, XL: 5 }[l.size || sizeOf(l)] || 2;
     const dash = !l.confirmed ? "6 4" : cross ? "2 4" : "";
-    const hrs = Math.max(0, (l.expires - Date.now()) / C.HOUR);
-    const lab = [l.code || "", l.life === "eol" ? "EOL" : "", `${hrs < 1 ? "<1" : Math.round(hrs)}h`].filter(Boolean).join(" ");
+    const lab = [l.code || "", l.life === "eol" ? "EOL" : "", lifeShort(l)].filter(Boolean).join(" ");
     return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${tone}" stroke-width="${width}"
               ${dash ? `stroke-dasharray="${dash}"` : ""} opacity="${cross ? .55 : 1}"/>
             <text x="${mx}" y="${(y1 + y2) / 2 - 5}" text-anchor="middle" font-size="11"
@@ -302,9 +515,31 @@ function render(force = false) {
 }
 const trim = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
 const sizeOf = l => (l.code && l.code !== "K162" ? C.sizeFromJump(S.WH[l.code]?.jump) : null);
+function lifeShort(l) {
+  const b = X.lifeBounds(l, S.WH), now = Date.now();
+  const hi = Math.max(0, (b.hi - now) / C.HOUR);
+  if (b.lo == null) return `<${Math.ceil(hi)}h`;
+  return `${dur(b.lo - now, true)}+`;
+}
+function dur(ms, short = false) {
+  if (ms <= 0) return short ? "0m" : "any moment";
+  const m = Math.floor(ms / 60e3), h = Math.floor(m / 60);
+  return h ? `${h}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+}
 
-/* ---- rendering: side panel ------------------------------------------------------ */
 function select(id) { S.sel = id; render(true); }
+
+function systemMeta(id) {
+  const L = label(id), j = S.J[id], k = S.K.s[id];
+  return C.isJ(id)
+    ? `${esc(L.cls)} · ${esc(j?.[2] || "no effect")} · ${esc(j?.[3] || "")} / ${esc(j?.[4] || "")} · ${j?.[5] ?? "?"} planets, ${j?.[6] ?? "?"} moons`
+    : `${esc(L.cls)} · ${esc(k?.[2] || "")} · <a href="../#s=${encodeURIComponent(L.name)}">open in Atlas</a>`;
+}
+function staticsHtml(id) {
+  const st = X.staticsOf(S.kb[id]);
+  if (!st.length) return `<span class="hint">none recorded yet (tag a hole's type here to record one)</span>`;
+  return st.map(s => { const w = S.WH[s.code]; return `<span class="tag" title="seen ${s.n} time${s.n > 1 ? "s" : ""}${s.sure ? "" : ", not yet sure"}">${esc(s.code)}${w ? ` to ${esc(S.CL[w.to] || "?")}` : ""}${s.sure ? "" : "?"}</span>`; }).join(" ");
+}
 
 function renderSide(force = true) {
   const side = $("#side");
@@ -313,76 +548,104 @@ function renderSide(force = true) {
   side.dataset.for = String(id);
   if (!id) { side.innerHTML = `<p class="hint">Pick a system in the chain, or type one in the Root box.</p>`; return; }
   const L = label(id);
-  const j = S.J[id], k = S.K.s[id];
-  const meta = C.isJ(id)
-    ? `${esc(L.cls)} · ${esc(j?.[2] || "no effect")} · ${esc(j?.[3] || "")} / ${esc(j?.[4] || "")} · ${j?.[5] ?? "?"} planets, ${j?.[6] ?? "?"} moons`
-    : `${esc(L.cls)} · ${esc(k?.[2] || "")} · <a href="../#s=${encodeURIComponent(L.name)}">open in Atlas</a>`;
-  const mine = Object.entries(S.chain.links).filter(([, l]) => l.a === id || l.b === id)
-    .sort((x, y) => (x[1].confirmed === y[1].confirmed ? 0 : x[1].confirmed ? 1 : -1));
-  const sigs = Object.entries(S.chain.sigs[id] || {}).sort((a, b) => a[0].localeCompare(b[0]));
-  const whSigs = sigs.filter(([, s]) => /wormhole/i.test(s.type) || !s.type);
-  const note = S.chain.notes[id]?.text || "";
-
   side.innerHTML = `
     <h2 style="color:${L.tone}">${esc(L.name)}</h2>
-    <div class="meta">${meta}</div>
-    <div class="row" style="margin-top:8px">
-      <button id="mkRoot">Make root</button>
-    </div>
-
-    <h3>Connections</h3>
-    ${mine.length ? mine.map(([key, l]) => linkCard(key, l, id, whSigs)).join("") : `<p class="hint">None yet.</p>`}
-    <div class="row"><input id="addTo" placeholder="connect to system..." autocomplete="off" size="20">
-      <button id="addBtn">Add</button></div>
-
-    <h3>Signatures</h3>
-    <textarea id="sigPaste" rows="3" placeholder="Probe scanner: select all, copy, paste here"></textarea>
-    <div class="row"><label><input type="checkbox" id="sigReplace" checked> paste is the full list
-      (removes signatures that are gone)</label><button id="sigGo">Save</button></div>
-    ${sigs.length ? `<table><tr><th>ID</th><th>Type</th><th>Name</th><th>%</th><th>Age</th><th></th></tr>
-      ${sigs.map(([sid, s]) => `<tr><td>${esc(sid)}</td><td>${esc(s.type || "?")}</td><td>${esc(s.name)}</td>
-        <td>${Math.round(s.pct || 0)}</td><td>${age(s.first)}</td>
-        <td class="x"><button class="xbtn" data-delsig="${esc(sid)}" title="Remove">x</button></td></tr>`).join("")}</table>`
-      : `<p class="hint">No signatures recorded.</p>`}
-
-    <h3>Notes</h3>
-    <textarea id="note" rows="3" placeholder="Residents, structures, statics, anything useful">${esc(note)}</textarea>
-    ${S.chain.notes[id]?.by ? `<div class="hint">last edit by ${esc(S.chain.notes[id].by)}</div>` : ""}
-  `;
+    <div class="meta">${systemMeta(id)}</div>
+    <div class="row" style="margin-top:6px">${C.isJ(id) ? staticsHtml(id) : ""}</div>
+    <div class="row" style="margin-top:8px"><button id="mkRoot">Make root</button><button id="mkHere">I am here</button></div>
+    <h3>Connections</h3>${linksHtml(id)}
+    <div class="row"><input id="addTo" placeholder="connect to system..." autocomplete="off" size="20"><button id="addBtn">Add</button></div>
+    <h3>Signatures</h3>${sigsHtml(id, true)}
+    <h3>Directional scans</h3>${dscanHtml(id)}
+    <h3>Notes</h3>${notesHtml(id)}`;
   side.querySelector("#mkRoot").onclick = () => setRoot(id);
+  side.querySelector("#mkHere").onclick = () => setHere(id, surveyor().name);
   side.querySelector("#addBtn").onclick = () => {
     const to = lookup(side.querySelector("#addTo").value);
     if (!to) return toast("Unknown system name.");
-    if (to === id) return;
-    addLink(id, to, { confirmed: true });
+    if (to !== id) addLink(id, to, { confirmed: true });
   };
   attachSuggest(side.querySelector("#addTo"), () => side.querySelector("#addBtn").click());
-  side.querySelector("#sigGo").onclick = () => {
-    const parsed = C.parseSigs(side.querySelector("#sigPaste").value);
-    if (!parsed.length) return toast("No signatures found in that paste. Copy from the probe scanner window.");
-    edit({ kind: "sigs", system: id, parsed, replace: side.querySelector("#sigReplace").checked });
-    toast(`${parsed.length} signature${parsed.length > 1 ? "s" : ""} saved for ${L.name}.`);
-  };
-  side.querySelectorAll("[data-delsig]").forEach(b => b.onclick = () =>
+  wirePanel(side, id);
+}
+
+/* ---- shared panel pieces (chain side panel and surveyor view) ---------------------- */
+function linksHtml(id) {
+  const mine = Object.entries(S.chain.links).filter(([, l]) => l.a === id || l.b === id)
+    .sort((x, y) => (x[1].confirmed === y[1].confirmed ? 0 : x[1].confirmed ? 1 : -1));
+  const sigs = Object.entries(S.chain.sigs[id] || {}).filter(([, s]) => /wormhole/i.test(s.type) || !s.type);
+  return mine.length ? mine.map(([key, l]) => linkCard(key, l, id, sigs)).join("") : `<p class="hint">None yet.</p>`;
+}
+function sigsHtml(id, withPaste) {
+  const sigs = Object.entries(S.chain.sigs[id] || {}).sort((a, b) => a[0].localeCompare(b[0]));
+  const used = new Map();
+  for (const l of Object.values(S.chain.links)) {
+    if (l.a === id && l.sigA) used.set(l.sigA, l.b);
+    if (l.b === id && l.sigB) used.set(l.sigB, l.a);
+  }
+  const fresh = new Set(S.lastProbe?.system === id && Date.now() - S.lastProbe.at < 30 * 60e3 ? S.lastProbe.fresh : []);
+  const state = s => (!s.type ? "unscanned" : s.pct < 100 ? "partial" : "scanned");
+  const rows = sigs.map(([sid, s]) => `<tr class="${fresh.has(sid) ? "fresh" : ""}">
+      <td>${esc(sid)}</td><td>${esc(s.type || "?")}</td><td>${esc(s.name)}</td>
+      <td><span class="st st-${state(s)}">${state(s)}</span>${used.has(sid) ? ` to ${esc(nameOf(used.get(sid)))}` : ""}</td>
+      <td>${age(s.first)}</td>
+      <td class="x"><button class="xbtn" data-delsig="${esc(sid)}" title="Remove">x</button></td></tr>`).join("");
+  const unscanned = sigs.filter(([, s]) => !s.type || s.pct < 100).length;
+  return (withPaste ? `<textarea id="sigPaste" rows="2" placeholder="Probe scanner: select all, copy, paste here (or anywhere on this page)"></textarea>
+    <div class="row"><button id="sigGo">Save</button></div>` : "") +
+    (sigs.length ? `<div class="hint">${pl(sigs.length, "signature")}, ${unscanned} still to scan</div>
+      <table><tr><th>ID</th><th>Type</th><th>Name</th><th>State</th><th>Age</th><th></th></tr>${rows}</table>`
+      : `<p class="hint">No signatures recorded. Copy the probe scanner in game.</p>`);
+}
+function dscanHtml(id) {
+  const rec = S.kb[id] || {};
+  const structs = Object.values(rec.structures || {}).sort((a, b) => b.last - a.last);
+  const hist = (rec.dscans || []);
+  const one = d => `<tr><td>${age(d.at)}</td><td>${esc(d.by || "")}</td><td>${esc(dscanLine(d.sum))}</td></tr>`;
+  return (structs.length ? `<div class="hint">Structures seen here:</div><ul class="tight">${structs.map(s =>
+      `<li>${esc(s.type)}: ${esc(s.name)} <span class="hint">last ${age(s.last)} ago</span></li>`).join("")}</ul>` : "") +
+    (hist.length ? `<table><tr><th>When</th><th>By</th><th>What</th></tr>${hist.slice(0, 15).map(one).join("")}</table>`
+      : `<p class="hint">No directional scans saved. Copy the d-scan window in game.</p>`);
+}
+function notesHtml(id) {
+  const n = S.chain.notes[id];
+  return `<textarea id="note" rows="3" placeholder="Residents, structures, anything useful">${esc(n?.text || "")}</textarea>
+    ${n?.by ? `<div class="hint">last edit by ${esc(n.by)}</div>` : ""}`;
+}
+function wirePanel(root, id) {
+  const go = root.querySelector("#sigGo");
+  if (go) go.onclick = () => routePasteFor(id, root.querySelector("#sigPaste").value);
+  root.querySelectorAll("[data-delsig]").forEach(b => b.onclick = () =>
     edit({ kind: "del", what: "sig", system: id, id: b.dataset.delsig }));
-  side.querySelector("#note").onchange = e => edit({ kind: "note", system: id, text: e.target.value });
-  side.querySelectorAll(".link").forEach(wireLinkCard);
+  const note = root.querySelector("#note");
+  if (note) note.onchange = e => edit({ kind: "note", system: id, text: e.target.value });
+  root.querySelectorAll(".link").forEach(wireLinkCard);
+}
+function routePasteFor(id, text) {
+  const keep = S.here;
+  S.here = { system: id, by: keep?.by || "", at: Date.now() };
+  routePaste(text, "paste");
+  S.here = keep;
 }
 
 function linkCard(key, l, here, whSigs) {
   const other = l.a === here ? l.b : l.a;
   const O = label(other);
   const mySig = l.a === here ? l.sigA : l.sigB;
-  const hrs = Math.max(0, (l.expires - Date.now()) / C.HOUR);
+  const b = X.lifeBounds(l, S.WH), now = Date.now();
   const wh = l.code ? S.WH[l.code] : null;
   const info = wh && !wh.exit
     ? `${l.code}: to ${S.CL[wh.to] || "?"}, ${C.SIZES[C.sizeFromJump(wh.jump)] || "?"}, ${wh.life}h life, ${(wh.mass / 1e9).toFixed(2)}B kg total`
     : l.code === "K162" ? "K162: exit side; the other side's type sets the limits" : "type not set";
+  const life = b.lo == null ? `<span style="color:var(--warn)">age unknown</span>, closes within ${dur(b.hi - now)}`
+    : b.lo <= now ? `<span style="color:var(--bad)">could close any moment</span>, at most ${dur(b.hi - now)}`
+    : `open at least <b>${dur(b.lo - now)}</b>, at most ${dur(b.hi - now)}`;
   const opt = (v, cur, text) => `<option value="${v}"${v === (cur || "") ? " selected" : ""}>${text}</option>`;
-  return `<div class="link${l.confirmed ? "" : " unsure"}" data-key="${key}" data-here="${here}">
+  return `<div class="link${l.confirmed ? "" : " unsure"}${S.selLink === key ? " picked" : ""}" data-key="${key}" data-here="${here}">
     <div class="row"><span class="to" data-go="${other}" style="color:${O.tone}">${esc(O.name)}</span>
       <span class="tag" style="color:${O.tone}">${esc(O.cls)}</span>
-      <span class="spacer"></span><span class="hint">${hrs < 1 ? "under 1h" : `about ${Math.round(hrs)}h`} left</span></div>
+      ${l.mass === "crit" ? `<span class="tag" style="color:var(--bad)">mass critical</span>` : ""}
+      <span class="spacer"></span><span class="hint">${life}</span></div>
     ${l.confirmed ? "" : `<div class="row hint" style="color:var(--warn)">Found from a move with no gate between the systems.
       <button data-act="confirm">It was a wormhole</button><button data-act="del">Discard</button></div>`}
     <div class="row">
@@ -393,33 +656,22 @@ function linkCard(key, l, here, whSigs) {
     <div class="row">
       <select data-f="life">${opt("", l.life, "age")}${opt("fresh", l.life, "fresh")}${opt("decay", l.life, "under a day")}${opt("eol", l.life, "end of life")}</select>
       <select data-f="mass">${opt("", l.mass, "mass")}${opt("stable", l.mass, "stable")}${opt("destab", l.mass, "reduced")}${opt("crit", l.mass, "critical")}</select>
-      <button data-act="info" title="Paste the wormhole's Show Info text">Paste Show Info</button>
+      ${S.pendingInfo ? `<button data-act="apply" class="primary">Apply Show Info</button>` : `<button data-act="pick" title="Show Info pastes go to this hole">${S.selLink === key ? "Show Info goes here" : "Show Info target"}</button>`}
       <button data-act="del" title="Remove this connection">Remove</button>
     </div>
     <div class="hint">${esc(info)}${l.by ? ` · by ${esc(l.by)}` : ""}</div>
   </div>`;
 }
-
 function wireLinkCard(card) {
   const key = card.dataset.key, here = +card.dataset.here;
   const l = S.chain.links[key];
   const set = rec => edit({ kind: "link", key, rec });
-  card.querySelector("[data-go]").onclick = e => select(+e.target.dataset.go);
+  card.querySelector("[data-go]").onclick = e => { setView("chain"); select(+e.target.dataset.go); };
   card.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
     if (b.dataset.act === "confirm") set({ confirmed: true });
     if (b.dataset.act === "del") edit({ kind: "del", what: "link", key });
-    if (b.dataset.act === "info") {
-      const text = prompt("Paste the wormhole's Show Info description:");
-      if (!text) return;
-      const r = C.parseShowInfo(text);
-      if (!Object.keys(r).length) return toast("Nothing recognised in that text.");
-      const rec = {};
-      if (r.size) rec.size = r.size;
-      if (r.mass) rec.mass = r.mass;
-      if (r.life) { rec.life = r.life; rec.lifeAt = Date.now(); }
-      set(rec);
-      toast(`Read: ${Object.entries(r).map(([k2, v]) => `${k2} ${v}`).join(", ")}.`);
-    }
+    if (b.dataset.act === "apply" && S.pendingInfo) applyInfo(key, S.pendingInfo);
+    if (b.dataset.act === "pick") { S.selLink = S.selLink === key ? null : key; render(true); }
   });
   card.querySelectorAll("[data-f]").forEach(f => f.onchange = () => {
     const v = f.value.trim().toUpperCase();
@@ -429,6 +681,7 @@ function wireLinkCard(card) {
       const size = v && v !== "K162" ? C.sizeFromJump(S.WH[v]?.jump) : null;
       if (size && !l.size) rec.size = size;
       set(rec);
+      if (v && v !== "K162" && C.isJ(here)) kbEdit({ kind: "static", system: here, code: v });
     } else if (f.dataset.f === "sig") {
       set(l.a === here ? { sigA: f.value || null } : { sigB: f.value || null });
     } else if (f.dataset.f === "life") {
@@ -439,25 +692,188 @@ function wireLinkCard(card) {
   });
 }
 
-/* ---- small helpers ---------------------------------------------------------------- */
+/* ---- rendering: surveyor view (second screen) ---------------------------------------- */
+function renderSurveyor(force) {
+  const root = $("#surveyorView");
+  const id = S.here?.system ?? null;
+  if (!force && root.dataset.for === String(id) && root.contains(document.activeElement)) { renderTimers(); return; }
+  root.dataset.for = String(id);
+  renderTimers();
+  renderScoreCard();
+  renderFeed();
+  if (!id) {
+    $("#svSystem").innerHTML = `<div class="hint">Where are you?</div><p>Start <b>Survey Link</b> or log in with tracking on,
+      and your system appears here as soon as you jump. Or type a system in the box.</p>
+      <div class="row"><input id="svWhere" placeholder="system name" autocomplete="off" size="16"></div>`;
+    attachSuggest($("#svWhere"), () => { const s = lookup($("#svWhere").value); if (s) setHere(s, surveyor().name); });
+    for (const k of ["#svSigs", "#svLinks", "#svDscan"]) $(k).innerHTML = "";
+    return;
+  }
+  const L = label(id);
+  const probe = S.lastProbe?.system === id ? `last probe scan ${age(S.lastProbe.at)} ago` : "no probe scan yet this visit";
+  $("#svSystem").innerHTML = `
+    <div class="hint">You are in${S.here.by ? ` (${esc(S.here.by)})` : ""}</div>
+    <div class="big" style="color:${L.tone}">${esc(L.name)} <span class="cls">${esc(L.cls)}</span></div>
+    <div class="meta">${systemMeta(id)}</div>
+    <div class="row" style="margin-top:6px">${C.isJ(id) ? `<span class="hint">Statics:</span> ${staticsHtml(id)}` : ""}</div>
+    <div class="hint" style="margin-top:6px">${esc(probe)}</div>
+    <div class="row" style="margin-top:8px"><button id="svChain">Show in chain</button>
+      <button id="svHomeBtn" title="Your way-home timer counts down to here">${S.home === id ? "This is home" : "Set as home"}</button></div>`;
+  $("#svChain").onclick = () => { setRoot(store.get(K_HOME, null) || id); S.sel = id; setView("chain"); };
+  $("#svHomeBtn").onclick = () => { store.set(K_HOME, id); S.home = id; toast(`Home set: ${L.name}.`); render(true); };
+  $("#svSigs").innerHTML = `<h3>Signatures</h3>${sigsHtml(id, false)}`;
+  $("#svLinks").innerHTML = `<h3>Connections from here</h3>${linksHtml(id)}`;
+  $("#svDscan").innerHTML = `<h3>Directional scans</h3>${dscanHtml(id)}`;
+  for (const k of ["#svSigs", "#svLinks", "#svDscan"]) wirePanel($(k), id);
+}
+
+/* the way-home countdown and its alarm, every second */
+function renderTimers() {
+  const box = $("#svHome");
+  if (!box || S.view !== "surveyor") return;
+  const home = S.home ?? store.get(K_HOME, null);
+  const id = S.here?.system;
+  if (!home) { box.innerHTML = `<div class="hint">Way home</div><p>Set a home system (the button under your current system) to get a minimum-life countdown for your way back.</p>`; return; }
+  if (!id) { box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}</div><p class="hint">Waiting for your location.</p>`; return; }
+  if (id === home) { box.className = "card"; box.innerHTML = `<div class="hint">Way home</div><div class="big ok">You are home</div><div class="hint">${esc(nameOf(home))}</div>`; return; }
+  const now = Date.now();
+  const w = X.wayHome(S.chain, id, home, S.WH, now);
+  if (!w.connected) {
+    box.className = "card warn";
+    box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}</div><div class="big">No mapped route</div>
+      <p class="hint">The chain has no path from here to home. Map the holes you came through.</p>`;
+    return;
+  }
+  const left = w.left, tier = left == null ? "warn" : left <= 10 * 60e3 ? "bad" : left <= 30 * 60e3 ? "warn" : "ok";
+  box.className = `card ${tier}`;
+  const weak = w.weakest ? S.chain.links[w.weakest] : null;
+  box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}: ${w.jumps} jump${w.jumps > 1 ? "s" : ""}</div>
+    <div class="big countdown">${left == null ? "unknown" : dur(left)}</div>
+    <div class="hint">${left == null ? "Guaranteed open time is unknown: check Show Info on every hole on the way."
+      : left <= 0 ? `the guaranteed time has run out${weak ? ` on ${esc(nameOf(weak.a))} to ${esc(nameOf(weak.b))}` : ""}; it may close any moment`
+      : `guaranteed open for at least this long${weak ? `; weakest hole ${esc(nameOf(weak.a))} to ${esc(nameOf(weak.b))}` : ""}`}</div>
+    ${w.unknown.length ? `<div class="hint" style="color:var(--warn)">Age unknown: ${w.unknown.map(k => esc(pairName(k))).join("; ")}. Paste its Show Info.</div>` : ""}
+    ${w.crit.length ? `<div class="hint" style="color:var(--bad)">Mass critical: ${w.crit.map(k => esc(pairName(k))).join("; ")}. A heavy ship may close it.</div>` : ""}`;
+  checkAlarms(w, left);
+}
+const pairName = k => { const l = S.chain.links[k]; return l ? `${nameOf(l.a)} to ${nameOf(l.b)}` : k; };
+/* one alarm per threshold crossed; when several are crossed at once (a hole
+   just marked end of life), only the most urgent one sounds */
+function checkAlarms(w, left) {
+  if (left == null) return;
+  const crossed = ALARMS.filter(([th]) => left <= th && !S.alerted.has(`${w.weakest}:${th}:${w.lo}`));
+  if (!crossed.length) return;
+  for (const [th] of crossed) S.alerted.add(`${w.weakest}:${th}:${w.lo}`);
+  const [th, text] = crossed[crossed.length - 1];
+  const msg = th === 0 ? "Way home: the guaranteed time is up. A hole on your way home may close any moment."
+                       : `Way home: guaranteed open for only ${text} more.`;
+  feed(msg, "bad");
+  toast(msg, 12000);
+  alarm();
+}
+
+function renderScoreCard() {
+  const box = $("#svScore");
+  if (!box) return;
+  const me = S.me || S.ledger[surveyor().id];
+  const pts = me?.pts || 0, rank = X.rankOf(pts);
+  const got = me ? Object.keys(me.badges || {}) : [];
+  const pct = rank.next ? Math.round((pts / rank.next.at) * 100) : 100;
+  box.innerHTML = `<div class="hint">${esc(surveyor().name)}${sharing() ? " · corp board" : " · this browser"}</div>
+    <div class="big">${esc(rank.name)}</div>
+    <div>${pts} survey points${rank.next ? ` · ${rank.next.at - pts} to ${esc(rank.next.name)}` : ""}</div>
+    <div class="bar"><span style="width:${Math.min(100, pct)}%"></span></div>
+    <div class="badges">${X.BADGES.map(b => `<span class="badge${got.includes(b.id) ? " got" : ""}" title="${esc(b.name)}: ${esc(b.desc)}">${esc(b.short)}</span>`).join("")}</div>
+    <div class="row"><button id="svBadges">Badges</button><button id="svBoard">Corp board</button></div>`;
+  $("#svBadges").onclick = showBadges;
+  $("#svBoard").onclick = showBoard;
+}
+function showBadges() {
+  const me = S.me || S.ledger[surveyor().id] || { badges: {} };
+  modal(`<h3 style="margin-top:0">Survey badges</h3>
+    <table>${X.BADGES.map(b => `<tr><td><span class="badge${me.badges?.[b.id] ? " got" : ""}">${esc(b.short)}</span></td>
+      <td><b>${esc(b.name)}</b><div class="hint">${esc(b.desc)}</div></td>
+      <td class="hint">${me.badges?.[b.id] ? `earned ${new Date(me.badges[b.id]).toLocaleDateString()}` : ""}</td></tr>`).join("")}</table>
+    <h3>Points</h3><table>${Object.entries(X.POINTS).map(([a, p]) => `<tr><td>${esc(POINT_NAMES[a] || a)}</td><td>${p}</td>
+      <td class="hint">${X.DAILY_CAP[a] ? `up to ${X.DAILY_CAP[a]} a day` : ""}</td></tr>`).join("")}</table>
+    <div class="row" style="justify-content:flex-end"><button data-close>Close</button></div>`);
+}
+const POINT_NAMES = { jump_link: "Wormhole found by flying it", confirm: "Confirming a gate-less move", first_visit: "First corp survey of a J-system",
+  new_sigs: "Each new signature", hole_typed: "Naming a hole's type", hole_status: "Show Info check", static_found: "First record of a static",
+  dscan: "Directional scan saved", structure_new: "Each new structure found", note: "First note on a system" };
+function showBoard() {
+  const rows = (S.board.length ? S.board : X.leaderboard(S.ledger));
+  modal(`<h3 style="margin-top:0">${sharing() ? "Corp survey board" : "Survey board (this browser only)"}</h3>
+    ${rows.length ? `<table><tr><th>#</th><th>Pilot</th><th>Rank</th><th>Points</th><th>Badges</th></tr>
+      ${rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td>${esc(r.rank)}</td><td>${r.pts}</td><td>${r.badges}</td></tr>`).join("")}</table>`
+      : `<p class="hint">No points yet.</p>`}
+    ${sharing() ? "" : `<p class="hint">Tick "share map with corp" to join the corp board; points there are awarded by the relay to verified pilots.</p>`}
+    <div class="row" style="justify-content:flex-end"><button data-close>Close</button></div>`);
+}
+
+/* ---- feed, toasts, sounds -------------------------------------------------------------- */
+function feed(text, kind = "") {
+  S.feed.unshift({ at: Date.now(), text, kind });
+  S.feed = S.feed.slice(0, 60);
+  renderFeed();
+}
+function renderFeed() {
+  const box = $("#svFeed");
+  if (!box) return;
+  box.innerHTML = `<h3>Activity</h3>` + (S.feed.length ? `<ul class="feed">${S.feed.map(f =>
+    `<li class="${f.kind}"><span class="hint">${new Date(f.at).toLocaleTimeString()}</span> ${esc(f.text)}</li>`).join("")}</ul>`
+    : `<p class="hint">Copies from EVE, jumps, points and alerts show here.</p>`);
+}
+let toastTimer;
+function toast(msg, ms = 6000) {
+  let el = document.querySelector(".toast");
+  if (!el) { el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); }
+  el.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.remove(), ms);
+}
+let audio;
+function tone(freqs, len = 0.18) {
+  try {
+    audio = audio || new AudioContext();
+    freqs.forEach((f, i) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(audio.destination);
+      const t0 = audio.currentTime + i * (len + 0.05);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+      o.start(t0); o.stop(t0 + len + 0.02);
+    });
+  } catch { /* no sound */ }
+}
+const chime = () => tone([660, 880]);
+let flash;
+function alarm() {
+  tone([880, 660, 880, 660], 0.25);
+  clearInterval(flash);
+  let n = 0;
+  const base = document.title;
+  flash = setInterval(() => { document.title = n++ % 2 ? base : "!! WAY HOME !!"; if (n > 20) { clearInterval(flash); document.title = base; } }, 700);
+}
+function modal(html, onClose) {
+  const box = document.createElement("div");
+  box.className = "consent";
+  box.innerHTML = `<div class="modal">${html}</div>`;
+  document.body.appendChild(box);
+  const close = () => { box.remove(); if (onClose) onClose(); };
+  box.querySelectorAll("[data-close]").forEach(b => b.onclick = close);
+  box.onclick = e => { if (e.target === box) close(); };
+  return box;
+}
+
+/* ---- small helpers ----------------------------------------------------------------- */
 function age(ms) {
   const m = Math.round((Date.now() - ms) / 60e3);
   return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
 }
 function lookup(text) {
-  const t = String(text || "").trim().toLowerCase();
-  return S.byName.get(t) || null;
+  return S.byName.get(String(text || "").trim().toLowerCase()) || null;
 }
-let toastTimer;
-function toast(msg) {
-  let el = document.querySelector(".toast");
-  if (!el) { el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); }
-  el.textContent = msg;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.remove(), 6000);
-}
-
-/* name suggestions for system inputs, from about 8,100 names */
 function attachSuggest(input, onPick) {
   const box = $("#suggest");
   let hits = [], on = 0;
@@ -492,15 +908,43 @@ function attachSuggest(input, onPick) {
     }
   };
 }
+function showLinkHelp() {
+  modal(`<h3 style="margin-top:0">Survey Link</h3>
+    <p>Survey Link is a small helper for Windows that runs next to EVE. Copy the probe scanner, the directional scanner or a
+       wormhole's Show Info in game, and it lands here on its own: no clicking over to this screen. It also reads EVE's
+       Local chat log, so the survey knows about a jump about a second after it happens.</p>
+    <p>It only passes on copies shaped like those three EVE windows; anything else on your clipboard never leaves it.
+       It talks only to this page, on this computer, and never touches the game client.</p>
+    <ol>
+      <li>Download both files into one folder:
+        <a href="link/Start-SurveyLink.bat" download>Start-SurveyLink.bat</a> and
+        <a href="link/SurveyLink.ps1" download>SurveyLink.ps1</a>.</li>
+      <li>Double-click <b>Start-SurveyLink.bat</b>. A window opens; leave it open while you survey. Close it to stop.</li>
+      <li>The first time, Chrome or Edge asks to let this site reach apps on your device. Click <b>Allow</b>.</li>
+    </ol>
+    <p class="hint">Status: ${S.link.ok ? `connected${S.link.logs ? ", reading chat logs" : ", chat logs not found"}` : `not connected (${esc(S.link.err || "not started")})`}.</p>
+    <div class="row" style="justify-content:flex-end"><button data-close>Close</button></div>`);
+}
 
-/* ---- start --------------------------------------------------------------------- */
+/* ---- start ---------------------------------------------------------------------------- */
+function isChromium() {
+  const brands = navigator.userAgentData?.brands || [];
+  return brands.some(b => /Chromium|Google Chrome|Microsoft Edge/.test(b.brand));
+}
 async function start() {
+  if (!isChromium()) {
+    modal(`<h3 style="margin-top:0">Please use Chrome or Edge</h3>
+      <p>J-Space Survey needs Google Chrome or Microsoft Edge (or another Chromium browser) for Survey Link and
+         background timers. Open this page in one of those.</p>`);
+    return;
+  }
   const cfg = await fetch("../data/sso.json").then(r => (r.ok ? r.json() : {})).catch(() => ({}));
   if (window.EveSSO) {
     EveSSO.clientId = cfg.clientId || "";
     EveSSO.redirectUri = new URL("../", location.href).href;
   }
   S.relay = (cfg.relay || "").replace(/\/$/, "");
+  S.home = store.get(K_HOME, null);
   await loadData();
 
   const dl = document.createElement("datalist");
@@ -514,25 +958,39 @@ async function start() {
     if (e.target.checked) { e.target.checked = false; askShare(); }
     else { store.set(K_SHARE, false); renderStatus(); }
   };
+  $("#linkChip").onclick = showLinkHelp;
+  $("#scoreChip").onclick = showBadges;
+  document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
   attachSuggest($("#rootInput"), () => { const id = lookup($("#rootInput").value); if (id) { setRoot(id); select(id); } else toast("Unknown system name."); });
-  $("#rootHere").onclick = () => {
-    const w = Object.values(S.where).find(x => x.system);
-    if (w) { setRoot(w.system); select(w.system); } else toast("No tracked pilot location yet.");
-  };
+  $("#rootHere").onclick = () => { if (S.here) { setRoot(S.here.system); select(S.here.system); } else toast("No location yet."); };
   $("#rootHome").onclick = () => { const h = store.get(K_HOME, null); if (h) { setRoot(h); select(h); } else toast("No home saved yet."); };
-  $("#setHome").onclick = () => { if (S.root) { store.set(K_HOME, S.root); toast(`Home saved: ${nameOf(S.root)}.`); } };
+  $("#setHome").onclick = () => { if (S.root) { store.set(K_HOME, S.root); S.home = S.root; toast(`Home saved: ${nameOf(S.root)}.`); } };
   if (S.root) $("#rootInput").value = nameOf(S.root);
 
+  /* paste anywhere: Ctrl+V on the page (outside text boxes) routes the copy */
+  document.addEventListener("paste", e => {
+    if (e.target.closest("input, textarea")) return;
+    const text = e.clipboardData?.getData("text");
+    if (text) { e.preventDefault(); routePaste(text, "paste"); }
+  });
+  document.addEventListener("pointerdown", () => { if (audio?.state === "suspended") audio.resume(); }, { once: false });
+
+  setView(S.view === "chain" ? "chain" : "surveyor");
   renderPilots();
   renderStatus();
-  render();
+  renderLinkChip();
+  renderScore();
   poll();
+  linkPoll();
   setInterval(poll, POLL_MS);
+  setInterval(linkPoll, 350);
   setInterval(sync, SYNC_MS);
+  setInterval(renderTimers, 1000);
   setInterval(() => { C.prune(S.chain, Date.now()); saveLocal(); render(); }, 60e3);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(); sync(); } });
   sync();
 }
+
 async function sha256hex(text) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
