@@ -8,6 +8,9 @@ Reads CCP's Static Data Export in its JSON Lines form and writes:
                                       (to = target class id, life = hours, mass and jump in kg,
                                       regen = kg per day)
     web/data/jspace/classes.json     class id -> label (C1..C6, HS, LS, NS, Thera, ...)
+    web/data/jspace/scan_types.json  {typeId: [name, group, cat]} for what shows on directional
+                                      scan: S ship, U Upwell structure, P starbase, D deployable,
+                                      R drone, F fighter, O orbital (customs offices)
 
 Usage:
     python tools/build_jspace.py <sde-jsonl-dir-or-zip> [out_dir]
@@ -27,6 +30,7 @@ import sys
 import zipfile
 from pathlib import Path
 
+SCAN_CATEGORIES = {6: "S", 65: "U", 23: "P", 22: "D", 18: "R", 87: "F", 46: "O"}
 CLASS_LABELS = {
     1: "C1", 2: "C2", 3: "C3", 4: "C4", 5: "C5", 6: "C6",
     7: "HS", 8: "LS", 9: "NS", 10: "Jove", 11: "Jove",
@@ -98,11 +102,17 @@ def main(src_path: Path, out: Path) -> None:
     for c in src.rows("mapConstellations"):
         constellations[rid(c, "constellationID")] = (name(c), c.get("wormholeClassID"), c.get("regionID"))
 
-    types, groups = {}, {}
+    types, groups, group_cat = {}, {}, {}
     for g in src.rows("groups"):
         groups[rid(g, "groupID")] = name(g)
+        group_cat[rid(g, "groupID")] = g.get("categoryID")
+    scan_types = {}
     for t in src.rows("types"):
-        types[rid(t, "typeID")] = (name(t), t.get("groupID"))
+        tid, gid = rid(t, "typeID"), t.get("groupID")
+        types[tid] = (name(t), gid)
+        cat = SCAN_CATEGORIES.get(group_cat.get(gid))
+        if cat and t.get("published", True):
+            scan_types[str(tid)] = [name(t), groups.get(gid, ""), cat]
 
     effects = {}
     try:
@@ -174,10 +184,15 @@ def main(src_path: Path, out: Path) -> None:
     (out / "systems.json").write_text(json.dumps(systems, separators=(",", ":")))
     (out / "wormholes.json").write_text(json.dumps(dict(sorted(wormholes.items())), separators=(",", ":")))
     (out / "classes.json").write_text(json.dumps(CLASS_LABELS, separators=(",", ":")))
+    (out / "scan_types.json").write_text(json.dumps(scan_types, separators=(",", ":")))
     by_class = {}
     for v in systems.values():
         by_class[v[1]] = by_class.get(v[1], 0) + 1
+    cats = {}
+    for v in scan_types.values():
+        cats[v[2]] = cats.get(v[2], 0) + 1
     print(json.dumps({"systems": len(systems), "byClass": by_class, "wormholes": len(wormholes),
+                      "scanTypes": cats,
                       "sample": {k: wormholes.get(k) for k in ("B274", "K162", "N110", "H296")}}))
 
 
