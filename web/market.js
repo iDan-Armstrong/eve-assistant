@@ -10,9 +10,19 @@
    pilot.js; uses their globals (state, map, canvas, danger, ...). */
 "use strict";
 
+/* deal heat map: green (best) through yellow and orange to red (worst) */
+const DEAL_RAMP = ["#2fe07a", "#c8e04a", "#ffb03a", "#ff4a3a"];
+function dealColor(x) {                          /* x in [0, 1], 0 = best deal */
+  const pos = Math.min(.999, Math.max(0, x)) * (DEAL_RAMP.length - 1), i = Math.floor(pos), f = pos - i;
+  const a = DEAL_RAMP[i], b = DEAL_RAMP[i + 1];
+  const mix = k => Math.round(parseInt(a.slice(k, k + 2), 16) * (1 - f) + parseInt(b.slice(k, k + 2), 16) * f)
+    .toString(16).padStart(2, "0");
+  return "#" + mix(1) + mix(3) + mix(5);
+}
+
 const market = {
   types: null, item: null, side: "sell", sort: "price", rows: [], origin: null,
-  layer: L.layerGroup(), rings: [], regions: null,
+  layer: L.layerGroup(), rings: [], regions: null, heat: L.layerGroup(), heatRings: [],
 };
 const ESI_BASE = "https://esi.evetech.net";
 const ESI_HEADERS = { "X-Compatibility-Date": "2025-09-30" };
@@ -178,6 +188,41 @@ function drawMarket() {
   const rr = radiusFor(map.getZoom());
   for (const { m, extra } of market.rings) m.setRadius(rr + extra);
   market.layer.addTo(map);
+  document.getElementById("mHeatWrap").hidden = false;
+  if (document.getElementById("mHeat").checked) drawHeat();
+}
+
+/* every system with orders, colored by how good its best price is: ranked
+   against the other systems (a rank spreads the colors evenly even when a
+   few absurd prices sit at the far end) */
+function drawHeat() {
+  market.heat.clearLayers();
+  market.heatRings = [];
+  const on = document.getElementById("mHeat").checked && market.rows.length;
+  document.getElementById("mRamp").hidden = !on;
+  if (!on) { market.heat.remove(); return; }
+  const sellSide = market.side === "sell", best = new Map();
+  for (const r of market.rows) {
+    const b = best.get(r.system);
+    if (b == null || (sellSide ? r.price < b : r.price > b)) best.set(r.system, r.price);
+  }
+  const ranked = [...best].sort((a, b) => sellSide ? a[1] - b[1] : b[1] - a[1]);
+  ranked.forEach(([sys, price], i) => {
+    const p = state.byId.get(sys);
+    const color = dealColor(ranked.length > 1 ? i / (ranked.length - 1) : 0);
+    const glow = L.circleMarker(p.ll, { renderer: canvas, interactive: false, stroke: false,
+      fill: true, fillColor: color, fillOpacity: .22 });
+    const core = L.circleMarker(p.ll, { renderer: canvas, interactive: false, stroke: true, color,
+      weight: 2, opacity: .95, fill: true, fillColor: color, fillOpacity: .55 });
+    glow.bindTooltip(`${esc(p.name)}: ${fmtPrice(price)}`, { sticky: true, className: "price-tag" });
+    market.heat.addLayer(glow);
+    market.heat.addLayer(core);
+    market.heatRings.push({ m: glow, extra: 14 }, { m: core, extra: 2 });
+  });
+  const r = radiusFor(map.getZoom());
+  for (const { m, extra } of market.heatRings) m.setRadius(r + extra);
+  market.heat.addTo(map);
+  market.layer.remove();                         /* the heat map replaces the top-five rings */
 }
 
 function openMarket(open) {
@@ -207,7 +252,7 @@ function wireMarket() {
         results = document.getElementById("mItemResults");
   btn.onclick = () => openMarket(document.getElementById("market").hidden);
   document.getElementById("marketClose").onclick = () => {
-    openMarket(false); market.layer.remove(); document.body.classList.remove("route-open"); };
+    openMarket(false); market.layer.remove(); market.heat.remove(); document.body.classList.remove("route-open"); };
   const clear = document.getElementById("mClear");
   const syncClear = () => { clear.hidden = !input.value && !market.item; };
   clear.onclick = () => {                      /* back to a blank search, map cleared */
@@ -219,6 +264,10 @@ function wireMarket() {
     document.getElementById("mSum").textContent = "Pick an item. Every region's NPC market is searched live from CCP.";
     market.layer.clearLayers();
     market.rings = [];
+    market.heat.clearLayers();
+    market.heat.remove();
+    document.getElementById("mHeatWrap").hidden = true;
+    document.getElementById("mRamp").hidden = true;
     syncClear();
     input.focus();
   };
@@ -258,6 +307,11 @@ function wireMarket() {
     document.querySelectorAll("#market [data-sort]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
     drawMarket();
   });
-  map.on("zoomend", () => { const r = radiusFor(map.getZoom()); for (const { m, extra } of market.rings) m.setRadius(r + extra); });
+  map.on("zoomend", () => { const r = radiusFor(map.getZoom());
+    for (const { m, extra } of [...market.rings, ...market.heatRings]) m.setRadius(r + extra); });
+  document.getElementById("mHeat").onchange = () => {
+    if (document.getElementById("mHeat").checked) drawHeat();
+    else { market.heat.remove(); document.getElementById("mRamp").hidden = true; market.layer.addTo(map); }
+  };
 }
 wireMarket();

@@ -172,6 +172,12 @@
   .leaflet-tooltip.price-tag { background: #0b2233; border: 1px solid #7fd0ff; color: #e9f6ff;
     font: 700 11.5px "Chakra Petch", sans-serif; padding: 1px 6px; box-shadow: 0 0 0 2px rgba(6,10,18,.8); }
   .leaflet-tooltip.price-tag::before { display: none; }
+  .m-heat { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--ink); cursor: pointer; }
+  .m-heat[hidden], .m-ramp[hidden] { display: none; }
+  .m-heat input { margin-top: 2px; }
+  .m-ramp { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--ink-dim); }
+  .m-ramp i { flex: 1; height: 7px; border-radius: 4px;
+    background: linear-gradient(to right, #2fe07a, #c8e04a, #ffb03a, #ff4a3a); }
   .route .m-list li { counter-increment: none; padding-left: 12px; }
   .route .m-list li::before { content: none; }
   .m-list .m-price { font-weight: 700; color: #e9f6ff; }
@@ -266,6 +272,13 @@
   #corpBtn .cm-badge { display: inline-block; min-width: 16px; padding: 0 4px; margin-left: 6px; border-radius: 8px;
     background: #7ef0c8; color: #06231a; font-size: 11px; font-weight: 700; text-align: center; }
   #corpBtn.focus-on { background: #123a2f; border-color: #7ef0c8; }
+  .ctx { position: fixed; z-index: 2100; min-width: 220px; background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 4px 0; box-shadow: 0 6px 22px rgba(0,0,0,.5); font-size: 12.5px; }
+  .ctx .ctx-head { padding: 5px 12px 6px; color: var(--ink-dim); font-size: 11.5px; border-bottom: 1px solid var(--panel-edge); margin-bottom: 3px; }
+  .ctx button { display: block; width: 100%; text-align: left; padding: 6px 12px; background: none; border: 0;
+    color: var(--ink); font: inherit; cursor: pointer; }
+  .ctx button:hover, .ctx button:focus-visible { background: #162032; outline: none; }
+  .ctx .ctx-note { padding: 4px 12px 2px; color: var(--ink-faint); font-size: 11px; }
   .pm-share { display: flex; gap: 6px; align-items: center; padding: 7px 10px 0; font-size: 12px; cursor: pointer; }
   /* pilot name tags sit above every label: gold for your own pilots,
      mint green for corp mates, both solid so they read at any zoom */
@@ -608,6 +621,9 @@
       <button data-sort="jumps" aria-pressed="false">Nearest</button>
       <button data-sort="safe" aria-pressed="false">Safest</button>
     </div>
+    <label class="m-heat" id="mHeatWrap" hidden><input type="checkbox" id="mHeat"> Deal heat map: every system
+      with orders, green for the best deals through red for the worst</label>
+    <div class="m-ramp" id="mRamp" hidden><span>good deal</span><i></i><span>bad deal</span></div>
     <div class="r-sum" id="mSum">Pick an item. Every region's NPC market is searched live from CCP.</div>
   </div>
   <ol id="mList" class="m-list"></ol>
@@ -637,7 +653,7 @@
   <button class="panel-close" id="panelClose" aria-label="Close details">✕</button>
   <div class="panel-head">
     <div class="crumbs" id="pCrumbs"></div>
-    <h2><span id="pName"></span><span class="sec-chip" id="pSec"></span></h2>
+    <h2><span id="pName" data-dest=""></span><span class="sec-chip" id="pSec"></span></h2>
     <div class="sec-true" id="pSecTrue"></div>
   </div>
   <div class="panel-body">
@@ -1647,6 +1663,8 @@ function select(id) {
 
   document.getElementById("pCrumbs").textContent = `${p.region} ‹ ${p.constellation}`;
   document.getElementById("pName").textContent = p.name;
+  document.getElementById("pName").dataset.dest = p.id;
+  document.getElementById("pName").dataset.destName = p.name;
   const chip = document.getElementById("pSec");
   chip.textContent = p.sec.toFixed(1);
   chip.style.color = secColor(p.sec);
@@ -1672,7 +1690,7 @@ function select(id) {
   const neighbors = (state.adj.get(id) || []).map(nid => state.byId.get(nid))
     .sort((a, b) => a.name.localeCompare(b.name));
   document.getElementById("pNeighbors").innerHTML = neighbors.map(n => `
-    <button data-id="${n.id}">
+    <button data-id="${n.id}" data-dest="${n.id}" data-dest-name="${n.name}">
       <span><span style="color:${secColor(n.sec)}">${n.sec.toFixed(1)}</span>&nbsp; ${n.name}</span>
       <span class="via">${n.region === p.region ? n.constellation : n.region}</span>
     </button>`).join("");
@@ -1693,7 +1711,7 @@ function select(id) {
     if (loc.startsWith(p.name)) loc = loc.slice(p.name.length).trim();
     const edge = SVC_CSS[st.svcClass];
     const starred = (st.svc || []).some(s => s === "Refinery" || s === "Compression");
-    return `<li${edge ? ` style="border-left-color:${edge}"` : ""}` +
+    return `<li data-dest="${st.id}" data-dest-name="${st.name.replace(/"/g, "&quot;")}"${edge ? ` style="border-left-color:${edge}"` : ""}` +
            `${st.svc ? ` title="${st.svc.join(", ")}"` : ""}>` +
            `${starred ? '<span style="color:#ffd966">★</span> ' : ""}` +
            `${facility}${loc ? ` <span class="at">${loc}</span>` : ""}</li>`;
@@ -1749,14 +1767,14 @@ async function loadCelestials(p) {
     const stripPl = name => name && name.startsWith(pl.name)
       ? name.slice(pl.name.length).trim().replace(/^[-–]\s*/, "") : name;
     const rows = [
-      ...pl.moons.map(m => `<li>${stripPl(m.name) || m.id}</li>`),
+      ...pl.moons.map(m => `<li data-dest="${p.id}" data-dest-name="${p.name}" data-dest-note="${strip(m.name) || m.id}">${stripPl(m.name) || m.id}</li>`),
       ...(Array.isArray(pl.belts) ? pl.belts : []).map(b =>
-        `<li class="belt">${stripPl(b.name) || b.id}</li>`),
+        `<li class="belt" data-dest="${p.id}" data-dest-name="${p.name}" data-dest-note="${strip(b.name) || b.id}">${stripPl(b.name) || b.id}</li>`),
     ].join("");
     if (!rows) {
-      return `<details><summary class="nomoons" tabindex="-1"><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary></details>`;
+      return `<details><summary class="nomoons" tabindex="-1" data-dest="${p.id}" data-dest-name="${p.name}" data-dest-note="${strip(pl.name)}"><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary></details>`;
     }
-    return `<details><summary><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary><ul>${rows}</ul></details>`;
+    return `<details><summary data-dest="${p.id}" data-dest-name="${p.name}" data-dest-note="${strip(pl.name)}"><span>${strip(pl.name)}</span><span class="what">${bits}</span></summary><ul>${rows}</ul></details>`;
   }).join("");
 }
 

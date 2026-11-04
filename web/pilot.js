@@ -721,3 +721,43 @@ function applyCorpFocus() {
   document.body.classList.toggle("corp-focus", corpmates.focus);
   document.getElementById("corpBtn").classList.toggle("focus-on", corpmates.focus);
 }
+
+/* ---- right-click: set destination / add waypoint ---------------------------
+   Stations, structures and systems can be autopilot targets; a planet,
+   moon or belt sends its system (CCP's API takes nothing finer). */
+function closeCtx() { document.querySelectorAll(".ctx").forEach(c => c.remove()); }
+document.addEventListener("click", closeCtx);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeCtx(); });
+document.addEventListener("contextmenu", e => {
+  const el = e.target.closest("#panel [data-dest]");
+  if (!el || !el.dataset.dest) return;
+  e.preventDefault();
+  closeCtx();
+  const id = +el.dataset.dest, name = el.dataset.destName || "", note = el.dataset.destNote;
+  const pilot = pilotState.data.get(pilotState.active);
+  const box = document.createElement("div");
+  box.className = "ctx";
+  box.setAttribute("role", "menu");
+  box.innerHTML = `<div class="ctx-head">${esc(note ? `${note} (autopilot goes to ${name})` : name)}</div>` +
+    (pilot ? `<button data-mode="dest" role="menuitem">Set destination for ${esc(pilot.name)}</button>
+              <button data-mode="wp" role="menuitem">Add waypoint for ${esc(pilot.name)}</button>
+              <div class="ctx-note">${pilot.online ? "Sent to the game client now." : "The pilot must be logged in to the game."}</div>`
+           : `<div class="ctx-note">Sign in with Pilot login to send routes to your game client.</div>`);
+  document.body.appendChild(box);
+  const r = box.getBoundingClientRect();
+  box.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + "px";
+  box.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + "px";
+  box.querySelectorAll("button").forEach(b => b.onclick = async ev => {
+    ev.stopPropagation();
+    const dest = b.dataset.mode === "dest";
+    b.textContent = "Sending…";
+    try {
+      await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false` +
+        `&clear_other_waypoints=${dest}&destination_id=${id}`, { method: "POST" });
+      b.textContent = dest ? `Destination set: ${name}` : `Waypoint added: ${name}`;
+    } catch (err) {
+      b.textContent = `Failed (${err.message}); is the pilot in game?`;
+    }
+    setTimeout(closeCtx, 1600);
+  });
+});

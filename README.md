@@ -158,6 +158,12 @@ day and typical gang size, band changes and chokepoints. Pochven and
 Zarzakh gates are left out of routing. Use **Route from here** and
 **Route to here** on any system panel to set the ends.
 
+Right-click anything in the system panel (the system name, a station, a
+planet, moon or belt, or a stargate connection) to **set the destination**
+or **add a waypoint** for the signed-in pilot; it goes straight to the
+game client. CCP's API takes systems, stations and structures as targets,
+so a planet, moon or belt sends its system.
+
 ### Market
 
 Every NPC market order in New Eden is public in CCP's API, and each order
@@ -173,7 +179,10 @@ browser searches every region's orders for one item live from CCP, then
 measures each seller from your pilot (or any system you type) two ways:
 jumps, and the safer-route cost the route planner uses. Sort by best
 price, nearest, or safest; the best five show their price on the map,
-and clicking a row plans the safer route there.
+and clicking a row plans the safer route there. A **deal heat map**
+option then colors every system with orders from green (best deal)
+through yellow and orange to red (worst), ranked so a few absurd prices
+cannot wash the colors out.
 
 CCP's region feed covers NPC stations only. Orders inside player-built
 structures (citadels, trade towers, Keepstars) are served per structure,
