@@ -777,7 +777,7 @@
     <button class="h-go" id="bScan">Scan my blueprints</button>
     <div class="h-grid">
       <label for="bFrom">from</label><input type="text" id="bFrom" list="sysNames" autocomplete="off" placeholder="your pilot's system"><span></span>
-      <label for="bReach">reach</label><input type="text" id="bReach" inputmode="numeric" value="25"><span class="h-unit">jumps</span>
+      <label for="bReach">reach</label><input type="text" id="bReach" inputmode="numeric" value="" placeholder="anywhere"><span class="h-unit">jumps</span>
     </div>
     <label class="m-heat"><input type="checkbox" id="bHigh" checked> Highsec only</label>
     <div class="h-grid b-filters">
@@ -797,8 +797,9 @@
   </div>
   <ol id="bList" class="m-list b-list"></ol>
   <div id="bOut"></div>
-  <div class="r-note">Prices in the list are from this hour's NPC-station orders; the checked ones are re-read live from CCP before routing.
-    Blueprints on the market are always originals. Corporation-owned blueprints are not counted.</div>
+  <div class="r-note">Offers come from NPC markets, player-station markets you can dock at, and public contracts selling one blueprint original,
+    scanned hourly; NPC prices are re-read live before routing. Market blueprints are always unresearched, so ME/TE above 0 means a contract.
+    Corporation-owned blueprints are not counted.</div>
 </section>
 
 <section class="route market" id="market" hidden aria-label="Market finder">

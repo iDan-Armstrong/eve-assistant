@@ -1,20 +1,25 @@
 /* Blueprint finder (opened from the pilot menu).
 
    1. Scan: the pilot's assets (or all signed-in pilots') are read from CCP
-      and every blueprint original they hold is set aside.
-   2. List: every other blueprint on the market, with the cheapest NPC
-      seller within reach from the hourly index (data/live/bpo_index.json)
-      and its price against the market average. Filter by the kind and
-      group of what it builds (data/blueprints.json, from the SDE), by
-      words in the name and by price against average; tick the ones wanted.
-   3. Price and route: the ticked blueprints are re-read live from CCP in
-      every region within reach, the cheapest seller of each is picked, and
-      the stations become an autopilot route, nearest first.
+      and every blueprint original they hold is set aside. The player
+      stations that sell blueprints (or hold blueprint contracts) are checked
+      for this pilot's docking access, as in Sell my cargo.
+   2. List: every other blueprint on the market with its cheapest offer the
+      pilot can use (NPC market, player-station market or a public contract;
+      data/live/bpo_index.json, hourly) and its price against the market
+      average. Filter by the kind and group of what it builds
+      (data/blueprints.json, from the SDE), by words in the name and by
+      price against average; tick the ones wanted.
+   3. Price and route: NPC sellers of the ticked blueprints are re-read live
+      from CCP, the cheapest offer of each is picked, and the stations become
+      an autopilot route, nearest first.
    Uses globals from the main page, pilot.js, haul.js (bfs, liveOrders,
-   regionOf) and sell_core.js (orderStops). */
+   regionOf), market.js (market.structures), sell.js (dockable, sell) and
+   sell_core.js (orderStops). */
 "use strict";
 
-const bpo = { bps: null, index: null, owned: null, rows: [], checked: new Set(), plan: null, tree: null };
+const OPEN_WINDOW_SCOPE = "esi-ui.open_window.v1";
+const bpo = { bps: null, index: null, owned: null, access: new Set(), rows: [], checked: new Set(), tree: null };
 
 function openBpo(open) {
   const panel = document.getElementById("bpo");
@@ -29,7 +34,7 @@ function openBpo(open) {
   const who = document.getElementById("bWho");
   const pilots = EveSSO.pilots();
   who.textContent = pilots.length
-    ? `Blueprint originals ${(pilots.find(p => p.id === pilotState.active) || pilots[0]).name} does not own yet, and where to buy them.`
+    ? `Blueprint originals ${(pilots.find(p => p.id === pilotState.active) || pilots[0]).name} does not own yet, and the cheapest place to get each.`
     : "Sign in with Pilot login first: the finder reads your assets to see which blueprints you own.";
   loadBpoData();
 }
@@ -51,6 +56,9 @@ async function loadBpoData() {
       const r = await fetch("data/live/bpo_index.json");
       bpo.index = r.ok ? await r.json() : { sell: {}, avg: {} };
     }
+    if (!market.structures) {
+      market.structures = await fetch("data/live/structures.json").then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+    }
   } catch {
     sum.textContent = "The blueprint list is not published yet.";
   }
@@ -71,10 +79,18 @@ function bpoTree() {
   const origin = bpoOrigin();
   if (!origin) return null;
   const hs = document.getElementById("bHigh").checked;
-  const reach = Math.max(0, +document.getElementById("bReach").value || 25);
+  const typed = document.getElementById("bReach").value.trim();
+  const reach = typed ? Math.max(0, +typed || 0) : Infinity;          /* blank: anywhere you can fly */
   const t = bfs(origin.id, hs);
   return { origin, hs, reach, jumps: sys => { const d = t.dist.get(sys); return d !== undefined && d <= reach ? d : undefined; } };
 }
+
+const bpoAccess = id => BpoCore.isNpcStation(id) || bpo.access.has(id);
+const bpoSysOf = id => sell.structSystems.get(id) || ((market.structures || {})[id] || [])[1] || 0;
+const placeName = id => esc(BpoCore.isStructure(id)
+  ? sell.structNames.get(id) || ((market.structures || {})[id] || [])[0] || `player station ${id}`
+  : stationName(id) || `station ${id}`);
+const KIND = { npc: "market", player: "player station market", contract: "contract" };
 
 async function scanBpos() {
   const sum = document.getElementById("bSum");
@@ -82,7 +98,8 @@ async function scanBpos() {
   if (!bpo.bps) return;
   const pilots = EveSSO.pilots();
   if (!pilots.length) { sum.textContent = "Sign in with Pilot login first."; return; }
-  const ids = document.getElementById("bAll").checked ? pilots.map(p => p.id) : [pilotState.active || pilots[0].id];
+  const active = pilotState.active || pilots[0].id;
+  const ids = document.getElementById("bAll").checked ? pilots.map(p => p.id) : [active];
   const owned = new Set();
   let failed = 0;
   for (const id of ids) {
@@ -92,6 +109,10 @@ async function scanBpos() {
       for (const t of BpoCore.ownedOriginals(assets, t => !!bpo.bps[t])) owned.add(t);
     } catch { failed++; }
   }
+  /* player stations and contracts there count only where this pilot may dock */
+  const structs = BpoCore.structuresIn(bpo.index);
+  bpo.access = structs.length ? await dockable(active, structs, sum) : new Set();
+  bpo.capped = sell.capped;
   bpo.owned = owned;
   bpo.failed = failed;
   rebuildBpoRows();
@@ -102,7 +123,7 @@ function rebuildBpoRows() {
   const sum = document.getElementById("bSum");
   bpo.tree = bpoTree();
   if (!bpo.tree) { sum.textContent = "Type your system in the from box."; return; }
-  bpo.rows = BpoCore.buildRows(bpo.bps, bpo.index, bpo.owned, bpo.tree.jumps);
+  bpo.rows = BpoCore.buildRows(bpo.bps, bpo.index, bpo.owned, bpo.tree.jumps, bpoAccess, bpoSysOf);
   drawBpoList();
 }
 
@@ -113,23 +134,24 @@ function bpoFilters() {
 }
 
 const SHOW_MAX = 300;
+const offerTxt = o => `${KIND[o.kind]}${o.kind === "contract" ? `, ME ${o.me} / TE ${o.te}` : ""}`;
 function drawBpoList() {
   const sum = document.getElementById("bSum"), list = document.getElementById("bList");
   const shown = BpoCore.sortRows(BpoCore.filterRows(bpo.rows, bpoFilters()), document.getElementById("bSort").value);
   const total = Object.keys(bpo.bps).length;
   sum.textContent = `You own ${bpo.owned.size.toLocaleString()} of ${total.toLocaleString()} blueprints on the market` +
     `${bpo.failed ? ` (${bpo.failed} pilot${bpo.failed === 1 ? "" : "s"} could not be read)` : ""}. ` +
+    `${bpo.capped ? `${bpo.capped} player stations still to check for docking: scan again in a minute. ` : ""}` +
     `${shown.length.toLocaleString()} match${shown.length === 1 ? "es" : ""}` +
     `${shown.length > SHOW_MAX ? `, first ${SHOW_MAX} shown: narrow the filters` : ""}. ${bpo.checked.size} checked.`;
-  const where = st => esc(stationName(st) || `station ${st}`);
   list.innerHTML = shown.slice(0, SHOW_MAX).map(r => {
-    const row = r.best || r.anywhere;
+    const o = r.best || r.anywhere;
     const vs = r.vsAvg === null ? "" : ` <span class="${r.vsAvg <= 0 ? "b-good" : "b-bad"}">${r.vsAvg <= 0 ? "" : "+"}${r.vsAvg.toFixed(0)}% vs average</span>`;
-    const place = r.best ? `${where(r.best[0])}, ${r.jumps} jump${r.jumps === 1 ? "" : "s"}`
-      : row ? `cheapest out of reach: ${where(row[0])}` : "not on sale at an NPC station this hour";
+    const place = r.best ? `${offerTxt(o)} at ${placeName(o.loc)}, ${r.jumps} jump${r.jumps === 1 ? "" : "s"}`
+      : o ? `cheapest is out of reach: ${offerTxt(o)} at ${placeName(o.loc)}` : "no offer anywhere you can buy this hour";
     return `<li data-tid="${r.tid}"><input type="checkbox"${bpo.checked.has(r.tid) ? " checked" : ""} aria-label="Choose ${esc(r.name)}">` +
       `<div class="b-main"><div>${esc(r.name)}</div>` +
-      `<div class="m-meta">${row ? `<span class="m-price">${fmtPrice(row[2])}</span>` : ""}${vs}` +
+      `<div class="m-meta">${o ? `<span class="m-price">${fmtPrice(o.price)}</span>` : ""}${vs}` +
       `${r.avg ? `, average ${fmtPrice(r.avg)}` : ""}<br>${place}</div></div></li>`;
   }).join("");
   list.querySelectorAll("li").forEach(li => li.onclick = e => {
@@ -158,15 +180,22 @@ async function routeBpos() {
   const regions = [...new Set([...state.byId.keys()].filter(sys => tree.jumps(sys) !== undefined).map(regionOf))];
   const jobs = [];
   for (const t of tids) for (const r of regions) jobs.push([t, r]);
-  const orders = [];
+  const live = [];
   let done = 0;
   for (let i = 0; i < jobs.length; i += 12) {
     await Promise.all(jobs.slice(i, i + 12).map(async ([t, r]) => {
-      try { orders.push(...await liveOrders(r, t, "sell")); } catch { /* region skipped */ }
-      sum.textContent = `Checking sellers live: ${++done} of ${jobs.length}…`;
+      try { live.push(...await liveOrders(r, t, "sell")); } catch { /* region skipped */ }
+      sum.textContent = `Checking NPC sellers live: ${++done} of ${jobs.length}…`;
     }));
   }
-  const pick = BpoCore.pickPurchases(tids, orders, tree.jumps);
+  /* NPC prices live; player-station orders and contracts from the hourly index */
+  const offers = BpoCore.npcOffers(live);
+  for (const t of tids) {
+    for (const o of BpoCore.offersFor(String(t), bpo.index, bpoAccess, bpoSysOf)) {
+      if (o.kind !== "npc") offers.push({ ...o, type_id: t });
+    }
+  }
+  const pick = BpoCore.pickPurchases(tids, offers, tree.jumps);
   const trees = new Map();
   const dist = (a, b) => {
     if (!trees.has(a)) trees.set(a, bfs(a, tree.hs));
@@ -178,18 +207,31 @@ async function routeBpos() {
   sum.textContent = pick.stops.length
     ? `${tids.length - pick.missing.length} of ${tids.length} blueprints for ${fmtPrice(pick.total)} ISK at ` +
       `${route.stops.length} station${route.stops.length === 1 ? "" : "s"}, ${route.jumps} jump${route.jumps === 1 ? "" : "s"} in all from ${tree.origin.name}.`
-    : "None of the checked blueprints is for sale at an NPC station within reach right now.";
+    : "None of the checked blueprints is on offer anywhere you can buy within reach right now.";
+  const canOpen = (EveSSO.pilots().find(p => p.id === pilotState.active) || { scopes: [] }).scopes.includes(OPEN_WINDOW_SCOPE);
+  const line = l => `<tr><td>${esc(name(l.type_id))}<div class="m-meta">${offerTxt(l)}` +
+    `${l.kind === "contract" ? ` <button class="h-copy" data-cid="${l.cid}">${canOpen ? "Open in game" : "Allow opening in game"}</button>` : ""}` +
+    `</div></td><td>${fmtPrice(l.price)}</td></tr>`;
   out.innerHTML = route.stops.map((s, i) =>
     `<div class="h-stop"><div class="h-stop-head"><span class="h-n buy">${i + 1}</span><b>Buy</b> at ` +
-    `${esc(stationName(s.station) || `station ${s.station}`)} <span class="m-meta">(${s.jumps} jump${s.jumps === 1 ? "" : "s"})</span></div>` +
-    `<table class="h-tab"><tr><th>blueprint</th><th>price</th></tr>` +
-    s.lines.map(l => `<tr><td>${esc(name(l.type_id))}</td><td>${fmtPrice(l.price)}</td></tr>`).join("") +
+    `${placeName(s.station)} <span class="m-meta">(${s.jumps} jump${s.jumps === 1 ? "" : "s"})</span></div>` +
+    `<table class="h-tab"><tr><th>blueprint</th><th>price</th></tr>` + s.lines.map(line).join("") +
     `<tr class="h-sum"><td>stop total</td><td>${fmtPrice(s.gross)}</td></tr></table></div>`).join("") +
-    (pick.missing.length ? `<div class="m-meta s-drop">Not for sale at an NPC station within reach right now: ` +
+    (pick.missing.length ? `<div class="m-meta s-drop">Not on offer anywhere you can buy within reach right now: ` +
       `${pick.missing.map(t => esc(name(t))).join(", ")}. Try a longer reach or untick Highsec only.</div>` : "") +
-    (pick.stops.length ? `<div class="m-meta">Total ${fmtPrice(pick.total)} ISK, checked live with CCP at ` +
-      `${new Date().toUTCString().slice(17, 22)} UTC. In game, open the market at each stop, search the blueprint name ` +
-      `and buy the one at this station; check the price before you confirm.</div>` : "");
+    (pick.stops.length ? `<div class="m-meta">Total ${fmtPrice(pick.total)} ISK. NPC market prices checked live with CCP at ` +
+      `${new Date().toUTCString().slice(17, 22)} UTC; player-station orders and contracts are from the hourly scan, so one ` +
+      `may have sold since. Market: open the market at the stop, search the blueprint name and buy the one at this station. ` +
+      `Contract: Open in game shows it in your client (or search Contracts for the blueprint name at that station). ` +
+      `Check the price, and a contract's ME/TE, before you confirm.</div>` : "");
+  out.querySelectorAll("[data-cid]").forEach(b => b.onclick = async () => {
+    if (!canOpen) { EveSSO.login([OPEN_WINDOW_SCOPE]); return; }
+    b.textContent = "Opening…";
+    try {
+      await EveSSO.esi(pilotState.active, `/ui/openwindow/contract?contract_id=${b.dataset.cid}`, { method: "POST" });
+      b.textContent = "Opened in game";
+    } catch (e) { b.textContent = `Failed (${e.message}); is the pilot in game?`; }
+  });
   const waypoints = route.stops.map(s => s.station);
   dest.hidden = !waypoints.length || !pilotState.data.size;
   dest.textContent = `Send buying route to autopilot (${waypoints.length} stop${waypoints.length === 1 ? "" : "s"})`;

@@ -10,7 +10,7 @@
    liveOrders, haulName) and pilot.js (pilotState, stationName). */
 "use strict";
 
-const sell = { plan: null, extraNames: new Map(), trees: new Map(), structNames: new Map(), capped: 0 };
+const sell = { plan: null, extraNames: new Map(), trees: new Map(), structNames: new Map(), structSystems: new Map(), capped: 0 };
 
 const sellName = t => sell.extraNames.get(+t) || haulName(t);
 const sellTax = () => {
@@ -101,7 +101,9 @@ async function dockable(pilot, ids, sum) {
   const todo = [];
   for (const sid of ids) {
     const m = memo[`${pilot}:${sid}`];
-    if (m && now - m.at < ACCESS_TTL) { if (m.name) { ok.add(sid); sell.structNames.set(sid, m.name); } }
+    if (m && now - m.at < ACCESS_TTL) {
+      if (m.name) { ok.add(sid); sell.structNames.set(sid, m.name); if (m.sys) sell.structSystems.set(sid, m.sys); }
+    }
     else todo.push(sid);
   }
   sell.capped = Math.max(0, todo.length - ACCESS_MAX_NEW);
@@ -111,8 +113,8 @@ async function dockable(pilot, ids, sum) {
     await Promise.all(ask.slice(i, i + 5).map(async sid => {
       try {
         const st = await EveSSO.esi(pilot, `/universe/structures/${sid}`);
-        memo[`${pilot}:${sid}`] = { at: now, name: st.name };
-        ok.add(sid); sell.structNames.set(sid, st.name);
+        memo[`${pilot}:${sid}`] = { at: now, name: st.name, sys: st.solar_system_id };
+        ok.add(sid); sell.structNames.set(sid, st.name); sell.structSystems.set(sid, st.solar_system_id);
       } catch (e) {
         if (/: 40[34]$/.test(e.message)) memo[`${pilot}:${sid}`] = { at: now, name: null };
       }
@@ -152,18 +154,25 @@ async function planSell(items, unknown) {
     await Promise.all(jobs.slice(i, i + 12).map(async ([t, r]) => {
       try {
         for (const o of await liveOrders(r, t, "buy")) {
-          if (!near(o.system_id)) continue;
-          if (o.location_id >= 60000000 && o.location_id < 64000000) orders.push(o);
-          else if (o.location_id > 1e12) structOrders.push(o);
+          if (near(o.system_id) && o.location_id >= 60000000 && o.location_id < 64000000) orders.push(o);
         }
       } catch { /* a region failing just drops its orders */ }
       sum.textContent = `Checking buyers: ${++done} of ${jobs.length} item and region pairs…`;
     }));
   }
 
-  /* player stations: kept only where this pilot may dock */
+  /* player stations: CCP's region feed has NPC stations only, so their buy
+     orders come from the hourly structure-market job (data/live/structure_orders),
+     kept only where this pilot may dock */
   sell.capped = 0;
   const pilot = typeof pilotState !== "undefined" && pilotState.active;
+  if (pilot && document.getElementById("sStruct").checked) {
+    for (const t of tids) {
+      for (const o of await structureOrders(t, "buy")) {
+        if (near(o.system_id)) structOrders.push({ ...o, type_id: t, min_volume: 1 });
+      }
+    }
+  }
   if (pilot && document.getElementById("sStruct").checked && structOrders.length) {
     const ok = await dockable(pilot, SellCore.structureCandidates(items, SellCore.planSale({ items, orders }), structOrders), sum);
     orders.push(...structOrders.filter(o => ok.has(o.location_id)));

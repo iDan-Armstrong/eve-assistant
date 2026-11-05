@@ -95,6 +95,11 @@ jobs:
         timeout-minutes: 15
         continue-on-error: true
 
+      - name: Blueprint contracts and structure offers (blueprint finder)
+        run: python tools/fetch_contracts.py --history ledger
+        timeout-minutes: 15
+        continue-on-error: true
+
       - name: Save risk history
         run: |
           cd ledger

@@ -279,9 +279,11 @@ inside containers, but nothing fitted). CCP's asset list can be up to an
 hour behind the game, so you can instead copy the cargo window in game
 (Ctrl+A, Ctrl+C) and paste it. Every buy order for those items is then
 read live from CCP in each region within reach (highsec only by default).
-NPC stations always count. Player stations count only where your pilot
-may dock: CCP answers a structure lookup only for pilots on that station's
-docking list, so Atlas asks about each player station whose bid beats what
+NPC stations always count. Player-station buy orders come from the hourly
+structure-market job (CCP's regional feed has NPC stations only), and count
+only where your pilot may dock: CCP answers a structure lookup only for
+pilots on that station's docking list, so Atlas asks about each player
+station whose bid beats what
 the NPC-only plan would get, best first, and leaves out any that refuse.
 Answers are kept per pilot for a day, and at most 40 new stations are asked
 per plan, since each refusal counts against CCP's error allowance. The
@@ -305,25 +307,40 @@ only its hash is in the code, and the data underneath is public.
 ### Blueprint finder
 
 **Blueprint finder** (in the pilot menu) shows the blueprint originals you
-do not own yet and where to buy them. **Scan my blueprints** reads your
-pilot's assets from CCP (or every signed-in pilot's, if ticked) and sets
-aside each blueprint original found; copies do not count, and neither do
-corporation-owned blueprints. Every other blueprint on the market is listed
-with its cheapest NPC seller within reach (from the hourly market job), the
-market average price and how far above or below that average it sits.
-Filter by the kind and group of what the blueprint builds (Ship, Frigate,
-Module, Damage Control and so on, from the SDE), by words in the name, and
-by price: at least a set percentage below average, or no more than a set
-percentage above it. Tick the ones you want and press **Price and route**:
-each ticked blueprint is re-read live from CCP in every region within reach,
-the cheapest NPC seller is picked, and the stations are listed nearest
-first with the total cost. One button sends them to autopilot.
+do not own yet and the cheapest place to get each one. **Scan my blueprints**
+reads your pilot's assets from CCP (or every signed-in pilot's, if ticked)
+and sets aside each blueprint original found; copies do not count, and
+neither do corporation-owned blueprints. Every other blueprint on the market
+is listed with its cheapest offer you can actually use, from three sources:
 
-Blueprints on the market are always originals (copies only trade by
-contract). `tools/build_blueprints.py` writes `web/data/blueprints.json`
-(blueprint, product, product kind and group) when the static data job runs,
-and the hourly market job writes `bpo_index.json` (the ten cheapest NPC
-sellers of each blueprint and CCP's average price).
+- NPC station markets (hourly market job, re-read live before routing)
+- player station markets (hourly structure-market job), only those your
+  pilot may dock at, checked the same way as in Sell my cargo
+- public item-exchange contracts that sell exactly one blueprint original
+  and ask for nothing in return, at an NPC station or a player station you
+  may dock at, with the blueprint's ME and TE
+
+Market blueprints are always unresearched (CCP allows only those on the
+market), so a researched blueprint only ever shows up as a contract. Each
+row shows the price, the market average and how far above or below it the
+price sits. Filter by the kind and group of what the blueprint builds (Ship,
+Frigate, Module, Damage Control and so on, from the SDE), by words in the
+name, and by price: at least a set percentage below average, or no more
+than a set percentage above it. Reach is blank by default, meaning anywhere
+you can fly (highsec only unless you untick it). Tick the ones you want and
+press **Price and route**: the cheapest offer of each is picked, the stops
+are listed nearest first with the total cost, and one button sends them to
+autopilot. Contract lines have an **Open in game** button that opens the
+contract in your client (it asks once for CCP's open-window permission).
+
+`tools/build_blueprints.py` writes `web/data/blueprints.json` (blueprint,
+product, product kind and group) when the static data job runs. Each hour
+`tools/fetch_market.py` writes `bpo_index.json` (the cheapest NPC sellers of
+each blueprint and CCP's average price) and `tools/fetch_contracts.py` adds
+player-station sellers and contracts. A contract's contents take one CCP call
+each, so every contract is read once and remembered in the history branch;
+only new contracts are read, at most 8,000 an hour, so the first few runs
+fill the backlog.
 
 ### Hourly traffic
 
