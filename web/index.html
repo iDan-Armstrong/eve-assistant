@@ -220,6 +220,13 @@
   .b-me { display: inline-block; padding: 0 5px; margin-left: 4px; border: 1px solid var(--panel-edge); border-radius: 3px;
     font-size: 10.5px; color: var(--ink-dim); white-space: nowrap; }
   .b-me.on { border-color: #2f7a4c; color: #8ff0b4; }
+  .b-lab { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; padding: 6px 8px; font-size: 11.5px;
+    background: #101a2a; border: 1px solid var(--panel-edge); border-radius: 3px; }
+  .b-lab[hidden] { display: none; }
+  .b-lab b { color: #e9f6ff; font-weight: 700; }
+  .b-lab .b-lab-head { grid-column: 1 / -1; color: var(--ink-dim); }
+  .b-lab .b-lab-note { grid-column: 1 / -1; font-size: 10.5px; color: var(--ink-dim); }
+  .b-lab button { grid-column: 1 / -1; }
   #bOut { padding: 0 12px 10px; }
   /* tall forms: the whole panel scrolls instead of squeezing the results */
   #bpo, #haul { overflow-y: auto; }
@@ -778,6 +785,7 @@
   <div class="r-head">
     <div class="r-title"><span>BLUEPRINT FINDER</span><button id="bpoClose" aria-label="Close blueprint finder">✕</button></div>
     <div class="h-ship" id="bWho">Blueprint originals you do not own yet, and where to buy them.</div>
+    <div class="b-lab" id="bLab" hidden></div>
     <label class="m-heat"><input type="checkbox" id="bAll"> Count blueprints on all my signed-in pilots</label>
     <button class="h-go" id="bScan">Scan my blueprints</button>
     <div class="h-grid">

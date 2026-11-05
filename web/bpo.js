@@ -19,6 +19,43 @@
 "use strict";
 
 const OPEN_WINDOW_SCOPE = "esi-ui.open_window.v1";
+const SKILLS_SCOPE = "esi-skills.read_skills.v1";
+const skillNames = new Map();
+
+/* the active pilot's lab skills, as bonuses (needs CCP's read-skills permission, asked once) */
+async function showLab() {
+  const box = document.getElementById("bLab");
+  const pilots = EveSSO.pilots();
+  const p = pilots.find(x => x.id === pilotState.active) || pilots[0];
+  if (!p) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!p.scopes.includes(SKILLS_SCOPE)) {
+    box.innerHTML = `<div class="b-lab-head">Lab skills for ${esc(p.name)}</div>` +
+      `<button class="h-dest" id="bLabAllow">Show my research bonuses (sign in once more to let Atlas read skills)</button>`;
+    document.getElementById("bLabAllow").onclick = () => EveSSO.login([SKILLS_SCOPE]);
+    return;
+  }
+  box.innerHTML = `<div class="b-lab-head">Reading ${esc(p.name)}'s skills…</div>`;
+  try {
+    const r = await EveSSO.esi(p.id, `/characters/${p.id}/skills`);
+    const ids = r.skills.map(x => x.skill_id).filter(id => !skillNames.has(id));
+    for (let i = 0; i < ids.length; i += 500) {
+      for (const n of await EveSSO.esiPublic("/universe/names", ids.slice(i, i + 500))) skillNames.set(n.id, n.name);
+    }
+    const levels = {};
+    for (const x of r.skills) levels[skillNames.get(x.skill_id)] = x.active_skill_level;
+    const d = pilotState.data.get(p.id) || {};
+    const b = BpoCore.labBonuses(levels, d.jobs || []);
+    box.title = b.levels.map(([n, l]) => `${n} ${l}`).join(", ");
+    box.innerHTML = `<div class="b-lab-head">Lab skills for ${esc(p.name)}</div>` +
+      `<div>ME research time <b>-${b.me}%</b></div><div>TE research time <b>-${b.te}%</b></div>` +
+      `<div>Copying time <b>-${b.copy}%</b></div><div>Lab jobs <b>${b.inUse} of ${b.jobs}</b> in use</div>` +
+      `<div class="b-lab-note">${b.range ? `Start jobs up to ${b.range} jumps away. ` : "Start jobs in your current system only. "}` +
+      `From skills only: implants and the lab's own bonuses come on top. Hover for skill levels.</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="b-lab-head">Could not read skills (${esc(e.message)}).</div>`;
+  }
+}
 const bpo = { bps: null, index: null, owned: null, access: new Set(), rows: [], checked: new Set(), tree: null };
 
 function openBpo(open) {
@@ -36,6 +73,7 @@ function openBpo(open) {
   who.textContent = pilots.length
     ? `Blueprint originals ${(pilots.find(p => p.id === pilotState.active) || pilots[0]).name} does not own yet, and the cheapest place to get each.`
     : "Sign in with Pilot login first: the finder reads your assets to see which blueprints you own.";
+  showLab();
   loadBpoData();
 }
 

@@ -307,7 +307,15 @@ only its hash is in the code, and the data underneath is public.
 ### Blueprint finder
 
 **Blueprint finder** (in the pilot menu) shows the blueprint originals you
-do not own yet and the cheapest place to get each one. **Scan my blueprints**
+do not own yet and the cheapest place to get each one. Its header shows the
+active pilot's lab skills as bonuses: ME and TE research time (Metallurgy
+and Research, 5% a level, each multiplied with Advanced Industry's 3% a
+level), copying time (Science, 5% a level), lab jobs in use out of the
+total allowed (1, plus a job a level of Laboratory Operation and Advanced
+Laboratory Operation) and how far away jobs can be started (Scientific
+Networking, 5 jumps a level). It reads skills with CCP's read-skills
+permission, asked for once. Implants and the lab's own bonuses are not
+included. **Scan my blueprints**
 reads your pilot's assets from CCP (or every signed-in pilot's, if ticked)
 and sets aside each blueprint original found; copies do not count, and
 neither do corporation-owned blueprints. Every other blueprint on the market

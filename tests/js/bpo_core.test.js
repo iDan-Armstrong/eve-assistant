@@ -107,3 +107,18 @@ test("research: minimum ME/TE drops weaker offers; a researched alternative is o
   assert.strictEqual(B.researched({ me: 10, te: 18 }, { minMe: 10, minTe: 20 }), false);
   assert.deepStrictEqual(B.sortRows(min.filter(r => r.best), "me").map(r => r.tid), [2047, 691, 3000]);
 });
+
+test("lab bonuses: skill levels to research, copy, jobs and range", () => {
+  const b = B.labBonuses({ "Metallurgy": 5, "Research": 4, "Advanced Industry": 5, "Science": 5,
+    "Laboratory Operation": 5, "Advanced Laboratory Operation": 2, "Scientific Networking": 3 },
+    [{ activity_id: 4, status: "active" }, { activity_id: 5, status: "ready" }, { activity_id: 1, status: "active" },
+     { activity_id: 3, status: "delivered" }]);
+  assert.strictEqual(b.me, 36.3);            // 1 - 0.75 * 0.85 = 36.25%
+  assert.strictEqual(b.te, 32);              // 1 - 0.80 * 0.85
+  assert.strictEqual(b.copy, 25);
+  assert.strictEqual(b.jobs, 8);
+  assert.strictEqual(b.inUse, 2);
+  assert.strictEqual(b.range, 15);
+  const none = B.labBonuses({});
+  assert.deepStrictEqual([none.me, none.te, none.copy, none.jobs, none.range], [0, 0, 0, 1, 0]);
+});

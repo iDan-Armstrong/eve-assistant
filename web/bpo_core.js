@@ -140,7 +140,32 @@
     return { stops: [...byStation.values()], missing, total };
   }
 
-  const api = { researched, isNpcStation, isStructure, ownedOriginals, structuresIn, offersFor, buildRows,
+  /* lab bonuses from trained skill levels, keyed by skill name:
+       Metallurgy           -5% ME research time a level
+       Research             -5% TE research time a level
+       Advanced Industry    -3% research (and manufacturing) time a level, multiplies with the above
+       Science              -5% copying time a level
+       Laboratory Operation, Advanced Laboratory Operation   +1 science job a level (1 to start)
+       Scientific Networking +5 jumps a level for starting jobs remotely (0: this system only)
+     Science jobs in use: ME/TE research, copying and invention jobs not yet delivered. */
+  const SCIENCE_ACTIVITIES = new Set([3, 4, 5, 8]);
+  function labBonuses(levels, jobs = []) {
+    const L = n => levels[n] || 0;
+    const ai = 1 - 0.03 * L("Advanced Industry");
+    const pct = x => Math.round((1 - x) * 1000) / 10;
+    return {
+      me: pct((1 - 0.05 * L("Metallurgy")) * ai),
+      te: pct((1 - 0.05 * L("Research")) * ai),
+      copy: pct(1 - 0.05 * L("Science")),
+      jobs: 1 + L("Laboratory Operation") + L("Advanced Laboratory Operation"),
+      inUse: jobs.filter(j => SCIENCE_ACTIVITIES.has(j.activity_id) && j.status !== "delivered" && j.status !== "cancelled").length,
+      range: 5 * L("Scientific Networking"),
+      levels: ["Metallurgy", "Research", "Advanced Industry", "Science", "Laboratory Operation",
+               "Advanced Laboratory Operation", "Scientific Networking"].map(n => [n, L(n)]),
+    };
+  }
+
+  const api = { labBonuses, researched, isNpcStation, isStructure, ownedOriginals, structuresIn, offersFor, buildRows,
                 filterRows, sortRows, npcOffers, pickPurchases };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BpoCore = api;
