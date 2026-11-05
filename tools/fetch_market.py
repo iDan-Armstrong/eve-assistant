@@ -109,6 +109,7 @@ def main() -> None:
     status.update({"systemsWithMarkets": len(systems), "failedRegions": failed,
                    "seconds": round(time.time() - started)})
 
+    prices = []
     try:
         prices = get("/markets/prices")
         names = type_names(sorted({p["type_id"] for p in prices}))
@@ -117,6 +118,11 @@ def main() -> None:
         status["types"] = len(names)
     except Exception as exc:                         # noqa: BLE001
         status["types"] = f"error: {exc}"
+
+    try:
+        status["blueprints"] = write_bpo_index(shelves, prices)
+    except Exception as exc:                         # noqa: BLE001
+        status["blueprints"] = f"error: {exc}"
 
     try:
         write_shelves(shelves)
@@ -189,6 +195,30 @@ def write_sell_index(shelves: dict) -> None:
         shards.setdefault(tid % SELL_SHARDS, {})[str(tid)] = rows
     for n in range(SELL_SHARDS):
         (out / f"{n}.json").write_text(json.dumps(shards.get(n, {}), separators=(",", ":")))
+
+
+BPO_KEEP = 10
+
+
+def bpo_index(shelves: dict, prices: list[dict], blueprint_ids: set[int]) -> dict:
+    """Blueprints only: market average price and the BPO_KEEP cheapest NPC
+    stations selling each one ([stationId, systemId, price, units]). Every
+    blueprint on the market is an original (copies trade only by contract)."""
+    sell = {tid: rows[:BPO_KEEP] for tid, rows in sell_index(shelves).items() if tid in blueprint_ids}
+    avg = {p["type_id"]: round(p["average_price"], 2) for p in prices
+           if p["type_id"] in blueprint_ids and p.get("average_price")}
+    return {"sell": {str(k): v for k, v in sell.items()}, "avg": {str(k): v for k, v in avg.items()}}
+
+
+def write_bpo_index(shelves: dict, prices: list[dict]) -> dict:
+    """web/data/live/bpo_index.json, for the blueprint finder."""
+    path = DATA / "blueprints.json"
+    if not path.exists():
+        return {"skipped": "no blueprints.json yet"}
+    ids = {int(k) for k in json.loads(path.read_text())["b"]}
+    idx = bpo_index(shelves, prices, ids)
+    (OUT / "bpo_index.json").write_text(json.dumps({"generated": _now(), **idx}, separators=(",", ":")))
+    return {"forSale": len(idx["sell"]), "withAverage": len(idx["avg"])}
 
 
 def write_haul(book: dict) -> None:

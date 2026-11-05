@@ -340,6 +340,7 @@ async function openHaul(open) {
   if (typeof openMarket === "function") document.getElementById("market").hidden = true;
   document.getElementById("shelf").hidden = true;
   document.getElementById("fitbox").hidden = true;
+  if (document.getElementById("bpo")) document.getElementById("bpo").hidden = true;
   document.body.classList.add("route-open");
   fillShip();
   if (!haul.data) {

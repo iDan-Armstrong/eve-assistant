@@ -302,6 +302,29 @@ The trades are instant (buy from sell orders, sell into buy orders), so
 the only fee is sales tax. The password is a soft gate on a public site:
 only its hash is in the code, and the data underneath is public.
 
+### Blueprint finder
+
+**Blueprint finder** (in the pilot menu) shows the blueprint originals you
+do not own yet and where to buy them. **Scan my blueprints** reads your
+pilot's assets from CCP (or every signed-in pilot's, if ticked) and sets
+aside each blueprint original found; copies do not count, and neither do
+corporation-owned blueprints. Every other blueprint on the market is listed
+with its cheapest NPC seller within reach (from the hourly market job), the
+market average price and how far above or below that average it sits.
+Filter by the kind and group of what the blueprint builds (Ship, Frigate,
+Module, Damage Control and so on, from the SDE), by words in the name, and
+by price: at least a set percentage below average, or no more than a set
+percentage above it. Tick the ones you want and press **Price and route**:
+each ticked blueprint is re-read live from CCP in every region within reach,
+the cheapest NPC seller is picked, and the stations are listed nearest
+first with the total cost. One button sends them to autopilot.
+
+Blueprints on the market are always originals (copies only trade by
+contract). `tools/build_blueprints.py` writes `web/data/blueprints.json`
+(blueprint, product, product kind and group) when the static data job runs,
+and the hourly market job writes `bpo_index.json` (the ten cheapest NPC
+sellers of each blueprint and CCP's average price).
+
 ### Hourly traffic
 
 CCP publishes, for every system, the stargate jumps and kills of the last

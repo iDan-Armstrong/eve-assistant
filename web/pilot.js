@@ -321,6 +321,7 @@ function renderPilotMenu(note = "") {
         <label><input type="checkbox" data-kind="location"${shareFor(p.id, "location") ? " checked" : ""}> location</label></div>` : "");
   }).join("") +
   `<div class="pm-foot"><button data-act="add">Add a character</button><button data-act="refresh">Refresh</button></div>` +
+  `<div class="pm-foot"><button data-act="bpo">Blueprint finder</button></div>` +
   (act.scopes.includes("esi-markets.structure_markets.v1")
     ? `<div class="pm-collector"><button data-act="collector">Make a login for the market collector</button>
        <div class="pm-note">A separate CCP login just for the hourly structure-market job, so signing in or out
@@ -351,6 +352,7 @@ function renderPilotMenu(note = "") {
   const coll = menu.querySelector('[data-act="collector"]');
   if (coll) coll.onclick = () => EveSSO.login(["esi-markets.structure_markets.v1"], { collector: true });
   menu.querySelector('[data-act="refresh"]').onclick = () => refreshPilots();
+  menu.querySelector('[data-act="bpo"]').onclick = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); if (typeof openBpo === "function") openBpo(true); };
 }
 
 /* ---- route planner hooks ----------------------------------------------------- */

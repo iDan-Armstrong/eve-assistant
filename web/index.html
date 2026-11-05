@@ -211,6 +211,14 @@
     border: 1px solid var(--panel-edge); border-radius: 3px; font: 11px/1.3 monospace; }
   #sOut { padding: 0 12px 10px; overflow-y: auto; }
   .s-drop { color: #ffb03a; }
+  .b-list li { display: flex; gap: 7px; align-items: flex-start; cursor: pointer; }
+  .b-list li input { margin-top: 3px; }
+  .b-list .b-main { flex: 1; min-width: 0; }
+  .b-good { color: #2fe07a; } .b-bad { color: #ff8a6a; }
+  #bOut { padding: 0 12px 10px; }
+  /* tall forms: the whole panel scrolls instead of squeezing the results */
+  #bpo, #haul { overflow-y: auto; }
+  #bpo > *, #haul > * { flex-shrink: 0; }
   .route .m-list li.on { background: #14263a; }
   .fw-key { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 11.5px; color: var(--ink); }
   .fw-key span { white-space: nowrap; }
@@ -759,6 +767,38 @@
   <ol id="hList" class="m-list h-trip"></ol>
   <div id="sOut" class="h-sell" hidden></div>
   <div class="r-note h-trip">Instant trades from this hour's NPC-station orders: buy from sell orders, sell into buy orders, sales tax only. Orders change all the time, so check prices in game before you buy.</div>
+</section>
+
+<section class="route bpo" id="bpo" hidden aria-label="Blueprint finder">
+  <div class="r-head">
+    <div class="r-title"><span>BLUEPRINT FINDER</span><button id="bpoClose" aria-label="Close blueprint finder">✕</button></div>
+    <div class="h-ship" id="bWho">Blueprint originals you do not own yet, and where to buy them.</div>
+    <label class="m-heat"><input type="checkbox" id="bAll"> Count blueprints on all my signed-in pilots</label>
+    <button class="h-go" id="bScan">Scan my blueprints</button>
+    <div class="h-grid">
+      <label for="bFrom">from</label><input type="text" id="bFrom" list="sysNames" autocomplete="off" placeholder="your pilot's system"><span></span>
+      <label for="bReach">reach</label><input type="text" id="bReach" inputmode="numeric" value="25"><span class="h-unit">jumps</span>
+    </div>
+    <label class="m-heat"><input type="checkbox" id="bHigh" checked> Highsec only</label>
+    <div class="h-grid b-filters">
+      <label for="bCat">kind</label><select id="bCat"><option value="">any kind</option></select><span></span>
+      <label for="bGroup">group</label><select id="bGroup"><option value="">any group</option></select><span></span>
+      <label for="bText">name</label><input type="text" id="bText" autocomplete="off" placeholder="words in the name"><span></span>
+      <label for="bMode">price</label><select id="bMode"><option value="any">any price</option>
+        <option value="below">at least this far below average</option><option value="above">no more than this far above average</option></select>
+        <span class="h-unit"><input type="text" id="bPct" inputmode="numeric" value="10" style="width:38px"> %</span>
+      <label for="bSort">sort</label><select id="bSort"><option value="name">name</option><option value="price">price</option>
+        <option value="deal">best deal vs average</option><option value="jumps">fewest jumps</option></select><span></span>
+    </div>
+    <label class="m-heat"><input type="checkbox" id="bInReach" checked> Only ones for sale within reach</label>
+    <div class="r-sum" id="bSum">Scan your blueprints to start.</div>
+    <button class="h-go" id="bGo" hidden>Price and route the checked blueprints</button>
+    <button class="h-dest h-go" id="bDest" hidden>Send buying route to autopilot</button>
+  </div>
+  <ol id="bList" class="m-list b-list"></ol>
+  <div id="bOut"></div>
+  <div class="r-note">Prices in the list are from this hour's NPC-station orders; the checked ones are re-read live from CCP before routing.
+    Blueprints on the market are always originals. Corporation-owned blueprints are not counted.</div>
 </section>
 
 <section class="route market" id="market" hidden aria-label="Market finder">
@@ -1842,6 +1882,7 @@ function openRoute(open) {
     document.getElementById("haul").hidden = true;
     document.getElementById("haulBtn").setAttribute("aria-expanded", "false");
   }
+  if (open && document.getElementById("bpo")) document.getElementById("bpo").hidden = true;
   if (open && document.getElementById("market")) {
     document.getElementById("market").hidden = true;
     document.getElementById("marketBtn").setAttribute("aria-expanded", "false");
@@ -2141,6 +2182,8 @@ boot().catch(err => {
 <script src="haul.js"></script>
 <script src="sell_core.js"></script>
 <script src="sell.js"></script>
+<script src="bpo_core.js"></script>
+<script src="bpo.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>
 </body>
