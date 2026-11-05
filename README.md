@@ -272,6 +272,25 @@ once an hour, so if it predates the docking the check is repeated as soon
 as CCP's next refresh is due (the response's Expires header), and any
 buy-list item still sitting in that station's hangar raises the alarm.
 
+**Sell my cargo** is the other mode of the same panel: it sells whatever
+is already in your hold. **Scan my cargo hold** reads your ship and its
+holds from CCP (everything in the cargo and other holds, including items
+inside containers, but nothing fitted). CCP's asset list can be up to an
+hour behind the game, so you can instead copy the cargo window in game
+(Ctrl+A, Ctrl+C) and paste it. Every buy order for those items is then
+read live from CCP in each region within reach (highsec only by default),
+keeping NPC stations only. `web/sell_core.js` sells each unit into the
+best-paying order it can, honoring each order's remaining and minimum
+volume, then removes stops that are not worth the detour: a stop is kept
+only if losing it would cost more than your "worth it" amount after tax,
+with at most eight stops. Its units move to the next best buyer among the
+stops that are left. Anything no buyer within reach will take goes to
+Jita 4-4, to be left in the hangar there. Stops are visited nearest
+first, and the Jita drop-off goes wherever it adds the fewest jumps (first,
+if you are already there). The result lists each stop with what to sell,
+how many, the price and the ISK after tax, and one button sends the whole
+route to the game's autopilot.
+
 The trades are instant (buy from sell orders, sell into buy orders), so
 the only fee is sales tax. The password is a soft gate on a public site:
 only its hash is in the code, and the data underneath is public.

@@ -204,6 +204,13 @@
   .h-dest { background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px; color: var(--ink);
     font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .h-dest[hidden] { display: none; }
+  .h-trip[hidden], .h-sell[hidden] { display: none; }
+  .s-paste { font-size: 12px; }
+  .s-paste summary { cursor: pointer; color: var(--ink-dim); }
+  .s-paste textarea { width: 100%; box-sizing: border-box; margin: 4px 0; background: rgba(13,19,31,.85); color: var(--ink);
+    border: 1px solid var(--panel-edge); border-radius: 3px; font: 11px/1.3 monospace; }
+  #sOut { padding: 0 12px 10px; overflow-y: auto; }
+  .s-drop { color: #ffb03a; }
   .route .m-list li.on { background: #14263a; }
   .fw-key { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 11.5px; color: var(--ink); }
   .fw-key span { white-space: nowrap; }
@@ -707,10 +714,17 @@
     <div class="r-title"><span>HAUL PLANNER</span><button id="haulClose" aria-label="Close haul planner">✕</button></div>
     <div class="r-row"><label for="hFrom">from</label><input type="text" id="hFrom" list="sysNames" autocomplete="off" placeholder="system (defaults to your pilot)"></div>
     <div class="h-ship" id="hShip">ship: loading…</div>
+    <div class="r-modes" role="group" aria-label="Haul mode">
+      <button data-hmode="trip" aria-pressed="true">Round trips</button>
+      <button data-hmode="sell" aria-pressed="false">Sell my cargo</button>
+    </div>
+    <div class="h-grid">
+      <label for="hAcct">Accounting</label><select id="hAcct"><option>0</option><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option></select><span class="h-unit" id="hTax"></span>
+    </div>
+    <div class="h-trip">
     <div class="h-grid">
       <label for="hCargo">hold</label><input type="text" id="hCargo" inputmode="numeric" value="5000"><span class="h-unit">m3</span>
       <label for="hBudget">budget</label><input type="text" id="hBudget" inputmode="numeric" value="200"><span class="h-unit">million ISK</span>
-      <label for="hAcct">Accounting</label><select id="hAcct"><option>0</option><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option></select><span class="h-unit" id="hTax"></span>
       <label for="hReach">reach</label><input type="text" id="hReach" inputmode="numeric" value="10"><span class="h-unit">jumps to a stop</span>
       <label for="hMin">min stock</label><input type="text" id="hMin" inputmode="numeric" value="10"><span class="h-unit" title="Counts only units that are both for sale at the buy stop and wanted by buyers at the sell stop, at a profit">units, sellers and buyers</span>
     </div>
@@ -724,9 +738,26 @@
     <button class="h-dest h-go" id="hDest" hidden>Send whole trip to autopilot</button>
     <button class="h-dest" id="hFirst" hidden>Set destination: first buy stop only</button>
     <button class="h-dest" id="hHud" hidden>Open haul window</button>
+    </div>
+    <div class="h-sell" hidden>
+      <div class="h-grid">
+        <label for="sReach">reach</label><input type="text" id="sReach" inputmode="numeric" value="15"><span class="h-unit">jumps from here</span>
+        <label for="sMin">worth it</label><input type="text" id="sMin" inputmode="numeric" value="5"><span class="h-unit" title="A stop is kept only if it earns at least this much more than selling those items at your other stops">million ISK a stop</span>
+      </div>
+      <label class="m-heat"><input type="checkbox" id="sHigh" checked> Highsec only</label>
+      <button class="h-go" id="sScan">Scan my cargo hold</button>
+      <details class="s-paste"><summary>Or paste the cargo from the game</summary>
+        <p class="m-meta">The scan reads CCP's asset list, which can be up to an hour old. For what is in the hold right now:
+          open your ship's cargo hold, click any item, press Ctrl+A then Ctrl+C, then click in the box below and press Ctrl+V.</p>
+        <textarea id="sPaste" rows="4" placeholder="paste here"></textarea>
+        <button class="h-dest" id="sPasteGo">Plan from this paste</button></details>
+      <div class="r-sum" id="sSum">Sells everything in your hold for the most ISK, stop by stop. Anything no one is buying goes to Jita.</div>
+      <button class="h-dest h-go" id="sDest" hidden>Send sell route to autopilot</button>
+    </div>
   </div>
-  <ol id="hList" class="m-list"></ol>
-  <div class="r-note">Instant trades from this hour's NPC-station orders: buy from sell orders, sell into buy orders, sales tax only. Orders change all the time, so check prices in game before you buy.</div>
+  <ol id="hList" class="m-list h-trip"></ol>
+  <div id="sOut" class="h-sell" hidden></div>
+  <div class="r-note h-trip">Instant trades from this hour's NPC-station orders: buy from sell orders, sell into buy orders, sales tax only. Orders change all the time, so check prices in game before you buy.</div>
 </section>
 
 <section class="route market" id="market" hidden aria-label="Market finder">
@@ -2107,6 +2138,8 @@ boot().catch(err => {
 <script src="pilot.js"></script>
 <script src="market.js"></script>
 <script src="haul.js"></script>
+<script src="sell_core.js"></script>
+<script src="sell.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>
 </body>
