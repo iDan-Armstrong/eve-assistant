@@ -248,6 +248,53 @@ async function loadMarketTypes() {
     market.types = [];
     document.getElementById("mSum").textContent = "The item list is not published yet; it arrives with the next hourly update.";
   }
+  loadTypeMeta();
+}
+
+/* item facts from the SDE (tools/build_type_meta.py): slot, kind, tech level,
+   rig size per type, for the filters under the item box */
+const SLOT_NAME = { H: "high", M: "mid", L: "low", R: "rig", S: "subsystem" };
+const RIG_SIZE = { 1: "small", 2: "medium", 3: "large", 4: "capital" };
+async function loadTypeMeta() {
+  if (market.meta) return;
+  try {
+    market.meta = await fetch("data/type_meta.json").then(x => x.json());
+  } catch {
+    market.meta = null;
+    document.querySelector(".m-filters").hidden = true;
+    return;
+  }
+  const fill = (id, entries) => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = sel.options[0].outerHTML + entries.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("");
+  };
+  const count = (i) => { const c = {}; for (const v of Object.values(market.meta.t)) c[v[i]] = (c[v[i]] || 0) + 1; return c; };
+  const metaCount = count(2), catCount = count(1);
+  fill("mfMeta", Object.entries(market.meta.metas).filter(([k]) => metaCount[k]).sort((a, b) => +a[0] - +b[0]));
+  fill("mfCat", Object.entries(market.meta.cats).filter(([k]) => catCount[k]).sort((a, b) => a[1].localeCompare(b[1])));
+}
+function itemFilter() {
+  const slot = document.getElementById("mfSlot").value, size = document.getElementById("mfSize").value,
+        meta = document.getElementById("mfMeta").value, cat = document.getElementById("mfCat").value;
+  if (!market.meta || !(slot || meta || cat)) return null;
+  return tid => {
+    const m = market.meta.t[tid];
+    if (!m) return false;
+    if (slot && m[0] !== slot) return false;
+    if (slot === "R" && size && String(m[3]) !== size) return false;
+    if (meta && String(m[2]) !== meta) return false;
+    if (cat && String(m[1]) !== cat) return false;
+    return true;
+  };
+}
+function itemTag(tid) {
+  const m = market.meta && market.meta.t[tid];
+  if (!m) return "";
+  const parts = [];
+  if (m[0]) parts.push(m[0] === "R" && m[3] ? `${RIG_SIZE[m[3]]} rig` : `${SLOT_NAME[m[0]]}${m[0] === "R" || m[0] === "S" ? "" : " slot"}`);
+  const meta = market.meta.metas[m[2]];
+  if (meta && meta !== "Tech I") parts.push(meta);
+  return parts.join(" · ");
 }
 
 function wireMarket() {
@@ -278,24 +325,41 @@ function wireMarket() {
   input.oninput = () => {
     syncClear();
     const q = input.value.trim().toLowerCase();
-    if (!q || !market.types) { results.classList.remove("open"); return; }
+    const pass = itemFilter();
+    /* with a filter set, an empty box lists everything that matches it */
+    if ((!q && !pass) || !market.types) { results.classList.remove("open"); return; }
+    const LIMIT = pass ? 40 : 12;
     const starts = [], has = [];
+    let total = 0;
     for (const t of market.types) {
+      if (pass && !pass(t[0])) continue;
       const n = t[1].toLowerCase();
-      if (n.startsWith(q)) starts.push(t); else if (n.includes(q)) has.push(t);
-      if (starts.length >= 12) break;
+      if (!q || n.startsWith(q)) { starts.push(t); total++; }
+      else if (n.includes(q)) { has.push(t); total++; }
+      if (!pass && starts.length >= LIMIT) break;
     }
-    const hits = [...starts, ...has].slice(0, 12);
-    results.innerHTML = hits.map(t => `<button data-id="${t[0]}">${esc(t[1])}</button>`).join("");
-    results.classList.toggle("open", hits.length > 0);
+    const hits = [...starts, ...has].slice(0, LIMIT);
+    results.innerHTML = hits.map(t => `<button data-id="${t[0]}"><span class="m-tag">${esc(itemTag(t[0]))}</span>${esc(t[1])}</button>`).join("") +
+      (pass && total > hits.length ? `<div class="m-count">${total} items match; type more of the name to narrow it</div>` : "") +
+      (pass && !total ? `<div class="m-count">No items match these filters${q ? " and that name" : ""}.</div>` : "");
+    results.classList.toggle("open", hits.length > 0 || !!pass);
     results.querySelectorAll("button").forEach(b => b.onclick = () => {
-      market.item = [+b.dataset.id, b.textContent];
-      input.value = b.textContent;
+      const label = b.lastChild.textContent;
+      market.item = [+b.dataset.id, label];
+      input.value = label;
       syncClear();
       results.classList.remove("open");
       runMarketSearch();
     });
   };
+  for (const id of ["mfSlot", "mfSize", "mfMeta", "mfCat"]) {
+    document.getElementById(id).onchange = () => {
+      document.getElementById("mfSize").hidden = document.getElementById("mfSlot").value !== "R";
+      if (market.item) { market.item = null; input.value = ""; }    /* a new filter starts a new pick */
+      input.oninput();
+      input.focus();
+    };
+  }
   input.onkeydown = e => {
     if (e.key === "Enter") { const b = results.querySelector("button"); if (b) b.click(); }
   };

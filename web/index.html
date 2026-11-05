@@ -170,6 +170,12 @@
   .m-results { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 5; display: none;
     background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 3px; max-height: 240px; overflow-y: auto; }
   .m-results.open { display: block; }
+  .m-filters { flex-wrap: wrap; gap: 4px; }
+  .m-filters select { background: #0a101b; color: var(--ink); border: 1px solid var(--panel-edge); border-radius: 3px;
+    font: inherit; font-size: 11.5px; padding: 2px 3px; max-width: 110px; }
+  .m-filters select[hidden] { display: none; }
+  .m-results .m-tag { float: right; color: var(--ink-dim); font-size: 11px; margin-left: 8px; }
+  .m-results .m-count { padding: 4px 8px; color: var(--ink-faint); font-size: 11px; }
   .m-results button { display: block; width: 100%; text-align: left; padding: 5px 8px; background: none; border: 0;
     color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
   .m-results button:hover, .m-results button:focus-visible { background: #162032; outline: none; }
@@ -726,6 +732,13 @@
 <section class="route market" id="market" hidden aria-label="Market finder">
   <div class="r-head">
     <div class="r-title"><span>MARKET FINDER</span><button id="marketClose" aria-label="Close market finder">✕</button></div>
+    <div class="r-row m-filters" aria-label="Filter items"><label>filter</label>
+      <select id="mfSlot" title="Fitting slot"><option value="">any slot</option><option value="H">high slot</option>
+        <option value="M">mid slot</option><option value="L">low slot</option><option value="R">rig</option><option value="S">subsystem</option></select>
+      <select id="mfSize" title="Rig size" hidden><option value="">any size</option><option value="1">small</option>
+        <option value="2">medium</option><option value="3">large</option><option value="4">capital</option></select>
+      <select id="mfMeta" title="Tech level"><option value="">any tech</option></select>
+      <select id="mfCat" title="Kind of item"><option value="">any kind</option></select></div>
     <div class="r-row"><label for="mItem">item</label>
       <div class="m-pick"><input type="text" id="mItem" autocomplete="off" placeholder="type an item name">
         <button class="m-clear" id="mClear" type="button" title="Clear the search" aria-label="Clear the search" hidden>Clear</button>

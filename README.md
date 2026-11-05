@@ -187,6 +187,14 @@ systems from no market through local and regional markets up to the
 trade hubs, and the system panel lists order counts and ISK on the
 market.
 
+**Find item filters** narrow the item list before you pick: fitting slot
+(high, mid, low, rig with its size, subsystem), tech level (Tech I, Tech II,
+faction, deadspace, officer and so on) and kind of item. With a filter set,
+an empty item box lists everything that matches, and each suggestion shows
+its slot and tech. The facts come from the SDE (`tools/build_type_meta.py`:
+the slot from each type's dogma effects, read by effect name) and load only
+when Find item opens.
+
 **Find item** answers "where can I buy (or sell) this near me?" The
 browser searches every region's orders for one item live from CCP, then
 measures each seller from your pilot (or any system you type) two ways:
