@@ -91,6 +91,9 @@ const placeName = id => esc(BpoCore.isStructure(id)
   ? sell.structNames.get(id) || ((market.structures || {})[id] || [])[0] || `player station ${id}`
   : stationName(id) || `station ${id}`);
 const KIND = { npc: "market", player: "player station market", contract: "contract" };
+const bpoResearch = () => ({ minMe: document.getElementById("bMinMe").value, minTe: document.getElementById("bMinTe").value });
+/* ME/TE badge: market blueprints are always ME 0 / TE 0 */
+const meBadge = o => `<span class="b-me${o.me > 0 || o.te > 0 ? " on" : ""}" title="Material Efficiency / Time Efficiency">ME ${o.me} · TE ${o.te}</span>`;
 
 async function scanBpos() {
   const sum = document.getElementById("bSum");
@@ -123,7 +126,7 @@ function rebuildBpoRows() {
   const sum = document.getElementById("bSum");
   bpo.tree = bpoTree();
   if (!bpo.tree) { sum.textContent = "Type your system in the from box."; return; }
-  bpo.rows = BpoCore.buildRows(bpo.bps, bpo.index, bpo.owned, bpo.tree.jumps, bpoAccess, bpoSysOf);
+  bpo.rows = BpoCore.buildRows(bpo.bps, bpo.index, bpo.owned, bpo.tree.jumps, bpoAccess, bpoSysOf, bpoResearch());
   drawBpoList();
 }
 
@@ -134,7 +137,7 @@ function bpoFilters() {
 }
 
 const SHOW_MAX = 300;
-const offerTxt = o => `${KIND[o.kind]}${o.kind === "contract" ? `, ME ${o.me} / TE ${o.te}` : ""}`;
+const offerTxt = o => KIND[o.kind];
 function drawBpoList() {
   const sum = document.getElementById("bSum"), list = document.getElementById("bList");
   const shown = BpoCore.sortRows(BpoCore.filterRows(bpo.rows, bpoFilters()), document.getElementById("bSort").value);
@@ -151,8 +154,10 @@ function drawBpoList() {
       : o ? `cheapest is out of reach: ${offerTxt(o)} at ${placeName(o.loc)}` : "no offer anywhere you can buy this hour";
     return `<li data-tid="${r.tid}"><input type="checkbox"${bpo.checked.has(r.tid) ? " checked" : ""} aria-label="Choose ${esc(r.name)}">` +
       `<div class="b-main"><div>${esc(r.name)}</div>` +
-      `<div class="m-meta">${o ? `<span class="m-price">${fmtPrice(o.price)}</span>` : ""}${vs}` +
-      `${r.avg ? `, average ${fmtPrice(r.avg)}` : ""}<br>${place}</div></div></li>`;
+      `<div class="m-meta">${o ? `<span class="m-price">${fmtPrice(o.price)}</span>${meBadge(o)}` : ""}${vs}` +
+      `${r.avg ? `, average ${fmtPrice(r.avg)}` : ""}<br>${place}` +
+      `${r.alt ? `<br>researched: <span class="m-price">${fmtPrice(r.alt.price)}</span>${meBadge(r.alt)} ` +
+        `${offerTxt(r.alt)} at ${placeName(r.alt.loc)}, ${r.alt.j} jump${r.alt.j === 1 ? "" : "s"}` : ""}</div></div></li>`;
   }).join("");
   list.querySelectorAll("li").forEach(li => li.onclick = e => {
     const tid = +li.dataset.tid, box = li.querySelector("input");
@@ -195,7 +200,8 @@ async function routeBpos() {
       if (o.kind !== "npc") offers.push({ ...o, type_id: t });
     }
   }
-  const pick = BpoCore.pickPurchases(tids, offers, tree.jumps);
+  const research = bpoResearch();
+  const pick = BpoCore.pickPurchases(tids, offers.filter(o => BpoCore.researched(o, research)), tree.jumps);
   const trees = new Map();
   const dist = (a, b) => {
     if (!trees.has(a)) trees.set(a, bfs(a, tree.hs));
@@ -209,7 +215,7 @@ async function routeBpos() {
       `${route.stops.length} station${route.stops.length === 1 ? "" : "s"}, ${route.jumps} jump${route.jumps === 1 ? "" : "s"} in all from ${tree.origin.name}.`
     : "None of the checked blueprints is on offer anywhere you can buy within reach right now.";
   const canOpen = (EveSSO.pilots().find(p => p.id === pilotState.active) || { scopes: [] }).scopes.includes(OPEN_WINDOW_SCOPE);
-  const line = l => `<tr><td>${esc(name(l.type_id))}<div class="m-meta">${offerTxt(l)}` +
+  const line = l => `<tr><td>${esc(name(l.type_id))}<div class="m-meta">${offerTxt(l)}${meBadge(l)}` +
     `${l.kind === "contract" ? ` <button class="h-copy" data-cid="${l.cid}">${canOpen ? "Open in game" : "Allow opening in game"}</button>` : ""}` +
     `</div></td><td>${fmtPrice(l.price)}</td></tr>`;
   out.innerHTML = route.stops.map((s, i) =>
@@ -218,7 +224,7 @@ async function routeBpos() {
     `<table class="h-tab"><tr><th>blueprint</th><th>price</th></tr>` + s.lines.map(line).join("") +
     `<tr class="h-sum"><td>stop total</td><td>${fmtPrice(s.gross)}</td></tr></table></div>`).join("") +
     (pick.missing.length ? `<div class="m-meta s-drop">Not on offer anywhere you can buy within reach right now: ` +
-      `${pick.missing.map(t => esc(name(t))).join(", ")}. Try a longer reach or untick Highsec only.</div>` : "") +
+      `${pick.missing.map(t => esc(name(t))).join(", ")}. Try a longer reach, untick Highsec only, or lower the ME/TE minimum.</div>` : "") +
     (pick.stops.length ? `<div class="m-meta">Total ${fmtPrice(pick.total)} ISK. NPC market prices checked live with CCP at ` +
       `${new Date().toUTCString().slice(17, 22)} UTC; player-station orders and contracts are from the hourly scan, so one ` +
       `may have sold since. Market: open the market at the stop, search the blueprint name and buy the one at this station. ` +
@@ -257,6 +263,7 @@ function wireBpo() {
   ["bGroup", "bMode", "bSort", "bInReach"].forEach(id => document.getElementById(id).onchange = () => { if (bpo.owned) drawBpoList(); });
   ["bText", "bPct"].forEach(id => document.getElementById(id).oninput = () => { if (bpo.owned) drawBpoList(); });
   ["bFrom", "bReach"].forEach(id => document.getElementById(id).onchange = rebuildBpoRows);
+  ["bMinMe", "bMinTe"].forEach(id => document.getElementById(id).oninput = rebuildBpoRows);
   document.getElementById("bHigh").onchange = rebuildBpoRows;
 }
 wireBpo();

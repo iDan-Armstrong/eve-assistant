@@ -322,8 +322,13 @@ is listed with its cheapest offer you can actually use, from three sources:
 
 Market blueprints are always unresearched (CCP allows only those on the
 market), so a researched blueprint only ever shows up as a contract. Each
-row shows the price, the market average and how far above or below it the
-price sits. Filter by the kind and group of what the blueprint builds (Ship,
+row shows the price, an ME/TE badge (Material and Time Efficiency, green
+when researched), the market average and how far above or below it the
+price sits. When the cheapest offer is unresearched and a researched one
+exists within reach, that one is shown underneath. Minimum ME and TE
+filters drop weaker offers entirely, so the list and the route then use
+the cheapest blueprint at or above that research, and the list can be
+sorted by research. Filter by the kind and group of what the blueprint builds (Ship,
 Frigate, Module, Damage Control and so on, from the SDE), by words in the
 name, and by price: at least a set percentage below average, or no more
 than a set percentage above it. Reach is blank by default, meaning anywhere

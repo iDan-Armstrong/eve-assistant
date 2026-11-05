@@ -55,21 +55,28 @@
 
   /* bps: {id: [name, productId, catId, groupId]}; jumps(sys) gives jumps
      from the pilot, or undefined when out of reach */
-  function buildRows(bps, index, owned, jumps, access = isNpcStation, sysOf) {
+  /* research floor: offers below minMe / minTe do not count at all */
+  const researched = (o, r = {}) => o.me >= (+r.minMe || 0) && o.te >= (+r.minTe || 0);
+
+  function buildRows(bps, index, owned, jumps, access = isNpcStation, sysOf, research = {}) {
     const rows = [];
     for (const [id, [name, , cat, group]] of Object.entries(bps)) {
       const tid = +id;
       if (owned.has(tid)) continue;
-      let best = null, anywhere = null;
+      let best = null, anywhere = null, bestResearched = null;
       for (const o of offersFor(id, index || {}, access, sysOf)) {
+        if (!researched(o, research)) continue;
         const j = jumps(o.sys);
         const x = { ...o, j };
         if (j !== undefined && better(x, best)) best = x;
+        if (j !== undefined && (o.me > 0 || o.te > 0) && better(x, bestResearched)) bestResearched = x;
         if (!anywhere || o.price < anywhere.price) anywhere = x;
       }
+      /* the cheapest researched copy within reach, when the cheapest overall is not researched */
+      const alt = best && !(best.me > 0 || best.te > 0) ? bestResearched : null;
       const avg = (index && index.avg && index.avg[id]) || 0;
       const price = best ? best.price : anywhere ? anywhere.price : 0;
-      rows.push({ tid, name, cat, group, best, jumps: best ? best.j : undefined, anywhere, avg,
+      rows.push({ tid, name, cat, group, best, jumps: best ? best.j : undefined, anywhere, avg, alt,
                   vsAvg: price && avg ? (price / avg - 1) * 100 : null });
     }
     return rows;
@@ -95,6 +102,8 @@
     const key = {
       name: (a, b) => a.name.localeCompare(b.name),
       price: (a, b) => price(a) - price(b),
+      me: (a, b) => ((b.best || b.anywhere || { me: -1 }).me - (a.best || a.anywhere || { me: -1 }).me)
+        || ((b.best || b.anywhere || { te: -1 }).te - (a.best || a.anywhere || { te: -1 }).te),
       deal: (a, b) => (a.vsAvg ?? Infinity) - (b.vsAvg ?? Infinity),
       jumps: (a, b) => (a.jumps ?? Infinity) - (b.jumps ?? Infinity),
     }[by] || ((a, b) => a.name.localeCompare(b.name));
@@ -131,7 +140,7 @@
     return { stops: [...byStation.values()], missing, total };
   }
 
-  const api = { isNpcStation, isStructure, ownedOriginals, structuresIn, offersFor, buildRows,
+  const api = { researched, isNpcStation, isStructure, ownedOriginals, structuresIn, offersFor, buildRows,
                 filterRows, sortRows, npcOffers, pickPurchases };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BpoCore = api;

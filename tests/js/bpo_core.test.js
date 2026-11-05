@@ -92,3 +92,18 @@ test("purchase: cheapest offer of any kind within reach, grouped by station", ()
   assert.deepStrictEqual(p.missing, [3000]);
   assert.strictEqual(p.total, 990_000 + 450_000 + 1_500_000);
 });
+
+test("research: minimum ME/TE drops weaker offers; a researched alternative is offered", () => {
+  const rows = B.buildRows(bps, index, new Set(), jumps, access, sysOf);
+  const dc = rows.find(r => r.tid === 2047);
+  assert.strictEqual(dc.best.cid, 555);                     // already researched: no alternative
+  assert.strictEqual(dc.alt, null);
+  const idx2 = { ...index, ct: { ...index.ct, 691: [[600, 60000001, 1, 3_000_000, 10, 20]] } };
+  const rifter = B.buildRows(bps, idx2, new Set(), jumps, access, sysOf).find(r => r.tid === 691);
+  assert.deepStrictEqual([rifter.best.kind, rifter.alt.cid], ["npc", 600]);
+  const min = B.buildRows(bps, idx2, new Set(), jumps, access, sysOf, { minMe: 5 });
+  assert.deepStrictEqual(min.find(r => r.tid === 691).best.cid, 600);
+  assert.strictEqual(min.find(r => r.tid === 692).best, null);   // only unresearched market offers
+  assert.strictEqual(B.researched({ me: 10, te: 18 }, { minMe: 10, minTe: 20 }), false);
+  assert.deepStrictEqual(B.sortRows(min.filter(r => r.best), "me").map(r => r.tid), [2047, 691, 3000]);
+});

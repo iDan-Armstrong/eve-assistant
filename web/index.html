@@ -215,6 +215,11 @@
   .b-list li input { margin-top: 3px; }
   .b-list .b-main { flex: 1; min-width: 0; }
   .b-good { color: #2fe07a; } .b-bad { color: #ff8a6a; }
+  .b-research { font-size: 11.5px; color: var(--ink-dim); white-space: nowrap; }
+  .h-grid .b-research input { width: 34px; padding: 3px 4px; }
+  .b-me { display: inline-block; padding: 0 5px; margin-left: 4px; border: 1px solid var(--panel-edge); border-radius: 3px;
+    font-size: 10.5px; color: var(--ink-dim); white-space: nowrap; }
+  .b-me.on { border-color: #2f7a4c; color: #8ff0b4; }
   #bOut { padding: 0 12px 10px; }
   /* tall forms: the whole panel scrolls instead of squeezing the results */
   #bpo, #haul { overflow-y: auto; }
@@ -787,8 +792,10 @@
       <label for="bMode">price</label><select id="bMode"><option value="any">any price</option>
         <option value="below">at least this far below average</option><option value="above">no more than this far above average</option></select>
         <span class="h-unit"><input type="text" id="bPct" inputmode="numeric" value="10" style="width:38px"> %</span>
+      <label for="bMinMe">research</label><span class="b-research">ME at least <input type="text" id="bMinMe" inputmode="numeric" placeholder="0">
+        TE at least <input type="text" id="bMinTe" inputmode="numeric" placeholder="0"></span><span></span>
       <label for="bSort">sort</label><select id="bSort"><option value="name">name</option><option value="price">price</option>
-        <option value="deal">best deal vs average</option><option value="jumps">fewest jumps</option></select><span></span>
+        <option value="deal">best deal vs average</option><option value="me">best research (ME, then TE)</option><option value="jumps">fewest jumps</option></select><span></span>
     </div>
     <label class="m-heat"><input type="checkbox" id="bInReach" checked> Only ones for sale within reach</label>
     <div class="r-sum" id="bSum">Scan your blueprints to start.</div>
