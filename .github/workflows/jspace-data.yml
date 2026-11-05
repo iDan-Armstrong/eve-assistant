@@ -1,4 +1,4 @@
-name: J-space reference data
+name: Static reference data (J-space, item facts)
 
 # Run by hand when CCP publishes a new SDE. Rebuilds web/data/jspace/*.json and
 # commits them to master if anything changed.
@@ -24,11 +24,13 @@ jobs:
           unzip -l sde.zip | head -60
       - name: Build J-space data
         run: python tools/build_jspace.py sde.zip web/data/jspace
+      - name: Build item facts (market filters)
+        run: python tools/build_type_meta.py sde.zip web/data/type_meta.json
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/data/jspace/systems.json web/data/jspace/wormholes.json web/data/jspace/classes.json web/data/jspace/scan_types.json
+          git add web/data/jspace/systems.json web/data/jspace/wormholes.json web/data/jspace/classes.json web/data/jspace/scan_types.json web/data/type_meta.json
           git diff --cached --quiet && echo "no change" && exit 0
           git commit -m "J-space reference data from the latest SDE"
           git push
