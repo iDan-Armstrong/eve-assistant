@@ -92,3 +92,18 @@ test("plan: free stations (drop-off, where you are) are kept however small", () 
   assert.deepStrictEqual(p.stops.map(s => s.station), [S.JITA.station]);
   assert.strictEqual(p.left.size, 0);
 });
+
+test("player stations: only those that beat what the NPC plan gets, most extra ISK first", () => {
+  const items = new Map([[34, 100], [35, 5], [37, 2]]);
+  const npc = [ord(34, 12, 50, 60000002, 1), ord(34, 10, 1000, 60000001, 1), ord(35, 50, 100, 60000001, 1)];
+  const plan = S.planSale({ items, orders: npc });          // 34 sells at 12 and 10, 37 unsold
+  const st = [
+    ord(34, 9, 1000, 1e12 + 1, 2),        // below every NPC price used: never worth asking
+    ord(34, 11, 1000, 1e12 + 2, 3),       // beats the 10 ISK units: +1 x 100 = 100
+    ord(35, 90, 100, 1e12 + 3, 4),        // +40 x 5 = 200
+    ord(35, 99, 100, 1e12 + 4, 4, 10),    // wants at least 10, we carry 5
+    ord(36, 999, 100, 1e12 + 5, 4),       // not in the hold
+    ord(37, 1, 100, 1e12 + 6, 4),         // unsold otherwise: any bid helps, 1 x 2 = 2
+  ];
+  assert.deepStrictEqual(S.structureCandidates(items, plan, st), [1e12 + 3, 1e12 + 2, 1e12 + 6]);
+});

@@ -141,7 +141,27 @@
     return { stops: out, jumps };
   }
 
-  const api = { JITA, parseCargoPaste, cargoFromAssets, sortOrders, allocate, planSale, orderStops };
+  /* player-station buy orders worth asking about: only where some order
+     pays more than the worst price that item gets in the NPC-only plan (any
+     price at all for units that plan leaves unsold), ranked by how much more
+     they could pay for your quantities. Returns station ids. */
+  function structureCandidates(items, npcPlan, structOrders) {
+    const floor = new Map();
+    for (const s of npcPlan.stops) for (const l of s.lines) {
+      floor.set(l.type_id, Math.min(floor.has(l.type_id) ? floor.get(l.type_id) : Infinity, l.price));
+    }
+    for (const t of npcPlan.left.keys()) floor.set(t, 0);
+    const gain = new Map();
+    for (const o of structOrders) {
+      const q = items.get(o.type_id);
+      if (!q || q < (o.min_volume || 1)) continue;
+      const g = (o.price - (floor.get(o.type_id) || 0)) * Math.min(q, o.volume_remain);
+      if (g > 0) gain.set(o.location_id, (gain.get(o.location_id) || 0) + g);
+    }
+    return [...gain].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  }
+
+  const api = { JITA, structureCandidates, parseCargoPaste, cargoFromAssets, sortOrders, allocate, planSale, orderStops };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SellCore = api;
 })(typeof self !== "undefined" ? self : this);

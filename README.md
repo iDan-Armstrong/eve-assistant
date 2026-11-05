@@ -278,8 +278,15 @@ holds from CCP (everything in the cargo and other holds, including items
 inside containers, but nothing fitted). CCP's asset list can be up to an
 hour behind the game, so you can instead copy the cargo window in game
 (Ctrl+A, Ctrl+C) and paste it. Every buy order for those items is then
-read live from CCP in each region within reach (highsec only by default),
-keeping NPC stations only. `web/sell_core.js` sells each unit into the
+read live from CCP in each region within reach (highsec only by default).
+NPC stations always count. Player stations count only where your pilot
+may dock: CCP answers a structure lookup only for pilots on that station's
+docking list, so Atlas asks about each player station whose bid beats what
+the NPC-only plan would get, best first, and leaves out any that refuse.
+Answers are kept per pilot for a day, and at most 40 new stations are asked
+per plan, since each refusal counts against CCP's error allowance. The
+docking list does not cover the market itself, which an owner can still
+close, so check the sell window there. `web/sell_core.js` sells each unit into the
 best-paying order it can, honoring each order's remaining and minimum
 volume, then removes stops that are not worth the detour: a stop is kept
 only if losing it would cost more than your "worth it" amount after tax,

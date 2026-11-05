@@ -10,7 +10,7 @@
    liveOrders, haulName) and pilot.js (pilotState, stationName). */
 "use strict";
 
-const sell = { plan: null, extraNames: new Map(), trees: new Map() };
+const sell = { plan: null, extraNames: new Map(), trees: new Map(), structNames: new Map(), capped: 0 };
 
 const sellName = t => sell.extraNames.get(+t) || haulName(t);
 const sellTax = () => {
@@ -87,6 +87,43 @@ async function pasteCargo() {
   await planSell(r.items, r.unknown);
 }
 
+/* Can this pilot dock at these player stations? CCP answers the structure
+   lookup only for pilots on the station's docking list, so a 403 means no.
+   Answers are remembered per pilot for a day. Each refusal counts against
+   CCP's error allowance (100 a minute), so at most 40 new stations are
+   asked per plan, the most promising first. */
+const ACCESS_KEY = "atlas.sell.access", ACCESS_TTL = 864e5, ACCESS_MAX_NEW = 40;
+function loadAccess() {
+  try { return JSON.parse(localStorage.getItem(ACCESS_KEY)) || {}; } catch { return {}; }
+}
+async function dockable(pilot, ids, sum) {
+  const memo = loadAccess(), now = Date.now(), ok = new Set();
+  const todo = [];
+  for (const sid of ids) {
+    const m = memo[`${pilot}:${sid}`];
+    if (m && now - m.at < ACCESS_TTL) { if (m.name) { ok.add(sid); sell.structNames.set(sid, m.name); } }
+    else todo.push(sid);
+  }
+  sell.capped = Math.max(0, todo.length - ACCESS_MAX_NEW);
+  const ask = todo.slice(0, ACCESS_MAX_NEW);
+  let done = 0;
+  for (let i = 0; i < ask.length; i += 5) {
+    await Promise.all(ask.slice(i, i + 5).map(async sid => {
+      try {
+        const st = await EveSSO.esi(pilot, `/universe/structures/${sid}`);
+        memo[`${pilot}:${sid}`] = { at: now, name: st.name };
+        ok.add(sid); sell.structNames.set(sid, st.name);
+      } catch (e) {
+        if (/: 40[34]$/.test(e.message)) memo[`${pilot}:${sid}`] = { at: now, name: null };
+      }
+      sum.textContent = `Checking which player stations you can dock at: ${++done} of ${ask.length}…`;
+    }));
+  }
+  for (const k of Object.keys(memo)) if (now - memo[k].at > ACCESS_TTL) delete memo[k];
+  try { localStorage.setItem(ACCESS_KEY, JSON.stringify(memo)); } catch { /* private mode */ }
+  return ok;
+}
+
 const treeFrom = (sys, hs) => {
   const k = `${sys}:${hs}`;
   if (!sell.trees.has(k)) sell.trees.set(k, bfs(sys, hs));
@@ -109,18 +146,27 @@ async function planSell(items, unknown) {
 
   const tids = [...items.keys()], jobs = [];
   for (const t of tids) for (const r of regions) jobs.push([t, r]);
-  const orders = [];
+  const orders = [], structOrders = [];
   let done = 0;
   for (let i = 0; i < jobs.length; i += 12) {
     await Promise.all(jobs.slice(i, i + 12).map(async ([t, r]) => {
       try {
         for (const o of await liveOrders(r, t, "buy")) {
-          /* NPC stations only: player structures may not let you dock */
-          if (o.location_id >= 60000000 && o.location_id < 64000000 && near(o.system_id)) orders.push(o);
+          if (!near(o.system_id)) continue;
+          if (o.location_id >= 60000000 && o.location_id < 64000000) orders.push(o);
+          else if (o.location_id > 1e12) structOrders.push(o);
         }
       } catch { /* a region failing just drops its orders */ }
       sum.textContent = `Checking buyers: ${++done} of ${jobs.length} item and region pairs…`;
     }));
+  }
+
+  /* player stations: kept only where this pilot may dock */
+  sell.capped = 0;
+  const pilot = typeof pilotState !== "undefined" && pilotState.active;
+  if (pilot && document.getElementById("sStruct").checked && structOrders.length) {
+    const ok = await dockable(pilot, SellCore.structureCandidates(items, SellCore.planSale({ items, orders }), structOrders), sum);
+    orders.push(...structOrders.filter(o => ok.has(o.location_id)));
   }
 
   const tax = sellTax();
@@ -138,7 +184,9 @@ function drawSell() {
   const { route, left, gross, origin, hs, unknown, at } = sell.plan;
   const rate = sellTax(), tax = gross * rate, net = gross - tax;
   const sum = document.getElementById("sSum"), out = document.getElementById("sOut");
-  const where = s => esc(stationName(s.station) || (state.byId.get(s.system) || {}).name || `station ${s.station}`);
+  const where = s => s.station > 1e12
+    ? `${esc(sell.structNames.get(s.station) || `player station ${s.station}`)} <span class="m-meta">(player station, you can dock)</span>`
+    : esc(stationName(s.station) || (state.byId.get(s.system) || {}).name || `station ${s.station}`);
   const jumpsTxt = j => j === Infinity ? `no ${hs ? "highsec " : ""}route` : `${j} jump${j === 1 ? "" : "s"}`;
   const sells = route.stops.filter(s => s.lines.length);
   sum.textContent = sells.length
@@ -166,8 +214,13 @@ function drawSell() {
   if (unknown && unknown.length) {
     html += `<div class="m-meta s-drop">Not recognised from the paste, so not planned: ${unknown.map(esc).join(", ")}.</div>`;
   }
+  if (sell.capped) {
+    html += `<div class="m-meta">${sell.capped} more player station${sell.capped === 1 ? "" : "s"} with better bids were not checked yet ` +
+      `(CCP limits how many refusals it allows a minute). Plan again in a minute to check them; answers are remembered for a day.</div>`;
+  }
+  const withStructs = typeof pilotState !== "undefined" && pilotState.active && document.getElementById("sStruct").checked;
   html += `<div class="m-meta">Buy orders checked live with CCP at ${at.toUTCString().slice(17, 22)} UTC, ` +
-    `NPC stations only, each sold at the order's own station. Gross ${fmtPrice(gross)} ISK. ` +
+    `${withStructs ? "NPC stations plus player stations your pilot can dock at (an owner can still close the market to you)" : "NPC stations only"}, each sold at the order's own station. Gross ${fmtPrice(gross)} ISK. ` +
     `In game, right-click each item at the stop and choose Sell This Item; check the price matches before you confirm, ` +
     `since other haulers can fill an order before you arrive.</div>`;
   out.innerHTML = html;
