@@ -30,5 +30,19 @@
     OPEN[tool]();
   });
   document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) show(false); });
+
+  /* one header menu at a time: opening Tools, Corp, Pilot or Overlays closes the others */
+  document.addEventListener("click", e => {
+    const opener = e.target.closest("[aria-controls$='Menu'], details.toggles > summary");
+    if (!opener) return;
+    const keep = opener.getAttribute("aria-controls");
+    document.querySelectorAll(".pilot-menu").forEach(m => {
+      if (m.id === keep || m.hidden) return;
+      m.hidden = true;
+      const b = document.querySelector(`[aria-controls="${m.id}"]`);
+      if (b) b.setAttribute("aria-expanded", "false");
+    });
+    if (opener.tagName !== "SUMMARY") document.querySelectorAll("details.toggles[open]").forEach(d => { d.open = false; });
+  }, true);
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) { show(false); btn.focus(); } });
 })();
