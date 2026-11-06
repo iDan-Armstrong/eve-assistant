@@ -37,7 +37,7 @@
    POST /org        body {"token": ..., "action": ..., ...}
      list | mine | create {name, adminPassword, memberPassword}
      | join {org, password} | leave {org}
-     | admin {org, adminPassword, op: view|approve|boot|promote|demote|master|passwords, target, newAdmin, newMember}
+     | admin {org, adminPassword, op: view|approve|boot|promote|demote|master|passwords|rename, target, newAdmin, newMember, name}
      | operator {org, op, target, newAdmin, newMember}   (the Atlas operator only)
      Rules in worker/org_core.js. Passwords are kept only as salted PBKDF2
      hashes; five wrong tries an hour per pilot per org.
@@ -372,7 +372,11 @@ export class OrgDirectory {
           }
           const op = body.op || "view";
           if (op !== "view") {
-            Org.adminAction(org, who, op, body.target, now, { operator });
+            if (op === "rename") {
+              const name = String(body.name || "").trim().toLowerCase();
+              if (Object.entries(index).some(([id, n]) => id !== org.id && n.toLowerCase() === name)) throw new Error("That name is taken.");
+            }
+            Org.adminAction(org, who, op, body.target, now, { operator, name: body.name });
             if (op === "passwords") {
               if (body.newAdmin !== undefined && body.newAdmin !== "") {
                 if (!goodPassword(body.newAdmin)) throw new Error("Passwords need at least 6 characters.");

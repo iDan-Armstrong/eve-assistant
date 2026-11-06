@@ -8,7 +8,8 @@
    Roles: pending (asked to join, sees nothing), member, admin. One admin is
    Master Admin: the creator, until they hand it on. Admins approve and boot
    members and promote members to admin; only the Master Admin demotes or
-   boots admins, changes the passwords, and passes Master Admin on.
+   boots admins, changes the passwords, renames the org, and passes
+   Master Admin on.
 
    Master Admin gone quiet: after 30 days without the Master Admin using the
    relay, the most active other admin of the last 30 days becomes Temporary
@@ -171,6 +172,15 @@ export function adminAction(org, actor, action, targetId, now, opts = {}) {
       org.temp = null;
       log(org, now, actor.name, `made ${t.name} Master Admin`);
       return "master";
+    case "rename": {
+      if (!master) throw new Error("Only the Master Admin renames the org.");
+      const name = String(opts.name || "").trim();
+      if (!NAME_RE.test(name)) throw new Error("Org names are 3 to 40 letters, numbers, spaces or . ' _ -");
+      if (name === org.name) return "renamed";
+      log(org, now, actor.name, `renamed the org from ${org.name} to ${name}`);
+      org.name = name;
+      return "renamed";
+    }
     case "passwords":
       if (!master) throw new Error("Only the Master Admin changes the passwords.");
       log(org, now, actor.name, "changed the passwords");

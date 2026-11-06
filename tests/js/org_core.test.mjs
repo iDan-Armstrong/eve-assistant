@@ -119,3 +119,13 @@ test("activity marks: at most one per 10 minutes, last 30 days only", () => {
   assert.strictEqual(O.activity(o.members[A.id], T0 + 11 * 60e3), before + 2);
   assert.strictEqual(O.activity(o.members[A.id], T0 + 40 * D), 0);
 });
+
+test("rename: Master Admin (or temporary holder) and the operator only, same name rules", () => {
+  const o = org();
+  assert.throws(() => O.adminAction(o, A, "rename", null, T0, { name: "New Name" }), /Only the Master Admin renames/);
+  assert.throws(() => O.adminAction(o, ME, "rename", null, T0, { name: "<b>" }), /Org names/);
+  O.adminAction(o, ME, "rename", null, T0, { name: "  Deep Divers  " });
+  assert.strictEqual(o.name, "Deep Divers");
+  O.adminAction(o, { id: 999, name: "Op" }, "rename", null, T0, { operator: true, name: "Op Named" });
+  assert.strictEqual(o.name, "Op Named");
+});

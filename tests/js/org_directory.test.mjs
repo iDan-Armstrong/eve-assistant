@@ -72,3 +72,13 @@ test("leaving: the Master Admin must hand over first; the last one out removes t
   await call({ action: "leave", who: VARG, org });
   assert.deepStrictEqual((await call({ action: "list", who: BOB })).orgs, []);
 });
+
+test("rename keeps names unique and updates the list", async () => {
+  const { call } = directory();
+  const { id: a } = await call({ action: "create", who: VARG, name: "Alpha Org", adminPassword: "adminpw1", memberPassword: "memberpw1" });
+  await call({ action: "create", who: ANN, name: "Beta Org", adminPassword: "adminpw2", memberPassword: "memberpw2" });
+  assert.match((await call({ action: "admin", who: VARG, org: a, adminPassword: "adminpw1", op: "rename", name: "beta org" })).error, /taken/);
+  assert.strictEqual((await call({ action: "admin", who: VARG, org: a, adminPassword: "adminpw1", op: "rename", name: "Gamma Org" })).name, "Gamma Org");
+  assert.deepStrictEqual((await call({ action: "list", who: BOB })).orgs.map(o => o.name), ["Beta Org", "Gamma Org"]);
+  assert.strictEqual((await call({ action: "mine", who: VARG })).orgs[0].name, "Gamma Org");
+});

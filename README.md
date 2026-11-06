@@ -405,15 +405,16 @@ login, so only approved members can read an org's data.
   one they share with.
 - **Admins** approve, refuse and boot members and make members admins.
   Only the **Master Admin** demotes or boots admins, changes the
-  passwords, and passes Master Admin to another admin.
+  passwords, renames the org (names stay unique), and passes Master Admin
+  to another admin.
 - **Master Admin away**: after 30 days without the Master Admin using the
   relay, the most active admin of the last 30 days becomes Temporary
   Master Admin with the same powers. If the Master Admin returns, they hold
   it again at once; if 30 more days pass first, it becomes the temporary
   holder's for good.
 - **Disputes and forgotten passwords**: send an in-game mail to Varg Soth,
-  the Atlas operator, who can reset an org's passwords, appoint a Master
-  Admin and remove anyone. Operators are named in `wrangler.toml`
+  the Atlas operator, who can reset an org's passwords, rename it, appoint
+  a Master Admin and remove anyone. Operators are named in `wrangler.toml`
   (`OPERATORS`).
 
 Passwords are stored only as salted PBKDF2 hashes, so a forgotten one is

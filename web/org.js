@@ -198,6 +198,9 @@ function drawAdmin(v, note) {
     `<p class="m-meta">Master Admin: <b>${esc(masterName)}</b>${tempName ? `, away; <b>${esc(tempName)}</b> is Temporary Master Admin` : ""}.
        After 30 quiet days the most active admin stands in; 30 more and it is theirs.</p>` +
     `<table class="h-tab o-members">${memberRows(v, me, master, "admin")}</table>` +
+    (master ? `<form id="oaRen" class="o-form"><div class="o-head">Rename the org</div>
+       <label>New name<input id="oaName" maxlength="40" autocomplete="off" value="${esc(v.name)}"></label>
+       <button class="h-go" type="submit">Rename</button></form>` : "") +
     (master ? `<form id="oaPw2" class="o-form"><div class="o-head">Change passwords</div>
        <label>New admin password<input id="oaNewA" type="password" autocomplete="new-password" placeholder="leave blank to keep"></label>
        <label>New member password<input id="oaNewM" type="password" autocomplete="new-password" placeholder="leave blank to keep"></label>
@@ -209,6 +212,13 @@ function drawAdmin(v, note) {
     if (["boot", "master", "demote"].includes(b.dataset.op) && !confirmInline(b, "Sure?")) return;
     adminRun(v.id, b.dataset.op, +b.dataset.t || b.dataset.t);
   });
+  const ren = document.getElementById("oaRen");
+  if (ren) ren.onsubmit = async e => {
+    e.preventDefault();
+    await adminRun(v.id, "rename", null, { name: document.getElementById("oaName").value });
+    const o = AtlasOrg.mine.find(x => x.id === v.id);
+    if (o) o.name = document.getElementById("oaName") ? document.getElementById("oaName").value.trim() : o.name;
+  };
   const pw = document.getElementById("oaPw2");
   if (pw) pw.onsubmit = e => {
     e.preventDefault();
@@ -227,6 +237,8 @@ async function operatorView(note = "") {
     box.innerHTML = `<div class="o-head">Operator: every org</div>` + (typeof note === "string" && note ? `<div class="r-sum">${esc(note)}</div>` : "") +
       all.orgs.map(v => `<details class="o-op"><summary><b>${esc(v.name)}</b> <span class="m-meta">${v.members.length} pilots</span></summary>
         <table class="h-tab o-members" data-org="${esc(v.id)}">${memberRows(v, -1, true, "operator")}</table>
+        <form class="o-form" data-rename="${esc(v.id)}"><label>Rename<input name="n" maxlength="40" value="${esc(v.name)}"></label>
+        <button class="h-go" type="submit">Rename</button></form>
         <form class="o-form" data-reset="${esc(v.id)}"><label>New admin password<input type="password" name="a" placeholder="leave blank to keep"></label>
         <label>New member password<input type="password" name="m" placeholder="leave blank to keep"></label>
         <button class="h-go" type="submit">Reset passwords</button></form></details>`).join("");
@@ -237,6 +249,10 @@ async function operatorView(note = "") {
     box.querySelectorAll("table[data-org] [data-op]").forEach(b => b.onclick = () => {
       if (!confirmInline(b, "Sure?")) return;
       run(b.closest("table").dataset.org, b.dataset.op, +b.dataset.t || b.dataset.t);
+    });
+    box.querySelectorAll("form[data-rename]").forEach(f => f.onsubmit = e => {
+      e.preventDefault();
+      run(f.dataset.rename, "rename", null, { name: f.n.value });
     });
     box.querySelectorAll("form[data-reset]").forEach(f => f.onsubmit = e => {
       e.preventDefault();
