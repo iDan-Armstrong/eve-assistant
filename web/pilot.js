@@ -322,7 +322,8 @@ function renderPilotMenu(note = "") {
     return `<div class="pm-row${p.id === pilotState.active ? " active" : ""}" data-id="${p.id}">
       <img src="https://images.evetech.net/characters/${p.id}/portrait?size=64" alt="" width="32" height="32">
       <div class="pm-who"><div>${d.online ? '<i class="pm-on" title="online"></i>' : ""}${esc(p.name)}</div>
-        <div class="pm-where">${esc(where)}${d.errors && d.errors.length ? ` <span title="${esc(d.errors.join("; "))}">(partial data)</span>` : ""}</div></div>
+        <div class="pm-where">${esc(where)}${expired(d) ? "" : d.errors && d.errors.length ? ` <span title="${esc(d.errors.join("; "))}">(partial data)</span>` : ""}</div>
+        ${expired(d) ? `<div class="pm-expired">Sign-in expired. <button data-act="relogin">Sign in again</button></div>` : ""}</div>
       <button data-act="go" title="Show on map">◎</button>
       <button data-act="out" title="Sign out this pilot">✕</button></div>` +
       (reserves.relay ? `<div class="pm-shares" data-id="${p.id}">share with ${orgShare() ? "org" : "corp"}:
@@ -359,12 +360,17 @@ function renderPilotMenu(note = "") {
     };
   });
   menu.querySelector('[data-act="add"]').onclick = () => EveSSO.login();
+  /* an expired sign-in: CCP's page lets the pilot pick the same character again */
+  menu.querySelectorAll('[data-act="relogin"]').forEach(b => b.onclick = () => EveSSO.login());
   const coll = menu.querySelector('[data-act="collector"]');
   if (coll) coll.onclick = () => EveSSO.login(["esi-markets.structure_markets.v1"], { collector: true });
   menu.querySelector('[data-act="refresh"]').onclick = () => refreshPilots();
   menu.querySelector('[data-act="orgs"]').onclick = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); openOrgs(true); };
   menu.querySelector('[data-act="bpo"]').onclick = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); if (typeof openBpo === "function") openBpo(true); };
 }
+
+/* CCP refused to renew this pilot's sign-in: every call failed on the token */
+const expired = d => !!(d && d.errors && d.errors.length && d.errors.every(e => /token request failed/.test(e)));
 
 /* ---- route planner hooks ----------------------------------------------------- */
 function pilotLocationName() {
