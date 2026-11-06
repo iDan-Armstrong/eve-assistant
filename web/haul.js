@@ -342,6 +342,7 @@ async function openHaul(open) {
   document.getElementById("fitbox").hidden = true;
   if (document.getElementById("bpo")) document.getElementById("bpo").hidden = true;
   document.body.classList.add("route-open");
+  if (haul.pendingMode && typeof setHaulMode === "function") { setHaulMode(haul.pendingMode); haul.pendingMode = null; }
   fillShip();
   if (!haul.data) {
     document.getElementById("hSum").textContent = "Loading this hour's trade pairs…";

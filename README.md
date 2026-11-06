@@ -177,6 +177,15 @@ or **add a waypoint** for the signed-in pilot; it goes straight to the
 game client. CCP's API takes systems, stations and structures as targets,
 so a planet, moon or belt sends its system.
 
+### Tools menu
+
+The header keeps two everyday buttons, **Route** and **Pilot login**, and
+puts every other tool behind **Tools**, grouped by job: Travel (route
+planner, J-Space Survey), Trading and hauling (Find item and each Haul
+planner mode: round trips, sell my cargo, courier jobs, contract deals)
+and Industry (fit shopper, blueprint finder). A Haul entry opens the
+planner straight in that mode, after the password if it is still locked.
+
 ### Market
 
 Every NPC market order in New Eden is public in CCP's API, and each order

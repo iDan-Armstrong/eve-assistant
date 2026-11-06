@@ -325,6 +325,14 @@
   .pm-on { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #5be37b; margin-right: 5px; }
   .pm-row button { background: none; border: 0; color: var(--ink-dim); cursor: pointer; font-size: 13px; padding: 2px 4px; }
   .pm-row button:hover { color: var(--ink); }
+  .route-btn[hidden] { display: none; }
+  .tools-menu { width: 300px; padding: 4px 0 6px; }
+  .tools-menu .tm-group { padding: 8px 12px 3px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+  .tools-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 5px 12px 5px 16px;
+    color: var(--ink); font: inherit; cursor: pointer; }
+  .tools-menu button:hover, .tools-menu button:focus-visible { background: #162032; outline: none; }
+  .tools-menu button b { display: block; font-size: 13px; font-weight: 600; }
+  .tools-menu button span { display: block; font-size: 11px; color: var(--ink-dim); }
   .pm-foot { display: flex; gap: 6px; padding: 6px 10px 2px; border-top: 1px solid var(--panel-edge); margin-top: 4px; }
   .pm-foot button { flex: 1; background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px;
     color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
@@ -664,10 +672,27 @@
     </div>
   </details>
   <button class="route-btn" id="routeBtn" aria-expanded="false" aria-controls="route">Route</button>
-  <button class="route-btn" id="haulBtn" aria-expanded="false" aria-controls="haul" title="Profitable round trips from where you are">Haul</button>
-  <button class="route-btn" id="fitBtn" aria-expanded="false" aria-controls="fitbox" title="Where to buy what you still need for a fit">Fit</button>
-  <button class="route-btn" id="marketBtn" aria-expanded="false" aria-controls="market" title="Where to buy or sell an item">Find item</button>
-  <a class="route-btn" id="surveyBtn" href="survey/" title="J-Space Survey: map wormhole chains; known-space exits show on this map">J-Space</a>
+  <div class="pilot">
+    <button class="route-btn" id="toolsBtn" aria-expanded="false" aria-controls="toolsMenu" title="Every Atlas tool in one place">Tools ▾</button>
+    <div class="pilot-menu tools-menu" id="toolsMenu" hidden>
+      <div class="tm-group">Travel</div>
+      <button data-tool="route"><b>Route planner</b><span>Safest or shortest route, sent to autopilot</span></button>
+      <button data-tool="survey"><b>J-Space Survey</b><span>Map wormhole chains with your surveyors</span></button>
+      <div class="tm-group">Trading and hauling</div>
+      <button data-tool="market"><b>Find item</b><span>Where to buy or sell an item, with filters</span></button>
+      <button data-tool="haul:trip"><b>Round trips</b><span>Profitable buy-here, sell-there hauls</span></button>
+      <button data-tool="haul:sell"><b>Sell my cargo</b><span>Best buyers for what is in your hold</span></button>
+      <button data-tool="haul:cour"><b>Courier jobs</b><span>Paid hauling contracts, best ISK per jump</span></button>
+      <button data-tool="haul:deal"><b>Contract deals</b><span>Item contracts worth more at a trade hub</span></button>
+      <div class="tm-group">Industry</div>
+      <button data-tool="fit"><b>Fit shopper</b><span>Where to buy what a fit still needs</span></button>
+      <button data-tool="bpo"><b>Blueprint finder</b><span>Originals you do not own, cheapest first</span></button>
+    </div>
+  </div>
+  <!-- the old one-click buttons stay in the page for the panels' own state, hidden: Tools opens everything -->
+  <button class="route-btn" id="haulBtn" aria-expanded="false" aria-controls="haul" hidden>Haul</button>
+  <button class="route-btn" id="fitBtn" aria-expanded="false" aria-controls="fitbox" hidden>Fit</button>
+  <button class="route-btn" id="marketBtn" aria-expanded="false" aria-controls="market" hidden>Find item</button>
   <div class="pilot" id="corpWrap" hidden>
     <button class="route-btn" id="corpBtn" aria-expanded="false" aria-controls="corpMenu">Corp</button>
     <div class="pilot-menu corp-menu" id="corpMenu" hidden></div>
@@ -2232,6 +2257,7 @@ boot().catch(err => {
 <script src="bpo.js"></script>
 <script src="contract_core.js"></script>
 <script src="contracts.js"></script>
+<script src="tools.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>
 </body>
