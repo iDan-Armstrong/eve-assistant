@@ -418,6 +418,11 @@ login, so only approved members can read an org's data.
   master J-Space map (still to come) shows outside the org. Known-space
   survey data stays public either way, except wormhole entrances into the
   org's own wormhole space.
+- **Varg Soth** (the Atlas operator) holds Master Admin standing in every
+  org: every org shows under his orgs, he opens any admin window without
+  its password, can share with and read any org, and has every Master
+  Admin control. He is not added as a member, so each org's own Master
+  Admin and the 30-day rules work as normal.
 - **Disputes and forgotten passwords**: send an in-game mail to Varg Soth,
   the Atlas operator, who can reset an org's passwords, rename it, appoint
   a Master Admin and remove anyone. Operators are named in `wrangler.toml`

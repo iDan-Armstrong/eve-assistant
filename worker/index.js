@@ -39,6 +39,10 @@
      | join {org, password} | leave {org}
      | admin {org, adminPassword, op: view|approve|boot|promote|demote|master|passwords|rename|jspace, target, newAdmin, newMember, name, value}
      | operator {org, op, target, newAdmin, newMember}   (the Atlas operator only)
+     The Atlas operator holds Master Admin standing in every org: all orgs
+     in "mine", any org's data, every admin and Master Admin control,
+     without the org's passwords. Not stored as a member, so an org's own
+     Master Admin and the 30-day rules are unaffected.
      Rules in worker/org_core.js. Passwords are kept only as salted PBKDF2
      hashes; five wrong tries an hour per pilot per org.
    Every sharing endpoint above also takes "org": <id>. The relay checks the
@@ -315,6 +319,14 @@ export class OrgDirectory {
         }
         case "mine": {
           const mine = [];
+          if (body.isOperator) {
+            /* the Atlas operator holds Master Admin standing in every org */
+            for (const id of Object.keys(index)) {
+              const o = await this.get(id);
+              if (o) mine.push({ id, name: o.name, role: "admin", master: true, operator: true, jspace: Org.jspaceOf(o), temp: false });
+            }
+            return out({ orgs: mine.sort((a, b) => a.name.localeCompare(b.name)) });
+          }
           for (const id of await this.pilotOrgs(who.id)) {
             const o = await this.get(id);
             if (!o || !o.members[who.id]) continue;
@@ -394,6 +406,7 @@ export class OrgDirectory {
         }
         case "check": {
           const org = await this.get(body.org);
+          if (org && body.isOperator) return out({ ok: true, name: org.name, role: "admin", jspace: Org.jspaceOf(org) });
           const m = org && org.members[who.id];
           if (!m || m.role === "pending") return out({ ok: false });
           const mark = m.lastTouch;
@@ -425,7 +438,7 @@ const isOperator = (who, env) => (env.OPERATORS || "").split(",").map(s => s.tri
    to the page in "corporation" so older pages keep working. */
 async function spaceOf(who, org, env) {
   if (org) {
-    const c = await orgCall(env, { action: "check", org: String(org), who: { id: who.id, name: who.name } });
+    const c = await orgCall(env, { action: "check", org: String(org), who: { id: who.id, name: who.name }, isOperator: isOperator(who, env) });
     if (!c.ok) throw new Error("Not an approved member of that org.");
     return { key: `org:${org}`, label: `org:${org}`, org: { id: String(org), name: c.name, jspace: c.jspace } };
   }

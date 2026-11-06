@@ -29,7 +29,7 @@ async function orgCall(action, extra = {}) {
 }
 
 const JSPACE_NAME = { org: "Org only", public: "Public" };
-const ROLE_NAME = o => o.role === "pending" ? "waiting for approval"
+const ROLE_NAME = o => o.operator ? "Master Admin (Atlas operator)" : o.role === "pending" ? "waiting for approval"
   : o.temp ? "Temporary Master Admin" : o.master ? "Master Admin" : o.role === "admin" ? "admin" : "member";
 
 function openOrgs(open) {
@@ -85,7 +85,7 @@ function drawOrgs(p, note) {
     (AtlasOrg.mine.length ? `<ul class="o-list">` + AtlasOrg.mine.map(o =>
       `<li><b>${esc(o.name)}</b> <span class="m-meta">${ROLE_NAME(o)}${o.role === "pending" ? "" : `, J-Space ${JSPACE_NAME[o.jspace] || "Org only"}`}</span>
          <span class="o-btns">${o.role === "admin" ? `<button data-admin="${esc(o.id)}">Admin</button>` : ""}
-         <button data-leave="${esc(o.id)}">Leave</button></span></li>`).join("") + `</ul>` : `<p class="m-meta">None yet.</p>`) +
+         ${o.operator ? "" : `<button data-leave="${esc(o.id)}">Leave</button>`}</span></li>`).join("") + `</ul>` : `<p class="m-meta">None yet.</p>`) +
     `<div class="o-head">Join an org</div>` +
     (others.length ? `<form id="orgJoin" class="o-form">
        <label>Org<select id="ojOrg">${others.map(o => `<option value="${esc(o.id)}">${esc(o.name)} (${o.members})</option>`).join("")}</select></label>
@@ -145,6 +145,7 @@ function confirmInline(btn, question) {
 function adminGate(orgId) {
   const box = document.getElementById("orgAdmin");
   const o = AtlasOrg.mine.find(x => x.id === orgId);
+  if (AtlasOrg.operator) { adminRun(orgId, "view"); return; }          /* Master Admin standing everywhere, no password */
   if (AtlasOrg.adminPw.has(orgId)) { adminRun(orgId, "view"); return; }
   box.innerHTML = `<div class="o-head">Admin: ${esc(o.name)}</div>
     <form id="oaGate" class="o-form"><label>Admin password<input id="oaPw" type="password" autocomplete="off"></label>
@@ -159,7 +160,9 @@ function adminGate(orgId) {
 async function adminRun(orgId, op, target, extra = {}) {
   const box = document.getElementById("orgAdmin");
   try {
-    const v = await orgCall("admin", { org: orgId, adminPassword: AtlasOrg.adminPw.get(orgId), op, target, ...extra });
+    const v = AtlasOrg.operator
+      ? await orgCall("operator", { org: orgId, op, target, ...extra })
+      : await orgCall("admin", { org: orgId, adminPassword: AtlasOrg.adminPw.get(orgId), op, target, ...extra });
     drawAdmin(v, op === "view" ? "" : "Done.");
   } catch (err) {
     if (/Wrong password|Too many/.test(err.message)) AtlasOrg.adminPw.delete(orgId);
@@ -191,7 +194,7 @@ function memberRows(v, me, master, run) {
 function drawAdmin(v, note) {
   const box = document.getElementById("orgAdmin");
   const me = pilotState.active || (EveSSO.pilots()[0] || {}).id;
-  const master = String(v.effectiveMaster) === String(me);
+  const master = AtlasOrg.operator || String(v.effectiveMaster) === String(me);
   const masterName = (v.members.find(m => String(m.id) === String(v.master)) || {}).name || "nobody";
   const tempName = v.temp ? (v.members.find(m => String(m.id) === String(v.temp.id)) || {}).name : "";
   box.innerHTML = `<div class="o-head">Admin: ${esc(v.name)}</div>` +

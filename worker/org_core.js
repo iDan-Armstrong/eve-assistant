@@ -24,8 +24,10 @@
    wormhole entrances into the org's own wormhole space (applied when the
    master map is built).
 
-   The Atlas operator (Varg Soth) can reset an org's passwords, make any
-   member Master Admin, and remove anyone, for disputes sent by game mail. */
+   The Atlas operator (Varg Soth) holds Master Admin standing in every org
+   (every Master Admin control, without the org's passwords) and can also
+   make any member Master Admin and remove anyone, for disputes sent by
+   game mail. The operator is not stored as a member. */
 
 export const DAY = 864e5;
 export const STALE = 30 * DAY;

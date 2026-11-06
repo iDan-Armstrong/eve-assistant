@@ -90,3 +90,16 @@ test("J-Space sharing shows in mine and check", async () => {
   await call({ action: "admin", who: VARG, org, adminPassword: "adminpw1", op: "jspace", value: "public" });
   assert.strictEqual((await call({ action: "check", who: VARG, org })).jspace, "public");
 });
+
+test("the operator holds Master Admin standing in every org, without being a member", async () => {
+  const { call } = directory();
+  const { id: org } = await call({ action: "create", who: ANN, name: "Anns Org", adminPassword: "adminpw1", memberPassword: "memberpw1" });
+  const mine = await call({ action: "mine", who: VARG, isOperator: true });
+  assert.deepStrictEqual(mine.orgs.map(o => [o.name, o.role, o.master, o.operator]), [["Anns Org", "admin", true, true]]);
+  assert.strictEqual((await call({ action: "check", who: VARG, org, isOperator: true })).ok, true);
+  assert.strictEqual((await call({ action: "check", who: VARG, org })).ok, false);      // not an operator: no access
+  const v = await call({ action: "operator", who: VARG, isOperator: true, org, op: "jspace", value: "public" });
+  assert.strictEqual(v.jspace, "public");
+  assert.ok(!v.members.some(m => m.id === VARG.id));                                     // never added as a member
+  assert.strictEqual(String(v.master), String(ANN.id));                                  // the org's own Master Admin stays
+});
