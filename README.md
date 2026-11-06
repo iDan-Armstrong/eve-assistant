@@ -165,7 +165,12 @@ Safer runs Dijkstra with each system weighted by its security band,
 30-day kills and gate kills per day, kills in the last hour, and highsec
 ganks. The counts go on log scales, then the cost grows with the square of
 that danger, so a notorious system such as Ahbazon or Uedama is worth a
-long detour while quiet space costs about one jump each. Each jump lists what to
+long detour while quiet space costs about one jump each. **Highsec only** (on by
+default) keeps both choices inside 0.5 and above, except for the
+destination itself. **Send to autopilot** sends only the turn points that
+hold the game to this exact path (between two turn points it is the only
+shortest way), one every 1.5 seconds, so a 19-jump route goes as a few
+waypoints instead of 19. Each jump lists what to
 expect: kills on the gate you arrive at and the one you leave by, kills per
 day and typical gang size, band changes and chokepoints. Pochven and
 Zarzakh gates are left out of routing. Use **Route from here** and

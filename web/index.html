@@ -737,11 +737,12 @@
       <button data-mode="safe" aria-pressed="true">Safer</button>
       <button data-mode="clear" aria-pressed="false" title="Clear the route">Clear</button>
     </div>
+    <label class="m-heat r-high"><input type="checkbox" id="rHigh" checked> Highsec only</label>
     <div class="r-pilot" id="rPilot" hidden>
       <button id="rFromMe">From my location</button>
       <button id="rAutopilot">Send to autopilot</button>
     </div>
-    <div class="r-sum" id="rSum">Pick two systems. Safer weighs 30 days of kills, gate camps, the last hour of kills and security band.</div>
+    <div class="r-sum" id="rSum">Pick two systems. Safer weighs 30 days of kills, gate camps, the last hour of kills and security band. Highsec only keeps both out of lowsec and nullsec.</div>
   </div>
   <ol id="rList"></ol>
   <div class="r-note">Estimates from public kill data, not a guarantee. Pochven and Zarzakh gates are left out.</div>
@@ -1890,7 +1891,9 @@ function danger(p) {
   return band + .5 * Math.log1p(h.k / days) + .7 * Math.log1p(h.g / days)
        + .6 * Math.log1p(ship + pod) + (gk ? 1.2 * Math.log1p(gk.n / 30) : 0);
 }
-function findRoute(from, to, safe) {
+/* hsOnly: never step into a system below 0.5, except the destination
+   itself (so a route into lowsec still works; the start may be anywhere) */
+function findRoute(from, to, safe, hsOnly = false) {
   const cost = id => { if (!safe) return 1; const d = danger(state.byId.get(id)); return 1 + 3 * d + 2 * d * d; };
   const dist = new Map([[from, 0]]), prev = new Map();
   const heap = [[0, from]];
@@ -1922,6 +1925,7 @@ function findRoute(from, to, safe) {
     if (v === to) break;
     if (d > dist.get(v)) continue;
     for (const w of state.routeAdj.get(v) || []) {
+      if (hsOnly && w !== to && state.byId.get(w).sec < 0.5) continue;
       const nd = d + cost(w);
       if (nd < (dist.has(w) ? dist.get(w) : Infinity)) { dist.set(w, nd); prev.set(w, v); push([nd, w]); }
     }
@@ -1943,13 +1947,18 @@ function drawRoute() {
   const byName = n => [...state.byId.values()].find(p => p.name.toLowerCase() === n.trim().toLowerCase());
   const a = byName(document.getElementById("rFrom").value), b = byName(document.getElementById("rTo").value);
   if (!a || !b || a === b) {
-    sum.textContent = "Pick two systems. Safer weighs 30 days of kills, gate camps, the last hour of kills and security band.";
+    sum.textContent = "Pick two systems. Safer weighs 30 days of kills, gate camps, the last hour of kills and security band. Highsec only keeps both out of lowsec and nullsec.";
     return;
   }
-  const shortest = findRoute(a.id, b.id, false);
-  const path = route.mode === "safe" ? findRoute(a.id, b.id, true) : shortest;
+  const hs = document.getElementById("rHigh").checked;
+  const shortest = findRoute(a.id, b.id, false, hs);
+  const path = route.mode === "safe" ? findRoute(a.id, b.id, true, hs) : shortest;
   route.path = path;
-  if (!path) { sum.textContent = `No stargate route from ${a.name} to ${b.name}.`; return; }
+  if (!path) {
+    sum.textContent = hs ? `No highsec-only route from ${a.name} to ${b.name}. Untick Highsec only to allow lowsec and nullsec.`
+      : `No stargate route from ${a.name} to ${b.name}.`;
+    return;
+  }
   const ps = path.map(id => state.byId.get(id));
   const total = ps.slice(1).reduce((t, p) => t + danger(p), 0);
   const shortTotal = shortest.slice(1).reduce((t, id) => t + danger(state.byId.get(id)), 0);
@@ -2032,7 +2041,7 @@ function wireRoute() {
   document.getElementById("routeBtn").onclick = () =>
     openRoute(document.getElementById("route").hidden);
   document.getElementById("routeClose").onclick = () => openRoute(false);
-  for (const id of ["rFrom", "rTo"]) document.getElementById(id).onchange = drawRoute;
+  for (const id of ["rFrom", "rTo", "rHigh"]) document.getElementById(id).onchange = drawRoute;
   document.querySelectorAll("#route .r-modes button").forEach(b => b.onclick = () => {
     if (b.dataset.mode === "clear") {
       document.getElementById("rFrom").value = document.getElementById("rTo").value = "";
