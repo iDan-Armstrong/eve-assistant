@@ -233,6 +233,12 @@
   .b-lab .b-lab-note { grid-column: 1 / -1; font-size: 10.5px; color: var(--ink-dim); }
   .b-lab button { grid-column: 1 / -1; }
   #bOut { padding: 0 12px 10px; }
+  #aOut { padding: 0 12px 10px; }
+  #assets { overflow-y: auto; } #assets > * { flex-shrink: 0; }
+  .a-kinds { font-size: 12px; } .a-kinds summary { cursor: pointer; color: var(--ink-dim); }
+  #aKinds { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; padding: 4px 0; }
+  #aKinds label { display: flex; gap: 5px; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .a-cons[hidden], .a-sell[hidden] { display: none; }
   /* tall forms: the whole panel scrolls instead of squeezing the results */
   #bpo, #haul { overflow-y: auto; }
   #bpo > *, #haul > * { flex-shrink: 0; }
@@ -687,6 +693,8 @@
       <div class="tm-group">Industry</div>
       <button data-tool="fit"><b>Fit shopper</b><span>Where to buy what a fit still needs</span></button>
       <button data-tool="bpo"><b>Blueprint finder</b><span>Originals you do not own, cheapest first</span></button>
+      <div class="tm-group">Assets</div>
+      <button data-tool="assets"><b>Asset clean-up</b><span>Gather scattered items to sell or consolidate</span></button>
     </div>
   </div>
   <!-- the old one-click buttons stay in the page for the panels' own state, hidden: Tools opens everything -->
@@ -834,6 +842,38 @@
   <ol id="cList" class="m-list h-cour k-list" hidden></ol>
   <ol id="dList" class="m-list h-deal k-list" hidden></ol>
   <div class="r-note h-trip">Instant trades from this hour's NPC-station orders: buy from sell orders, sell into buy orders, sales tax only. Orders change all the time, so check prices in game before you buy.</div>
+</section>
+
+<section class="route bpo" id="assets" hidden aria-label="Asset clean-up">
+  <div class="r-head">
+    <div class="r-title"><span>ASSET CLEAN-UP</span><button id="aClose" aria-label="Close asset clean-up">✕</button></div>
+    <div class="h-ship" id="aWho">Gather scattered assets into your hold: sell them for the most ISK, or move them to one station.</div>
+    <button class="h-go" id="aScan">Scan my assets</button>
+    <div class="r-modes" role="group" aria-label="Clean-up goal">
+      <button data-amode="sell" aria-pressed="true">Sell for most profit</button>
+      <button data-amode="consolidate" aria-pressed="false">Move and consolidate</button>
+    </div>
+    <div class="h-grid">
+      <label for="aFrom">from</label><input type="text" id="aFrom" list="sysNames" autocomplete="off" placeholder="your pilot's system"><span></span>
+      <label for="aHold">hold</label><input type="text" id="aHold" inputmode="numeric" placeholder="m³"><span class="h-unit" id="aHoldNote">m³ free</span>
+      <label for="aReach">reach</label><input type="text" id="aReach" inputmode="numeric" value="10" placeholder="any"><span class="h-unit">jumps to a pickup</span>
+      <label for="aMin" class="a-sell">worth it</label><input type="text" id="aMin" class="a-sell" inputmode="numeric" value="1"><span class="h-unit a-sell">million ISK a pickup stop</span>
+      <label for="aDest" class="a-cons" hidden>drop at</label><select id="aDest" class="a-cons" hidden></select><span class="a-cons" hidden></span>
+      <label for="aText">name</label><input type="text" id="aText" autocomplete="off" placeholder="words in the item name"><span></span>
+    </div>
+    <details class="a-kinds"><summary id="aKindsSum">Kinds of items: all</summary><div id="aKinds"></div></details>
+    <label class="m-heat"><input type="checkbox" id="aHigh" checked> Highsec only</label>
+    <div class="r-sum" id="aSum">Scan your assets to start.</div>
+    <button class="h-go" id="aGo" hidden>Plan the pickups</button>
+    <div class="route-actions" id="aActs" hidden>
+      <button id="aDestBtn">Send route to autopilot and open trip window</button>
+      <button id="aHud">Open trip window</button>
+    </div>
+  </div>
+  <div id="aOut"></div>
+  <div class="r-note">Picks up loose items from station hangars and from containers in them; fitted modules, ship cargo and assembled ships stay put.
+    Values are what the best trade hub's buy orders pay; a sell run then plans the sale from your last pickup with live orders.
+    CCP's asset list can be up to an hour old.</div>
 </section>
 
 <section class="route bpo" id="bpo" hidden aria-label="Blueprint finder">
@@ -1954,6 +1994,7 @@ function openRoute(open) {
     document.getElementById("haulBtn").setAttribute("aria-expanded", "false");
   }
   if (open && document.getElementById("bpo")) document.getElementById("bpo").hidden = true;
+  if (open && document.getElementById("assets")) document.getElementById("assets").hidden = true;
   if (open && document.getElementById("market")) {
     document.getElementById("market").hidden = true;
     document.getElementById("marketBtn").setAttribute("aria-expanded", "false");
@@ -2257,6 +2298,8 @@ boot().catch(err => {
 <script src="bpo.js"></script>
 <script src="contract_core.js"></script>
 <script src="contracts.js"></script>
+<script src="asset_core.js"></script>
+<script src="assets.js"></script>
 <script src="tools.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>

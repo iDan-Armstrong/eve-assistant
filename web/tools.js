@@ -13,6 +13,7 @@
     market: () => openMarket(true),
     fit: () => openFit(true),
     bpo: () => openBpo(true),
+    assets: () => openAssets(true),
   };
 
   btn.onclick = e => { e.stopPropagation(); show(menu.hidden); };

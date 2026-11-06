@@ -232,6 +232,7 @@ function openMarket(open) {
     openRoute(false);
     document.getElementById("haul").hidden = true;
     document.getElementById("shelf").hidden = true;
+  if (document.getElementById("assets")) document.getElementById("assets").hidden = true;
   if (document.getElementById("bpo")) document.getElementById("bpo").hidden = true;
     document.getElementById("fitbox").hidden = true;
     document.body.classList.add("route-open");          /* zoom buttons step aside */

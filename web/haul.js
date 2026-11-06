@@ -341,6 +341,7 @@ async function openHaul(open) {
   document.getElementById("shelf").hidden = true;
   document.getElementById("fitbox").hidden = true;
   if (document.getElementById("bpo")) document.getElementById("bpo").hidden = true;
+  if (document.getElementById("assets")) document.getElementById("assets").hidden = true;
   document.body.classList.add("route-open");
   if (haul.pendingMode && typeof setHaulMode === "function") { setHaulMode(haul.pendingMode); haul.pendingMode = null; }
   fillShip();

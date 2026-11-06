@@ -6,7 +6,7 @@
 <title>Haul | New Eden Atlas</title>
 <style>
   :root { --bg: #060a12; --panel: #0d131f; --edge: #1c2638; --ink: #e3ecf7; --dim: #8fb7ee; --faint: #5f8fd0;
-          --buy: #7dff9a; --sell: #ffd24a; }
+          --buy: #7dff9a; --sell: #ffd24a; --pick: #7ec8ff; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", system-ui, sans-serif; font-size: 17px; }
@@ -19,14 +19,16 @@
   .where b { color: var(--ink); font-size: 19px; }
   .next { margin: 12px 0; padding: 14px; border-radius: 6px; background: var(--panel); border: 2px solid var(--edge); }
   .next.buy { border-color: var(--buy); } .next.sell { border-color: var(--sell); }
+  .next.pickup, .next.drop { border-color: var(--pick); }
   .act { font-size: 30px; font-weight: 800; letter-spacing: .02em; }
-  .act.buy { color: var(--buy); } .act.sell { color: var(--sell); }
+  .act.buy { color: var(--buy); } .act.sell { color: var(--sell); } .act.pickup, .act.drop { color: var(--pick); }
   .station { font-size: 21px; font-weight: 600; margin: 4px 0 2px; line-height: 1.25; }
   .jumps { font-size: 18px; color: var(--dim); }
   .jumps b { color: var(--ink); font-size: 26px; }
   .docked { margin-top: 8px; font-size: 18px; font-weight: 700; color: #06101a; background: var(--buy);
             border-radius: 4px; padding: 6px 10px; display: inline-block; }
   .next.sell .docked { background: var(--sell); }
+  .next.pickup .docked, .next.drop .docked { background: var(--pick); }
   table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 18px; }
   th { text-align: left; font-weight: 400; font-size: 13px; color: var(--dim); border-bottom: 1px solid var(--edge); padding: 4px; }
   td { padding: 7px 4px; border-bottom: 1px solid #141c2b; vertical-align: top; }
@@ -120,16 +122,17 @@ async function checkLeftBehind(index, stop, since) {
       return;
     }
     const names = new Map(stop.items.map(x => [x.name, x.n]));
+    const keep = new Map(stop.items.map(x => [x.name, x.keep || 0]));
     const typeIds = await EveSSO.esiPublic("/universe/ids", [...names.keys()]).then(r => r.inventory_types || []);
     const left = typeIds.map(t => ({ name: t.name, n: assets.filter(a => a.type_id === t.id && a.location_id === stop.station
                     && a.location_flag === "Hangar").reduce((x, a) => x + a.quantity, 0) }))
-                        .filter(x => x.n > 0);
+                        .filter(x => x.n > (keep.get(x.name) || 0));
     if (left.length) {
       raise("Cargo left in the station hangar!", `${stop.stationName} still holds: ` +
-        left.map(x => `${x.name} ×${x.n.toLocaleString()}`).join(", ") + ". Go back for it before you sell.");
+        left.map(x => `${x.name} ×${(x.n - (keep.get(x.name) || 0)).toLocaleString()}`).join(", ") + " more than planned. Go back for it.");
       trip.check = "";
     } else {
-      trip.check = `Cargo check for stop ${index + 1}: nothing from the buy list left in ${stop.stationName}'s hangar ✓`;
+      trip.check = `Cargo check for stop ${index + 1}: nothing from the list left in ${stop.stationName}'s hangar ✓`;
     }
     save(); render();
   } catch (e) {
@@ -160,7 +163,10 @@ function render() {
   const offRoute = here && !trip.path.some(p => p.id === here.system);
   const dockedHere = here && here.station === s.station;
   const j = jumpsTo(s);
-  let body = `<div class="top"><span>${esc(trip.pilotName || "Pilot")} · trip worth <span class="profit">+${isk(trip.total)}</span></span>
+  const VERB = { buy: "BUY", sell: "SELL", pickup: "PICK UP", drop: "DROP OFF" };
+  const DOCKED = { buy: "buy now", sell: "sell now", pickup: "move these to your ship's cargo", drop: "move everything to the item hangar" };
+  const loads = k => k === "buy" || k === "pickup";
+  let body = `<div class="top"><span>${esc(trip.pilotName || "Pilot")} · ${trip.label ? esc(trip.label) : `trip worth <span class="profit">+${isk(trip.total)}</span>`}</span>
     <span class="live${liveOk ? "" : " off"}"><i></i>${liveOk ? (online === false ? "offline in game" : "live") : "no signal"}</span></div>`;
   body += `<div class="where">Now in <b>${here ? esc(sysName(here.system) !== "unknown system" ? sysName(here.system) : here.systemName || "…") : "…"}</b>` +
     `${ship ? ` · ${esc(ship)}` : ""}</div>`;
@@ -170,28 +176,30 @@ function render() {
   if (trip.check) body += `<div class="check">${esc(trip.check)}</div>`;
   if (done) {
     const back = here && here.system === trip.home.id;
-    body += `<div class="next"><div class="act buy">Trade stops done</div>
-      <div class="station">${back ? "You're home." : `Head home to ${esc(trip.home.name)}`}</div></div>`;
+    body += `<div class="next"><div class="act buy">${trip.label ? "All stops done" : "Trade stops done"}</div>
+      <div class="station">${trip.label ? "Trip complete." : back ? "You're home." : `Head home to ${esc(trip.home.name)}`}</div></div>`;
   } else {
     const total = s.items.reduce((a, x) => a + x.total, 0);
     body += `<div class="next ${s.kind}">
-      <div class="act ${s.kind}">Stop ${trip.done + 1} of ${trip.stops.length}: ${s.kind === "buy" ? "BUY" : "SELL"}</div>
+      <div class="act ${s.kind}">Stop ${trip.done + 1} of ${trip.stops.length}: ${VERB[s.kind]}</div>
       <div class="station">${esc(s.stationName)}</div>
       <div class="jumps">${dockedHere ? "" : j == null ? "jumps: unknown" : j === 0 ? "<b>in this system</b>, dock up" : `<b>${j}</b> jump${j === 1 ? "" : "s"} away`}</div>
-      ${dockedHere ? `<div class="docked">Docked here: ${s.kind === "buy" ? "buy" : "sell"} now</div>` : ""}
-      ${dockedHere && s.kind === "buy" ? `<button class="load${s.loaded ? " ok" : ""}" id="loaded">${s.loaded
-        ? "Cargo loaded into the ship ✓" : "Bought and moved to my ship's cargo? Tap when loaded"}</button>` : ""}
-      <table><tr><th>item</th><th style="text-align:right">qty</th><th style="text-align:right">${s.kind === "buy" ? "price each" : "buyers pay"}</th></tr>
-      ${s.items.map(x => `<tr><td>${esc(x.name)}</td><td class="q">${x.n.toLocaleString()}</td><td class="p">${isk(x.each)}</td></tr>`).join("")}
-      <tr class="sum"><td>${s.kind === "buy" ? `total, ${Math.round(s.m3).toLocaleString()} m3` : "you receive after tax"}</td><td></td>
-        <td class="p">${isk(total)}</td></tr>
+      ${dockedHere ? `<div class="docked">Docked here: ${DOCKED[s.kind]}</div>` : ""}
+      ${dockedHere && loads(s.kind) ? `<button class="load${s.loaded ? " ok" : ""}" id="loaded">${s.loaded
+        ? "Cargo loaded into the ship ✓" : `${s.kind === "buy" ? "Bought and moved" : "Moved"} to my ship's cargo? Tap when loaded`}</button>` : ""}
+      <table><tr><th>item</th><th style="text-align:right">qty</th><th style="text-align:right">${
+        s.kind === "buy" ? "price each" : s.kind === "sell" ? "buyers pay" : s.kind === "pickup" ? "worth each" : ""}</th></tr>
+      ${s.items.map(x => `<tr><td>${esc(x.name)}${x.keep ? `<div class="check">leave ${x.keep.toLocaleString()} behind</div>` : ""}</td>` +
+        `<td class="q">${x.n.toLocaleString()}</td><td class="p">${x.each ? isk(x.each) : ""}</td></tr>`).join("")}
+      <tr class="sum"><td>${s.kind === "sell" ? "you receive after tax" : `total, ${Math.round(s.m3 || 0).toLocaleString()} m3`}</td><td></td>
+        <td class="p">${total ? isk(total) : ""}</td></tr>
       ${s.kind === "sell" ? `<tr class="sum"><td>profit on this leg</td><td></td><td class="p profit">+${isk(s.profit)}</td></tr>` : ""}
       </table></div>`;
   }
   body += `<div class="row"><button id="back">Previous stop</button><button class="go" id="next">${done ? "Finish trip" : "Done here, next stop"}</button></div>`;
   body += `<div class="steps">${trip.stops.map((x, i) => `<div class="${i < trip.done ? "done" : i === trip.done ? "cur" : ""}">` +
-    `${i + 1}. ${x.kind === "buy" ? "Buy" : "Sell"} at ${esc(x.stationName)}</div>`).join("")}
-    <div class="${done ? "cur" : ""}">${trip.stops.length + 1}. Home: ${esc(trip.home.name)}</div></div>`;
+    `${i + 1}. ${{ buy: "Buy", sell: "Sell", pickup: "Pick up", drop: "Drop off" }[x.kind]} at ${esc(x.stationName)}</div>`).join("")}
+    ${trip.label ? "" : `<div class="${done ? "cur" : ""}">${trip.stops.length + 1}. Home: ${esc(trip.home.name)}</div>`}</div>`;
   root.innerHTML = body;
   const ld = document.getElementById("loaded");
   if (ld) ld.onclick = () => { s.loaded = !s.loaded; save(); render(); };
@@ -222,7 +230,7 @@ async function poll() {
     const s = trip.stops[trip.done];
     if (s && wasDockedAt === s.station && here.station !== s.station) {
       /* leaving a buy stop: was the cargo loaded? */
-      if (s.kind === "buy") {
+      if (s.kind === "buy" || s.kind === "pickup") {
         if (!s.loaded) raise("Did you load the cargo?", `You undocked from ${s.stationName} without marking the goods as loaded. ` +
           "Check your ship's cargo hold before you jump.");
         checkLeftBehind(trip.done, s, dockedSince || Date.now() - 60e3);

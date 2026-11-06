@@ -63,7 +63,7 @@ function openBpo(open) {
   panel.hidden = !open;
   if (!open) { document.body.classList.remove("route-open"); return; }
   openRoute(false);
-  ["market", "haul", "shelf", "fitbox"].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
+  ["market", "haul", "shelf", "fitbox", "assets"].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
   document.body.classList.add("route-open");
   const d = pilotState.data.get(pilotState.active);
   const from = document.getElementById("bFrom");

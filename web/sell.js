@@ -142,7 +142,21 @@ async function planSell(items, unknown) {
   const origin = haulOrigin();
   if (!origin) { sum.textContent = "Where are you? Type your system in the from box."; return; }
   const hs = document.getElementById("sHigh").checked;
-  const reach = Math.max(0, +document.getElementById("sReach").value || 15);
+  const res = await computeSale(items, origin, {
+    hs, reach: Math.max(0, +document.getElementById("sReach").value || 15),
+    minStop: Math.max(0, +document.getElementById("sMin").value || 0) * 1e6,
+    structs: document.getElementById("sStruct").checked,
+  }, sum);
+  sell.plan = { route: res.route, left: res.left, gross: res.gross, origin, hs, unknown, at: new Date() };
+  drawSell();
+}
+
+/* the sale itself, shared with the asset clean-up tool: live buy orders in
+   reach of origin (plus player stations the pilot may dock at), planned by
+   SellCore, unsold items to a Jita drop-off.
+   opts: { hs, reach, minStop (ISK), structs (bool) } */
+async function computeSale(items, origin, opts, sum) {
+  const { hs, reach, minStop } = opts;
   const tree = treeFrom(origin.id, hs);
   const near = sys => { const d = tree.dist.get(sys); return d !== undefined && d <= reach; };
   const regions = [...new Set([...tree.dist].filter(([, d]) => d <= reach).map(([s]) => regionOf(s)))];
@@ -167,27 +181,25 @@ async function planSell(items, unknown) {
      kept only where this pilot may dock */
   sell.capped = 0;
   const pilot = typeof pilotState !== "undefined" && pilotState.active;
-  if (pilot && document.getElementById("sStruct").checked) {
+  if (pilot && opts.structs) {
     for (const t of tids) {
       for (const o of await structureOrders(t, "buy")) {
         if (near(o.system_id)) structOrders.push({ ...o, type_id: t, min_volume: 1 });
       }
     }
   }
-  if (pilot && document.getElementById("sStruct").checked && structOrders.length) {
+  if (pilot && opts.structs && structOrders.length) {
     const ok = await dockable(pilot, SellCore.structureCandidates(items, SellCore.planSale({ items, orders }), structOrders), sum);
     orders.push(...structOrders.filter(o => ok.has(o.location_id)));
   }
 
   const tax = sellTax();
-  const minStop = Math.max(0, +document.getElementById("sMin").value || 0) * 1e6;
   const free = new Set([SellCore.JITA.station, ...orders.filter(o => o.system_id === origin.id).map(o => o.location_id)]);
   const p = SellCore.planSale({ items, orders, tax, minStop, maxStops: 8, free });
   const dist = (a, b) => { const d = treeFrom(a, hs).dist.get(b); return d === undefined ? Infinity : d; };
   const drop = p.left.size ? SellCore.JITA : null;
   const route = SellCore.orderStops(p.stops, origin.id, dist, drop);
-  sell.plan = { route, left: p.left, gross: p.gross, origin, hs, unknown, at: new Date() };
-  drawSell();
+  return { route, left: p.left, gross: p.gross };
 }
 
 function drawSell() {

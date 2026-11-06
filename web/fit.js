@@ -186,7 +186,7 @@ function openFit(open) {
   document.getElementById("fitBtn").setAttribute("aria-expanded", String(open));
   if (!open) { document.body.classList.remove("route-open"); return; }
   openRoute(false);
-  ["market", "haul", "shelf", "bpo"].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
+  ["market", "haul", "shelf", "bpo", "assets"].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
   document.body.classList.add("route-open");
   loadSavedFits();
 }

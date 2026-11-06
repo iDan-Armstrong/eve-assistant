@@ -388,6 +388,37 @@ each, so every contract is read once and remembered in the history branch;
 only new contracts are read, at most 8,000 an hour, so the first few runs
 fill the backlog.
 
+### Asset clean-up
+
+**Asset clean-up** (Tools, Assets) gathers items scattered across stations
+into your hold. **Scan my assets** reads the active pilot's assets and lists
+every loose stack: items in a station's hangar and items inside containers
+there (fitted modules, ship cargo and assembled ships stay where they are).
+Each stack gets its packaged volume (from the SDE, or from CCP for ships)
+and what the best trade hub's buy orders pay for it. The free hold is your
+ship's cargo capacity minus what is already in it; change it to allow for
+skills and expanders. Filter by kind of item and by words in the name, and
+set how far you will go for a pickup (10 jumps by default).
+
+Two goals:
+
+- **Sell for most profit**: each next pickup is the station with the most
+  ISK per jump that still fits, taking the best ISK per m³ first, skipping
+  stops worth less than the "worth it" amount. The sale is then planned
+  from the last pickup with live buy orders, the same way as Sell my cargo,
+  with unsold items dropped at Jita 4-4.
+- **Move and consolidate**: each next pickup is the station that clears the
+  most stacks per jump, smallest stacks first, and everything is dropped at
+  the station you choose (by default the one already holding the most).
+  Whatever did not fit is counted for the next trip.
+
+**Send route to autopilot and open trip window** sets the stops and opens
+the same pop-out window as the Haul planner, which now knows pickup and
+drop-off stops: it shows what to move at each station, asks whether you
+loaded the cargo when you undock, and warns if more than planned was left
+in the hangar. `web/asset_core.js` holds the planning (tested in
+`tests/js/asset_core.test.js`).
+
 ### Hourly traffic
 
 CCP publishes, for every system, the stargate jumps and kills of the last
