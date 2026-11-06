@@ -325,7 +325,7 @@ function renderPilotMenu(note = "") {
         <div class="pm-where">${esc(where)}${d.errors && d.errors.length ? ` <span title="${esc(d.errors.join("; "))}">(partial data)</span>` : ""}</div></div>
       <button data-act="go" title="Show on map">◎</button>
       <button data-act="out" title="Sign out this pilot">✕</button></div>` +
-      (reserves.relay ? `<div class="pm-shares" data-id="${p.id}">share with corp:
+      (reserves.relay ? `<div class="pm-shares" data-id="${p.id}">share with ${orgShare() ? "org" : "corp"}:
         <label><input type="checkbox" data-kind="reserves"${shareFor(p.id, "reserves") ? " checked" : ""}> reserves</label>
         <label><input type="checkbox" data-kind="location"${shareFor(p.id, "location") ? " checked" : ""}> location</label></div>` : "");
   }).join("") +
@@ -337,7 +337,7 @@ function renderPilotMenu(note = "") {
        <div class="pm-note">A separate CCP login just for the hourly structure-market job, so signing in or out
        here never breaks it. For the GitHub secret EVE_MARKET_REFRESH_TOKEN.</div></div>` : "") +
   (reserves.relay ? `<div class="pm-note">Sharing sends that pilot's login to the Atlas relay, which checks it ` +
-    `with CCP and keeps no token. Only members of the same corporation see shared reserves (no names) or ` +
+    `with CCP and keeps no token. Only members of the same corporation (or of the org picked under Organizations) see shared reserves (no names) or ` +
     `locations (name, system, ship).</div>` : "") +
   `<div class="pm-note">${esc(note || "Tokens stay in this browser and go only to CCP, unless you share.")}</div>`;
   menu.querySelectorAll(".pm-shares input").forEach(box => box.onchange = e => {
@@ -535,10 +535,11 @@ function askToShare(pilot) {
   const box = document.createElement("div");
   box.className = "consent";
   box.setAttribute("role", "dialog");
-  box.setAttribute("aria-label", "Share with your corporation");
-  box.innerHTML = `<div class="c-card"><h3>Share with your corporation?</h3>
-    <p>${esc(pilot.name)} can share with <b>members of the same corporation only</b>. Nothing is shared
-    unless you tick it.</p>
+  const group = orgShare() ? orgShareLabel() : "your corporation";
+  box.setAttribute("aria-label", `Share with ${group}`);
+  box.innerHTML = `<div class="c-card"><h3>Share with ${esc(group)}?</h3>
+    <p>${esc(pilot.name)} can share with <b>${orgShare() ? "approved members of that org only" : "members of the same corporation only"}</b>
+    (change which under Organizations). Nothing is shared unless you tick it.</p>
     <label class="c-opt"><input type="checkbox" data-kind="reserves"> <span><b>Bulwark reserve sightings</b>:
       light up reserves you mine, from your mining ledger. Shows system, ore and time, never your name.</span></label>
     <label class="c-opt"><input type="checkbox" data-kind="location"> <span><b>My location</b>: corp mates

@@ -35,7 +35,7 @@ async function sellNames() {
 }
 
 /* names CCP knows that the hourly market list does not */
-async function resolveNames(names) {
+async function sellResolveNames(names) {
   const out = new Map();
   if (!names.length) return out;
   try {
@@ -80,7 +80,7 @@ async function pasteCargo() {
   const text = document.getElementById("sPaste").value;
   let r = SellCore.parseCargoPaste(text, n => sell.byName.get(n.toLowerCase()));
   if (r.unknown.length) {
-    const found = await resolveNames(r.unknown);
+    const found = await sellResolveNames(r.unknown);
     for (const [n, tid] of found) sell.byName.set(n, tid);
     r = SellCore.parseCargoPaste(text, n => sell.byName.get(n.toLowerCase()));
   }
