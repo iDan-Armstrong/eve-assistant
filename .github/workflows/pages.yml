@@ -110,6 +110,9 @@ jobs:
           git push -q -f origin snapshot:live-data
         continue-on-error: true
 
+      - name: Stamp file versions (browsers fetch new scripts right after a deploy)
+        run: python tools/stamp_versions.py web "${GITHUB_SHA::8}"
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
