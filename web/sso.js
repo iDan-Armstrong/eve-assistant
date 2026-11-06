@@ -15,6 +15,8 @@
   const LOGIN = "https://login.eveonline.com";
   const ESI = "https://esi.evetech.net";
   const COMPAT = "2025-09-30";
+  const WAYPOINT_GAP_MS = 1500;   /* between autopilot waypoints */
+  const WAYPOINT_MAX = 25;
   const STORE = "atlas.pilots";
   const PENDING = "atlas.sso.pending";
   const SCOPES = [
@@ -169,6 +171,23 @@
         if (r.ok) data.push(...await r.json());
       }
       return data;
+    },
+
+    /* Set the in-game autopilot: the first destination replaces the route,
+       the rest are added as waypoints. Sent one at a time with a pause in
+       between, because the client rebuilds its whole route on every
+       waypoint and a fast burst of them has dropped a pilot from the server.
+       progress(i, n) before each; returns how many were sent. */
+    async waypoints(id, destinations, progress = () => {}) {
+      const list = destinations.filter((d, i) => d && d !== destinations[i - 1]);
+      if (list.length > WAYPOINT_MAX) throw new Error(`too many stops (${list.length}); the most is ${WAYPOINT_MAX}`);
+      for (let i = 0; i < list.length; i++) {
+        if (i) await new Promise(r => setTimeout(r, WAYPOINT_GAP_MS));
+        progress(i + 1, list.length);
+        await EveSSO.esi(id, `/ui/autopilot/waypoint?add_to_beginning=false&clear_other_waypoints=${i === 0}` +
+                             `&destination_id=${list[i]}`, { method: "POST" });
+      }
+      return list.length;
     },
 
     /* public ESI POST (names, etc.), no token */

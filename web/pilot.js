@@ -376,13 +376,10 @@ async function sendToAutopilot(path, progress = () => {}) {
   if (!id || !path || path.length < 2) return "Plan a route and sign in first.";
   const d = pilotState.data.get(id);
   try {
-    const hops = path.slice(1);
-    for (let i = 0; i < hops.length; i++) {
-      progress(i + 1, hops.length);
-      await EveSSO.esi(id, `/ui/autopilot/waypoint?add_to_beginning=false&clear_other_waypoints=${i === 0}` +
-                          `&destination_id=${hops[i]}`, { method: "POST" });
-    }
-    return `Sent ${hops.length} waypoints to ${d ? d.name : "your pilot"}'s autopilot.`;
+    /* only the turn points that hold the client to this path, not every system */
+    const hops = PilotCore.turnPoints(path, v => state.routeAdj.get(v) || []);
+    const n = await EveSSO.waypoints(id, hops, progress);
+    return `Sent the ${path.length - 1}-jump route to ${d ? d.name : "your pilot"}'s autopilot as ${n} waypoint${n === 1 ? "" : "s"}.`;
   } catch (e) {
     return `Autopilot update failed (${e.message}). The pilot must be logged in to the game.`;
   }
@@ -779,7 +776,7 @@ document.addEventListener("contextmenu", e => {
     b.textContent = "Sending…";
     try {
       await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false` +
-        `&clear_other_waypoints=${dest}&destination_id=${id}`, { method: "POST" });
+        `&clear_other_waypoints=${dest}&destination_id=${id}`, { method: "POST" });   /* one waypoint: no pacing needed */
       b.textContent = dest ? `Destination set: ${name}` : `Waypoint added: ${name}`;
     } catch (err) {
       b.textContent = `Failed (${err.message}); is the pilot in game?`;

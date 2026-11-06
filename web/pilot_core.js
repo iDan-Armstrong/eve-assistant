@@ -97,8 +97,36 @@
     return out;
   }
 
+  /* Turn points: the fewest waypoints that hold the in-game autopilot to a
+     planned path. Between two turn points the path must be the ONLY shortest
+     way (counted on the whole gate graph), so the client's own routing has
+     no other choice; the end is always a turn point. adj(system) lists the
+     gate neighbours. Returns the systems to send, without the start. */
+  function turnPoints(path, adj) {
+    const out = [];
+    let i = 0;
+    while (i < path.length - 1) {
+      const from = path[i];
+      const dist = new Map([[from, 0]]), ways = new Map([[from, 1]]), queue = [from];
+      const horizon = path.length - 1 - i;
+      for (let q = 0; q < queue.length; q++) {
+        const v = queue[q], d = dist.get(v);
+        if (d >= horizon) continue;
+        for (const w of adj(v) || []) {
+          if (!dist.has(w)) { dist.set(w, d + 1); ways.set(w, ways.get(v)); queue.push(w); }
+          else if (dist.get(w) === d + 1) ways.set(w, Math.min(2, ways.get(w) + ways.get(v)));
+        }
+      }
+      let j = i + 1;
+      while (j + 1 < path.length && dist.get(path[j + 1]) === j + 1 - i && ways.get(path[j + 1]) === 1) j++;
+      out.push(path[j]);
+      i = j;
+    }
+    return out;
+  }
+
   const api = { isStation, isSystem, ASSET_SAFETY, rootLocations, placeOf, rollup,
-                unknownStructures, miningBySystem };
+                unknownStructures, miningBySystem, turnPoints };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.PilotCore = api;
 })(typeof self !== "undefined" ? self : this);

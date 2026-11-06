@@ -73,11 +73,7 @@ function wireContractButtons(list) {
     const stops = b.dataset.route.split(",").map(Number);
     b.disabled = true;
     try {
-      for (let i = 0; i < stops.length; i++) {
-        b.textContent = `Sending ${i + 1} of ${stops.length}…`;
-        await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false` +
-          `&clear_other_waypoints=${i === 0}&destination_id=${stops[i]}`, { method: "POST" });
-      }
+      await EveSSO.waypoints(pilotState.active, stops, (i, n) => { b.textContent = `Sending ${i} of ${n}…`; });
       b.textContent = "Route sent";
     } catch (err) { b.textContent = `Failed (${err.message}); is the pilot in game?`; }
     b.disabled = false;

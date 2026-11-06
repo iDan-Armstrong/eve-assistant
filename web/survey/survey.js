@@ -984,11 +984,7 @@ async function sendRoute(btn, msg) {
   if (!stops.length) { msg.textContent = "Nothing left to route to."; return; }
   btn.disabled = true;
   try {
-    for (let i = 0; i < stops.length; i++) {
-      btn.textContent = `Sending ${i + 1} of ${stops.length}...`;
-      await EveSSO.esi(pilot.id, `/ui/autopilot/waypoint?add_to_beginning=false&clear_other_waypoints=${i === 0}` +
-        `&destination_id=${stops[i]}`, { method: "POST" });
-    }
+    await EveSSO.waypoints(pilot.id, stops, (i, n) => { btn.textContent = `Sending ${i} of ${n}...`; });
     btn.textContent = "Route sent";
     msg.textContent = `${stops.length} waypoints set for ${pilot.name}. Probe-scan each system when you arrive.`;
     feed(`Survey route sent to ${pilot.name}'s autopilot: ${stops.map(nameOf).join(", ")}`, "jump");

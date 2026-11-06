@@ -269,14 +269,15 @@ async function showLoop(o, li) {
     try { await navigator.clipboard.writeText(text); b.textContent = "Copied: paste into Multibuy in game"; }
     catch { b.textContent = "Copy failed: browser blocked the clipboard"; }
   });
-  /* autopilot: the whole circuit, jump by jump, so the game flies this
-     route (highsec only if chosen) rather than its own; each trade stop is
-     its station, so autopilot docks there; home is the starting system */
+  /* autopilot: just the turn points that hold the game to this circuit
+     (highsec only if chosen), not every system; each trade stop is its
+     station, so autopilot docks there; home is the starting system */
   const stopIds = [o.L1.a, o.L1.b, ...(o.L2 ? [o.L2.a, o.L2.b] : []), origin.id];
   const waypoints = [];
   for (let i = 0; i < stops.length - 1; i++) {
-    const seg = pathTo(tree(stops[i]), stops[i + 1]) || [stops[i + 1]];
-    waypoints.push(...seg.slice(1, -1), stopIds[i]);
+    const seg = pathTo(tree(stops[i]), stops[i + 1]) || [stops[i], stops[i + 1]];
+    const turns = PilotCore.turnPoints(seg, v => state.routeAdj.get(v) || []);
+    waypoints.push(...turns.slice(0, -1), stopIds[i]);
   }
   const btn = document.getElementById("hDest"), first = document.getElementById("hFirst");
   const signedIn = typeof pilotState !== "undefined" && pilotState.data.size;
@@ -290,11 +291,7 @@ async function showLoop(o, li) {
     const hud = window.open("hud.html", "atlasHaulHud", "width=460,height=720");
     saveActiveHaul(o, stops, path);
     try {
-      for (let i = 0; i < waypoints.length; i++) {
-        btn.textContent = `Sending waypoint ${i + 1} of ${waypoints.length}…`;
-        await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false` +
-          `&clear_other_waypoints=${i === 0}&destination_id=${waypoints[i]}`, { method: "POST" });
-      }
+      await EveSSO.waypoints(pilotState.active, waypoints, (i, n) => { btn.textContent = `Sending waypoint ${i} of ${n}…`; });
       btn.textContent = `Trip sent: ${waypoints.length} waypoints, docking at each trade stop`;
       if (!hud) btn.textContent += ". Your browser blocked the haul window; use Open haul window.";
     } catch (e) { btn.textContent = `Failed (${e.message}); is the pilot in game?`; }

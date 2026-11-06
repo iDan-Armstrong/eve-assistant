@@ -45,3 +45,18 @@ test("mining ledger sums per system and ore", () => {
   assert.equal(m.get(1).types.get(1230), 150);
   assert.equal(m.get(1).last.get(1230), "2026-11-01");
 });
+
+test("turn points: fewest waypoints that pin the autopilot to the planned path", () => {
+  const P = require("../../web/pilot_core.js");
+  // a straight line 1-2-3-4-5 needs only its end
+  const line = new Map([[1, [2]], [2, [1, 3]], [3, [2, 4]], [4, [3, 5]], [5, [4]]]);
+  assert.deepEqual(P.turnPoints([1, 2, 3, 4, 5], v => line.get(v)), [5]);
+  // a square 1-2-4 and 1-3-4: two equal ways to 4, so the path through 2 needs 2 pinned
+  const sq = new Map([[1, [2, 3]], [2, [1, 4]], [3, [1, 4]], [4, [2, 3, 5]], [5, [4]]]);
+  assert.deepEqual(P.turnPoints([1, 2, 4, 5], v => sq.get(v)), [2, 5]);
+  // a detour around a shortcut (1-9-5 is shorter than 1-2-3-4-5): pin the detour
+  const det = new Map([[1, [2, 9]], [2, [1, 3]], [3, [2, 4]], [4, [3, 5]], [5, [4, 9]], [9, [1, 5]]]);
+  const t = P.turnPoints([1, 2, 3, 4, 5], v => det.get(v));
+  assert.deepEqual(t, [3, 5]);
+  assert.deepEqual(P.turnPoints([1], v => line.get(v)), []);
+});

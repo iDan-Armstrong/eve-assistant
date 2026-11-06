@@ -282,11 +282,7 @@ async function routeBpos() {
   dest.onclick = async () => {
     dest.disabled = true;
     try {
-      for (let i = 0; i < waypoints.length; i++) {
-        dest.textContent = `Sending stop ${i + 1} of ${waypoints.length}…`;
-        await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false` +
-          `&clear_other_waypoints=${i === 0}&destination_id=${waypoints[i]}`, { method: "POST" });
-      }
+      await EveSSO.waypoints(pilotState.active, waypoints, (i, n) => { dest.textContent = `Sending stop ${i} of ${n}…`; });
       dest.textContent = `Route sent: ${waypoints.length} stop${waypoints.length === 1 ? "" : "s"}, docking at each`;
     } catch (e) { dest.textContent = `Failed (${e.message}); is the pilot in game?`; }
     dest.disabled = false;

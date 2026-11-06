@@ -304,11 +304,7 @@ async function sendAssetRoute() {
   const waypoints = stops.filter(s => s.jumps !== Infinity).map(s => s.station).filter((s, i, a) => s !== a[i - 1]);
   btn.disabled = true;
   try {
-    for (let i = 0; i < waypoints.length; i++) {
-      btn.textContent = `Sending stop ${i + 1} of ${waypoints.length}…`;
-      await EveSSO.esi(pilotState.active, `/ui/autopilot/waypoint?add_to_beginning=false` +
-        `&clear_other_waypoints=${i === 0}&destination_id=${waypoints[i]}`, { method: "POST" });
-    }
+    await EveSSO.waypoints(pilotState.active, waypoints, (i, n) => { btn.textContent = `Sending stop ${i} of ${n}…`; });
     btn.textContent = `Route sent: ${waypoints.length} stop${waypoints.length === 1 ? "" : "s"}, docking at each`;
   } catch (e) { btn.textContent = `Failed (${e.message}); is the pilot in game?`; }
   btn.disabled = false;
