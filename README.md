@@ -388,6 +388,41 @@ each, so every contract is read once and remembered in the history branch;
 only new contracts are read, at most 8,000 an hour, so the first few runs
 fill the backlog.
 
+### Organizations
+
+**Organizations** (pilot menu) are sharing groups that work like corp
+sharing but do not depend on anyone's in-game corporation. Under **Share
+with**, each browser picks "my corporation" or one of its orgs; J-Space
+Survey sharing, corp-mate positions and reserve sightings then go to that
+group. The relay checks every request against the pilot's verified EVE
+login, so only approved members can read an org's data.
+
+- **Create Org**: name it and set two passwords. The admin password opens
+  the admin window; the member password lets a pilot ask to join. The
+  creator is Master Admin.
+- **Joining**: pick the org, give the member password, and wait for an
+  admin to approve you. Pilots can belong to several orgs and switch which
+  one they share with.
+- **Admins** approve, refuse and boot members and make members admins.
+  Only the **Master Admin** demotes or boots admins, changes the
+  passwords, and passes Master Admin to another admin.
+- **Master Admin away**: after 30 days without the Master Admin using the
+  relay, the most active admin of the last 30 days becomes Temporary
+  Master Admin with the same powers. If the Master Admin returns, they hold
+  it again at once; if 30 more days pass first, it becomes the temporary
+  holder's for good.
+- **Disputes and forgotten passwords**: send an in-game mail to Varg Soth,
+  the Atlas operator, who can reset an org's passwords, appoint a Master
+  Admin and remove anyone. Operators are named in `wrangler.toml`
+  (`OPERATORS`).
+
+Passwords are stored only as salted PBKDF2 hashes, so a forgotten one is
+replaced, never recovered; five wrong tries lock that pilot out of that org
+for an hour. The rules are in `worker/org_core.js` (tested in
+`tests/js/org_core.test.mjs`); the relay keeps every org in one
+`OrgDirectory` Durable Object, and each org's shared data in its own room,
+the same kind as a corporation's.
+
 ### Asset clean-up
 
 **Asset clean-up** (Tools, Assets) gathers items scattered across stations

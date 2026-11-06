@@ -33,7 +33,21 @@
      (web/survey/survey_core.mjs).
    POST /kb         body {"token": ..., "systems": [ids]} -> {"kb": {id: record}}
 
-   Bindings: SIGHTINGS (KV), CLIENT_ID and ALLOWED_ORIGINS (vars). The
+   Organizations (Atlas orgs, independent of in-game corporations):
+   POST /org        body {"token": ..., "action": ..., ...}
+     list | mine | create {name, adminPassword, memberPassword}
+     | join {org, password} | leave {org}
+     | admin {org, adminPassword, op: view|approve|boot|promote|demote|master|passwords, target, newAdmin, newMember}
+     | operator {org, op, target, newAdmin, newMember}   (the Atlas operator only)
+     Rules in worker/org_core.js. Passwords are kept only as salted PBKDF2
+     hashes; five wrong tries an hour per pilot per org.
+   Every sharing endpoint above also takes "org": <id>. The relay checks the
+   verified pilot is an approved member, then uses that org's room instead
+   of the corporation's, so a pilot shares with their corp or one of their
+   orgs, never both at once.
+
+   Bindings: SIGHTINGS (KV), CORP and ORGS (Durable Objects), CLIENT_ID,
+   ALLOWED_ORIGINS and OPERATORS (vars: operator character names). The
    salt for pilot hashes is made on first use and kept in KV, which is
    private to the Worker; a SALT secret, if set, takes its place. */
 
@@ -41,6 +55,7 @@ import { ACTIVE_MINUTES, diffLedger, freshPresence, mergeSightings, prune,
          reserveRows } from "./sightings_core.js";
 import { applyOp, emptyChain, prune as pruneChain } from "../web/survey/chain_core.mjs";
 import { applyKbOp, award, chainEvents, leaderboard } from "../web/survey/survey_core.mjs";
+import * as Org from "./org_core.js";
 import WORMHOLES from "../web/data/jspace/wormholes.json";
 import JSYSTEMS from "../web/data/jspace/systems.json";
 import CLASSES from "../web/data/jspace/classes.json";
@@ -117,9 +132,10 @@ async function corporationOf(id) {
 }
 
 async function report(req, env) {
-  const { token } = await req.json();
-  const { id } = await verify(token, env, true);
-  const corp = await corporationOf(id);
+  const { token, org } = await req.json();
+  const who = await verify(token, env, true);
+  const { id } = who;
+  const corp = (await spaceOf(who, org, env)).key;
   const resp = await fetch(`${ESI}/characters/${id}/mining`, {
     headers: { Authorization: `Bearer ${token}`, "X-Compatibility-Date": "2025-09-30", "User-Agent": UA } });
   if (!resp.ok) throw new Error(`ESI mining ledger: ${resp.status}`);
@@ -236,10 +252,187 @@ export class CorpRoom {
 }
 const room = (env, corp) => env.CORP.get(env.CORP.idFromName(String(corp)));
 
-async function presence(req, env) {
-  const { token, share } = await req.json();
-  const who = await verify(token, env);
+/* ---- organizations ------------------------------------------------------ */
+const PBKDF2_ITER = 20000;
+const b64 = u => btoa(String.fromCharCode(...new Uint8Array(u)));
+async function hashPassword(pw, saltB64) {
+  const saltBytes = saltB64 ? Uint8Array.from(atob(saltB64), c => c.charCodeAt(0)) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: saltBytes, iterations: PBKDF2_ITER }, key, 256);
+  return { s: b64(saltBytes), h: b64(bits), i: PBKDF2_ITER };
+}
+async function checkPassword(pw, rec) {
+  if (!rec || typeof pw !== "string") return false;
+  const h = (await hashPassword(pw, rec.s)).h;
+  let diff = h.length ^ rec.h.length;
+  for (let i = 0; i < Math.min(h.length, rec.h.length); i++) diff |= h.charCodeAt(i) ^ rec.h.charCodeAt(i);
+  return diff === 0;
+}
+const goodPassword = pw => typeof pw === "string" && pw.length >= 6 && pw.length <= 100;
+
+/* every org lives here (one instance): membership, roles, password hashes */
+export class OrgDirectory {
+  constructor(state) { this.state = state; }
+  async get(id) { return this.state.storage.get(`org:${id}`); }
+  async save(org) {
+    await this.state.storage.put(`org:${org.id}`, org);
+    const index = (await this.state.storage.get("index")) || {};
+    index[org.id] = org.name;
+    await this.state.storage.put("index", index);
+  }
+  async pilotOrgs(id) { return (await this.state.storage.get(`pilot:${id}`)) || []; }
+  async setPilotOrgs(id, list) { await this.state.storage.put(`pilot:${id}`, [...new Set(list)]); }
+
+  async fetch(req) {
+    const body = await req.json();
+    const { action, who } = body;
+    const now = Date.now();
+    const out = data => new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+    const fail = (msg, status = 400) => new Response(JSON.stringify({ error: msg }), { status });
+    try {
+      const index = (await this.state.storage.get("index")) || {};
+      const load = async () => {
+        const org = await this.get(body.org);
+        if (!org) throw new Error("No such org.");
+        if (Org.settleMaster(org, now)) await this.save(org);
+        return org;
+      };
+      const passwordGate = async (org, rec) => {
+        if (Org.tooManyTries(org, who.id, now)) throw new Error("Too many wrong passwords: try again in an hour.");
+        const ok = await checkPassword(body.adminPassword ?? body.password, rec);
+        Org.noteTry(org, who.id, ok, now);
+        await this.save(org);
+        if (!ok) throw new Error("Wrong password.");
+      };
+      switch (action) {
+        case "list": {
+          const orgs = [];
+          for (const id of Object.keys(index)) {
+            const o = await this.get(id);
+            if (o) orgs.push({ id, name: o.name, members: Object.values(o.members).filter(m => m.role !== "pending").length });
+          }
+          return out({ orgs: orgs.sort((a, b) => a.name.localeCompare(b.name)) });
+        }
+        case "mine": {
+          const mine = [];
+          for (const id of await this.pilotOrgs(who.id)) {
+            const o = await this.get(id);
+            if (!o || !o.members[who.id]) continue;
+            Org.settleMaster(o, now);
+            mine.push({ id, name: o.name, role: o.members[who.id].role, master: Org.isMaster(o, who.id),
+                        temp: !!o.temp && String(o.temp.id) === String(who.id) });
+          }
+          return out({ orgs: mine });
+        }
+        case "create": {
+          const name = String(body.name || "").trim();
+          if (Object.values(index).some(n => n.toLowerCase() === name.toLowerCase())) throw new Error("That name is taken.");
+          if (!goodPassword(body.adminPassword) || !goodPassword(body.memberPassword)) throw new Error("Passwords need at least 6 characters.");
+          if (body.adminPassword === body.memberPassword) throw new Error("The admin and member passwords must differ.");
+          const id = [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(36).padStart(2, "0")).join("").slice(0, 10);
+          const org = Org.newOrg({ id, name, creator: who, now });
+          org.pw = { admin: await hashPassword(body.adminPassword), member: await hashPassword(body.memberPassword) };
+          await this.save(org);
+          await this.setPilotOrgs(who.id, [...await this.pilotOrgs(who.id), id]);
+          return out({ id, name: org.name, role: "admin", master: true });
+        }
+        case "join": {
+          const org = await load();
+          if (org.members[who.id]) return out({ id: org.id, name: org.name, role: org.members[who.id].role });
+          await passwordGate(org, org.pw.member);
+          const role = Org.join(org, who, now);
+          await this.save(org);
+          await this.setPilotOrgs(who.id, [...await this.pilotOrgs(who.id), org.id]);
+          return out({ id: org.id, name: org.name, role });
+        }
+        case "leave": {
+          const org = await load();
+          Org.leave(org, who.id, now);
+          if (!Object.keys(org.members).length) {
+            await this.state.storage.delete(`org:${org.id}`);
+            delete index[org.id];
+            await this.state.storage.put("index", index);
+          } else await this.save(org);
+          await this.setPilotOrgs(who.id, (await this.pilotOrgs(who.id)).filter(x => x !== org.id));
+          return out({ left: org.id });
+        }
+        case "admin":
+        case "operator": {
+          const operator = action === "operator";
+          if (operator && !body.isOperator) return fail("Operator only.", 403);
+          if (operator && !body.org) {
+            const all = [];
+            for (const id of Object.keys(index)) { const o = await this.get(id); if (o) all.push(Org.adminView(o, now)); }
+            return out({ orgs: all });
+          }
+          const org = await load();
+          if (!operator) {
+            if (!Org.isAdmin(org, who.id)) throw new Error("Admins only.");
+            await passwordGate(org, org.pw.admin);
+          }
+          const op = body.op || "view";
+          if (op !== "view") {
+            Org.adminAction(org, who, op, body.target, now, { operator });
+            if (op === "passwords") {
+              if (body.newAdmin !== undefined && body.newAdmin !== "") {
+                if (!goodPassword(body.newAdmin)) throw new Error("Passwords need at least 6 characters.");
+                org.pw.admin = await hashPassword(body.newAdmin);
+              }
+              if (body.newMember !== undefined && body.newMember !== "") {
+                if (!goodPassword(body.newMember)) throw new Error("Passwords need at least 6 characters.");
+                org.pw.member = await hashPassword(body.newMember);
+              }
+            }
+            if (op === "boot") await this.setPilotOrgs(body.target, (await this.pilotOrgs(body.target)).filter(x => x !== org.id));
+            await this.save(org);
+          }
+          return out(Org.adminView(org, now));
+        }
+        case "check": {
+          const org = await this.get(body.org);
+          const m = org && org.members[who.id];
+          if (!m || m.role === "pending") return out({ ok: false });
+          const mark = m.lastTouch;
+          Org.touch(org, who.id, who.name, now);
+          const settled = Org.settleMaster(org, now);
+          if (settled || m.lastTouch !== mark) await this.save(org);
+          return out({ ok: true, name: org.name, role: m.role });
+        }
+        default:
+          return fail("Unknown org action.");
+      }
+    } catch (e) {
+      return fail(e.message);
+    }
+  }
+}
+const orgDir = env => env.ORGS.get(env.ORGS.idFromName("directory"));
+async function orgCall(env, payload) {
+  const r = await orgDir(env).fetch("https://orgs/", { method: "POST", body: JSON.stringify(payload) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || "org error");
+  return data;
+}
+const isOperator = (who, env) => (env.OPERATORS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+  .includes(String(who.name || "").toLowerCase());
+
+/* where a request shares: the pilot's corporation, or an org they are an
+   approved member of. key names the room (and KV prefix); label goes back
+   to the page in "corporation" so older pages keep working. */
+async function spaceOf(who, org, env) {
+  if (org) {
+    const c = await orgCall(env, { action: "check", org: String(org), who: { id: who.id, name: who.name } });
+    if (!c.ok) throw new Error("Not an approved member of that org.");
+    return { key: `org:${org}`, label: `org:${org}`, org: { id: String(org), name: c.name } };
+  }
   const corp = await corporationOf(who.id);
+  return { key: String(corp), label: corp, org: null };
+}
+
+async function presence(req, env) {
+  const { token, share, org } = await req.json();
+  const who = await verify(token, env);
+  const corp = (await spaceOf(who, org, env)).key;
   if (!share) {
     await room(env, corp).fetch("https://room/set", { method: "POST", body: JSON.stringify({ id: who.id, rec: null }) });
     return { shared: false };
@@ -262,40 +455,50 @@ export default {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
     try {
+      if (req.method === "POST" && url.pathname === "/org") {
+        const body = await req.json();
+        const who = await verify(body.token, env);
+        const { token, ...rest } = body;
+        const payload = { ...rest, who: { id: who.id, name: who.name }, isOperator: isOperator(who, env) };
+        const data = await orgCall(env, payload);
+        return json({ ...data, operator: payload.isOperator }, 200, { ...headers, "Cache-Control": "no-store" });
+      }
       if (req.method === "POST" && url.pathname === "/sightings") {
-        const { token } = await req.json();
-        const corp = await corporationOf((await verify(token, env)).id);
-        const systems = (await env.SIGHTINGS.get(`sightings:${corp}`, "json")) || {};
+        const { token, org } = await req.json();
+        const sp = await spaceOf(await verify(token, env), org, env);
+        const systems = (await env.SIGHTINGS.get(`sightings:${sp.key}`, "json")) || {};
         return json({ updated: new Date().toISOString(), activeMinutes: ACTIVE_MINUTES,
-                      corporation: corp, systems }, 200, { ...headers, "Cache-Control": "no-store" });
+                      corporation: sp.label, org: sp.org, systems }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/presence") {
         return json(await presence(req, env), 200, headers);
       }
       if (req.method === "POST" && url.pathname === "/corpmates") {
-        const { token } = await req.json();
-        const corp = await corporationOf((await verify(token, env)).id);
-        const pilots = await room(env, corp).fetch("https://room/get").then(r => r.json());
-        return json({ corporation: corp, pilots }, 200, { ...headers, "Cache-Control": "no-store" });
+        const { token, org } = await req.json();
+        const sp = await spaceOf(await verify(token, env), org, env);
+        const pilots = await room(env, sp.key).fetch("https://room/get").then(r => r.json());
+        return json({ corporation: sp.label, org: sp.org, pilots }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && (url.pathname === "/chain" || url.pathname === "/chain/ops")) {
         const body = await req.json();
         const who = await verify(body.token, env);
-        const corp = await corporationOf(who.id);
+        const sp = await spaceOf(who, body.org, env);
+        const corp = sp.key;
         const ops = (body.ops || []).map(op => ({ ...op, by: who.name,
           rec: op.rec ? { ...op.rec, by: who.name } : op.rec }));
         const path = url.pathname === "/chain" ? "/chain-get" : "/chain-ops";
         const r = await room(env, corp).fetch(`https://room${path}`,
           { method: "POST", body: JSON.stringify({ ops, pilot: { id: who.id, name: who.name } }) });
         if (!r.ok) throw new Error(await r.text());
-        return json({ corporation: corp, ...(await r.json()) }, 200, { ...headers, "Cache-Control": "no-store" });
+        return json({ corporation: sp.label, org: sp.org, ...(await r.json()) }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/kb") {
         const body = await req.json();
-        const corp = await corporationOf((await verify(body.token, env)).id);
+        const sp = await spaceOf(await verify(body.token, env), body.org, env);
+        const corp = sp.key;
         const r = await room(env, corp).fetch("https://room/kb-get",
           { method: "POST", body: JSON.stringify({ systems: (body.systems || []).map(Number).filter(Boolean) }) });
-        return json({ corporation: corp, kb: await r.json() }, 200, { ...headers, "Cache-Control": "no-store" });
+        return json({ corporation: sp.label, org: sp.org, kb: await r.json() }, 200, { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/report") {
         return json(await report(req, env), 200, headers);

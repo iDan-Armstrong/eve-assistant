@@ -416,10 +416,12 @@ function dscanLine(sum) {
 }
 
 /* ---- corp sharing via the Atlas relay ------------------------------------------ */
+/* the Atlas pilot menu's Organizations > Share with: an org id, or empty for the corp */
+const shareOrg = () => { try { return localStorage.getItem("atlas.shareTo") || undefined; } catch { return undefined; } };
 async function relayPost(path, extra) {
   const p = pilots()[0];
   const r = await fetch(`${S.relay}${path}`, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: await EveSSO.token(p.id), ...extra }) });
+    body: JSON.stringify({ token: await EveSSO.token(p.id), org: shareOrg(), ...extra }) });
   const body = await r.json();
   if (!r.ok) throw new Error(body.error || r.status);
   return body;
@@ -464,12 +466,14 @@ async function fetchKb(systems) {
 
 function askShare() {
   const box = modal(`
-    <h3 style="margin-top:0">Share this map with your corporation?</h3>
+    <h3 style="margin-top:0">Share this map with ${shareOrg() ? "your org" : "your corporation"}?</h3>
     <p>Sharing sends what this browser has surveyed (wormholes, signatures, notes, statics and directional scans)
-       to the Atlas relay. It is kept for your corporation only, and only pilots the relay verifies as members
-       of that corporation can read it. Your finds carry your pilot's name, and survey points go on the corp board.</p>
+       to the Atlas relay. It is kept for ${shareOrg() ? "the Atlas org you picked" : "your corporation"} only, and only
+       pilots the relay verifies as ${shareOrg() ? "approved members of that org" : "members of that corporation"} can read it.
+       Your finds carry your pilot's name, and survey points go on that group's board.</p>
+    <p>To share with an Atlas org instead of your corporation (or back), use the Atlas pilot menu, Organizations, Share with.</p>
     <p>Nothing is shared until you tick the box. You can untick it at any time.</p>
-    <label class="row"><input type="checkbox" id="cs"> Yes, share my survey map with my corporation</label>
+    <label class="row"><input type="checkbox" id="cs"> Yes, share my survey map with ${shareOrg() ? "my org" : "my corporation"}</label>
     <div class="row" style="justify-content:flex-end"><button data-close>Cancel</button><button id="ok" class="primary">Save</button></div>`,
     () => { $("#share").checked = store.get(K_SHARE, false); });
   box.querySelector("#ok").onclick = () => {

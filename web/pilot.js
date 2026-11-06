@@ -32,6 +32,15 @@ const stationName = id => {
   return st ? st.name : null;
 };
 
+/* sharing target: the pilot's corporation, or an Atlas org (org.js) */
+const orgShare = () => (typeof AtlasOrg !== "undefined" && AtlasOrg.shareTo()) || undefined;
+const orgShareLabel = () => {
+  const id = orgShare();
+  if (!id) return "my corporation";
+  const o = typeof AtlasOrg !== "undefined" && AtlasOrg.mine.find(x => x.id === id);
+  return o ? `${o.name} (org)` : "an org";
+};
+
 async function startPilots() {
   const cfg = await fetch("data/sso.json").then(r => r.ok ? r.json() : {}).catch(() => ({}));
   EveSSO.clientId = cfg.clientId || "";
@@ -321,7 +330,8 @@ function renderPilotMenu(note = "") {
         <label><input type="checkbox" data-kind="location"${shareFor(p.id, "location") ? " checked" : ""}> location</label></div>` : "");
   }).join("") +
   `<div class="pm-foot"><button data-act="add">Add a character</button><button data-act="refresh">Refresh</button></div>` +
-  `<div class="pm-foot"><button data-act="bpo">Blueprint finder</button></div>` +
+  `<div class="pm-foot"><button data-act="bpo">Blueprint finder</button><button data-act="orgs">Organizations</button></div>` +
+  (reserves.relay ? `<div class="pm-note">Sharing with: <b>${esc(orgShareLabel())}</b></div>` : "") +
   (act.scopes.includes("esi-markets.structure_markets.v1")
     ? `<div class="pm-collector"><button data-act="collector">Make a login for the market collector</button>
        <div class="pm-note">A separate CCP login just for the hourly structure-market job, so signing in or out
@@ -352,6 +362,7 @@ function renderPilotMenu(note = "") {
   const coll = menu.querySelector('[data-act="collector"]');
   if (coll) coll.onclick = () => EveSSO.login(["esi-markets.structure_markets.v1"], { collector: true });
   menu.querySelector('[data-act="refresh"]').onclick = () => refreshPilots();
+  menu.querySelector('[data-act="orgs"]').onclick = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); openOrgs(true); };
   menu.querySelector('[data-act="bpo"]').onclick = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); if (typeof openBpo === "function") openBpo(true); };
 }
 
@@ -430,7 +441,7 @@ async function loadSightings() {
     try {
       const r = await fetch(`${reserves.relay}/sightings`, { method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: await EveSSO.token(p.id) }) }).then(x => x.json());
+        body: JSON.stringify({ token: await EveSSO.token(p.id), org: orgShare() }) }).then(x => x.json());
       if (!r.systems || corps.has(r.corporation)) continue;
       corps.add(r.corporation);
       reserves.activeMinutes = r.activeMinutes || 60;
@@ -451,7 +462,7 @@ async function reportReserves() {
     try {
       const token = await EveSSO.token(p.id);
       await fetch(`${reserves.relay}/report`, { method: "POST",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, org: orgShare() }) });
     } catch { /* one pilot failing must not stop the rest */ }
   }
   loadSightings();
@@ -564,7 +575,7 @@ async function reportPresence(stopId = null) {
     if (!share && p.id !== stopId) continue;
     try {
       await fetch(`${reserves.relay}/presence`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: await EveSSO.token(p.id), share }) });
+        body: JSON.stringify({ token: await EveSSO.token(p.id), share, org: orgShare() }) });
     } catch { /* try again next round */ }
   }
   if (stopId) loadCorpmates();
@@ -576,9 +587,10 @@ async function loadCorpmates() {
   for (const p of pilots) {
     try {
       const r = await fetch(`${reserves.relay}/corpmates`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: await EveSSO.token(p.id) }) }).then(x => x.json());
+        body: JSON.stringify({ token: await EveSSO.token(p.id), org: orgShare() }) }).then(x => x.json());
       if (!r.pilots || corps.has(r.corporation)) continue;
       corps.add(r.corporation);
+      if (r.org) corpmates.names.set(r.corporation, `${r.org.name} (org)`);
       for (const [id, rec] of Object.entries(r.pilots)) if (!own.has(+id)) list.set(+id, { ...rec, corp: r.corporation });
     } catch { /* relay down */ }
   }

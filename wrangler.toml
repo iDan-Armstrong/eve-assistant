@@ -10,6 +10,8 @@ compatibility_date = "2025-09-01"
 [vars]
 CLIENT_ID = "38a2c041bdfd428ebd8cb580b750efdd"
 ALLOWED_ORIGINS = "https://idan-armstrong.github.io,http://localhost:8765"
+# Atlas operator characters (comma separated): reset org passwords, settle disputes
+OPERATORS = "Varg Soth"
 
 [[kv_namespaces]]
 binding = "SIGHTINGS"
@@ -23,3 +25,13 @@ class_name = "CorpRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["CorpRoom"]
+
+# Atlas organizations: one directory for every org (membership, roles,
+# password hashes); each org's shared data lives in a CorpRoom named org:<id>
+[[durable_objects.bindings]]
+name = "ORGS"
+class_name = "OrgDirectory"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["OrgDirectory"]

@@ -239,6 +239,22 @@
   #aKinds { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; padding: 4px 0; }
   #aKinds label { display: flex; gap: 5px; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .a-cons[hidden], .a-sell[hidden] { display: none; }
+  #orgs { overflow-y: auto; } #orgs > * { flex-shrink: 0; }
+  .o-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+  .o-head { margin-top: 6px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+  .o-form { display: flex; flex-direction: column; gap: 6px; }
+  .o-form[hidden] { display: none; }
+  .o-form label { display: flex; flex-direction: column; gap: 2px; color: var(--ink-dim); font-size: 11.5px; }
+  .o-form input, .o-form select { background: rgba(13,19,31,.85); color: var(--ink); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 5px 7px; font: inherit; }
+  .o-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+  .o-list li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+  .o-list li::before { content: none !important; display: none !important; }
+  .route .o-list li { counter-increment: none; padding: 2px 0; cursor: default; }
+  .o-btns { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+  .o-btns button, .o-list button { background: #162032; color: var(--ink); border: 1px solid var(--panel-edge); border-radius: 3px;
+    padding: 2px 7px; font: inherit; font-size: 11.5px; cursor: pointer; }
+  .o-members td { vertical-align: top; }
   /* tall forms: the whole panel scrolls instead of squeezing the results */
   #bpo, #haul { overflow-y: auto; }
   #bpo > *, #haul > * { flex-shrink: 0; }
@@ -842,6 +858,13 @@
   <ol id="cList" class="m-list h-cour k-list" hidden></ol>
   <ol id="dList" class="m-list h-deal k-list" hidden></ol>
   <div class="r-note h-trip">Instant trades from this hour's NPC-station orders: buy from sell orders, sell into buy orders, sales tax only. Orders change all the time, so check prices in game before you buy.</div>
+</section>
+
+<section class="route bpo" id="orgs" hidden aria-label="Organizations">
+  <div class="r-head">
+    <div class="r-title"><span>ORGANIZATIONS</span><button id="orgsClose" aria-label="Close organizations">✕</button></div>
+  </div>
+  <div id="orgBody" class="o-body"></div>
 </section>
 
 <section class="route bpo" id="assets" hidden aria-label="Asset clean-up">
@@ -2300,6 +2323,7 @@ boot().catch(err => {
 <script src="contracts.js"></script>
 <script src="asset_core.js"></script>
 <script src="assets.js"></script>
+<script src="org.js"></script>
 <script src="tools.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>
