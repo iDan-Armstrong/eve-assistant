@@ -14,9 +14,23 @@ fetch_market.py with the NPC-station sellers and market averages):
 Contracts: every k-space region's public contract list is read each run
 (about a thousand per page). What a contract holds needs one more call per
 contract, so each contract's contents are read once and remembered in the
-history folder (contract_bpo.json); only new contracts are read, at most
+history folder (contract_items.json); only new contracts are read, at most
 MAX_NEW a run, newest first, so the first runs fill the backlog over a few
 hours. Expired contracts drop out of the memory when they leave the list.
+
+Haul planner, from the same scan (web/data/live/):
+
+    courier.json  public courier contracts: [contractId, startLocation, startSystem,
+                  endLocation, endSystem, reward, collateral, volume m3, days to
+                  complete, expires (ISO)]
+    deals.json    item-exchange contracts worth more at a trade hub's buy orders than
+                  their price: [contractId, location, system, price, hub value, hub
+                  station, volume m3, item kinds, [[typeId, qty], ...top 3 by value],
+                  units no hub buys, expires]
+
+Contents are remembered as [[typeId, qty, isCopy, me, te], ...] (0 when the
+contract asks for items back or is too big to judge), so every use above
+comes from one read per contract.
 
     python tools/fetch_contracts.py --history ledger
 """
@@ -34,7 +48,13 @@ from fetch_live import ESI, OUT, http  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[1] / "web" / "data"
 KEEP = 10
-MAX_NEW = 8000
+MAX_NEW = 10000
+MAX_ITEMS = 50
+HUBS = [60003760, 60008494, 60011866, 60004588, 60005686]   # Jita 4-4, Amarr, Dodixie, Rens, Hek
+DEAL_TAX = 0.075 * (1 - 0.11 * 4)                            # sales tax at Accounting 4
+DEAL_MIN_PROFIT = 1_000_000
+DEAL_MIN_MARGIN = 0.05
+DEAL_KEEP = 800
 WORKERS = 16
 MAX_ERRORS = 60          # CCP blocks clients that rack up ~100 errors a minute
 
@@ -55,16 +75,80 @@ def region_contracts(region_id: int) -> list[dict]:
     return rows
 
 
-def single_bpo(items: list[dict], blueprint_ids: set[int]):
-    """[typeId, me, te] when the contract sells exactly one blueprint original
-    and asks for nothing back; else 0."""
-    if len(items) != 1:
+def contents(items: list[dict]):
+    """What a contract hands over: [[typeId, qty, isCopy, me, te], ...], or 0 when
+    it asks for items back, holds nothing, or is too big to judge."""
+    if not items or len(items) > MAX_ITEMS or any(not it.get("is_included", True) for it in items):
         return 0
-    it = items[0]
-    if (not it.get("is_included", True) or it.get("is_blueprint_copy")
-            or it.get("type_id") not in blueprint_ids or it.get("quantity", 1) != 1):
+    return [[it["type_id"], it.get("quantity", 1), 1 if it.get("is_blueprint_copy") else 0,
+             it.get("material_efficiency", 0), it.get("time_efficiency", 0)] for it in items]
+
+
+def single_bpo(rec, blueprint_ids: set[int]):
+    """[typeId, me, te] when the contents are exactly one blueprint original; else 0."""
+    if not rec or len(rec) != 1:
         return 0
-    return [it["type_id"], it.get("material_efficiency", 0), it.get("time_efficiency", 0)]
+    tid, qty, copy, me, te = rec[0]
+    if copy or tid not in blueprint_ids or qty != 1:
+        return 0
+    return [tid, me, te]
+
+
+def hub_value(rec, books: dict):
+    """Best single hub to dump the contents into its buy orders: (hub, gross ISK,
+    units no buyer there takes). Blueprint copies count as unsold."""
+    best = (None, 0.0, 0)
+    for hub, book in books.items():
+        gross, unsold = 0.0, 0
+        for tid, qty, copy, _me, _te in rec:
+            buy, bq = book.get(tid, (None, 0))
+            take = 0 if copy or not buy else min(qty, bq)
+            gross += take * (buy or 0)
+            unsold += qty - take
+        if gross > best[1]:
+            best = (hub, gross, unsold)
+    return best
+
+
+def deals(contracts: list[dict], seen: dict, systems: dict, books: dict) -> list:
+    out = []
+    for c in contracts:
+        rec = seen.get(str(c["contract_id"]))
+        if not rec:
+            continue
+        hub, gross, unsold = hub_value(rec, books)
+        profit = gross * (1 - DEAL_TAX) - c["price"]
+        if hub is None or profit < DEAL_MIN_PROFIT or profit < DEAL_MIN_MARGIN * c["price"]:
+            continue
+        book = books[hub]
+        top = sorted(((tid, qty) for tid, qty, copy, *_ in rec if not copy),
+                     key=lambda x: -x[1] * ((book.get(x[0]) or (0, 0))[0] or 0))[:3]
+        loc = c.get("start_location_id") or 0
+        out.append([c["contract_id"], loc, systems.get(loc, 0), c["price"], round(gross, 2), hub,
+                    c.get("volume", 0), len(rec), [list(t) for t in top], unsold, c.get("date_expired", "")])
+    out.sort(key=lambda r: -(r[4] * (1 - DEAL_TAX) - r[3]))
+    return out[:DEAL_KEEP]
+
+
+def couriers(contracts: list[dict], systems: dict) -> list:
+    out = []
+    for c in contracts:
+        if c.get("type") != "courier" or not c.get("reward"):
+            continue
+        a, b = c.get("start_location_id") or 0, c.get("end_location_id") or 0
+        out.append([c["contract_id"], a, systems.get(a, 0), b, systems.get(b, 0), c["reward"],
+                    c.get("collateral", 0), c.get("volume", 0), c.get("days_to_complete", 0), c.get("date_expired", "")])
+    return out
+
+
+def hub_books(stations_dir: Path) -> dict:
+    """{hub: {typeId: (best buy, units wanted)}} from the hourly station files."""
+    books = {}
+    for hub in HUBS:
+        f = stations_dir / f"{hub}.json"
+        if f.exists():
+            books[hub] = {r[0]: (r[3], r[4]) for r in json.loads(f.read_text())["items"] if r[3]}
+    return books
 
 
 def contract_offers(contracts: list[dict], seen: dict, systems: dict) -> dict:
@@ -106,17 +190,26 @@ def main() -> None:
     for sid, (_name, sys_id) in structures.items():
         systems[int(sid)] = sys_id
 
-    cache = hist / "contract_bpo.json" if hist else None
+    cache = hist / "contract_items.json" if hist else None
     seen = json.loads(cache.read_text()) if cache and cache.exists() else {}
+    old_cache = hist / "contract_bpo.json" if hist else None
+    if old_cache and old_cache.exists():
+        # earlier format kept only single-blueprint results: those carry over,
+        # everything else is read again for its full contents
+        for k, v in json.loads(old_cache.read_text()).items():
+            if v and k not in seen:
+                seen[k] = [[v[0], 1, 0, v[1], v[2]]]
+        old_cache.unlink()
 
-    contracts, failed = [], []
+    contracts, courier_rows, failed = [], [], []
     with ThreadPoolExecutor(8) as pool:
         for rid, res in zip(regions, pool.map(lambda r: _safe(region_contracts, r), regions)):
             if isinstance(res, Exception):
                 failed.append(rid)
                 continue
-            contracts += [c for c in res if c.get("type") == "item_exchange" and c.get("price", 0) > 0
-                          and _ts(c.get("date_expired")) > now]
+            live = [c for c in res if _ts(c.get("date_expired")) > now]
+            contracts += [c for c in live if c.get("type") == "item_exchange" and c.get("price", 0) > 0]
+            courier_rows += [c for c in live if c.get("type") == "courier"]
 
     listed = {str(c["contract_id"]) for c in contracts}
     seen = {k: v for k, v in seen.items() if k in listed}            # expired ones leave
@@ -133,7 +226,7 @@ def main() -> None:
             items = get(f"/contracts/public/items/{c['contract_id']}", meta) or []
             if meta.get("pages", 1) > 1:
                 return c["contract_id"], 0
-            return c["contract_id"], single_bpo(items, blueprint_ids)
+            return c["contract_id"], contents(items)
         except Exception:                            # noqa: BLE001
             errors += 1
             return c["contract_id"], None
@@ -147,12 +240,23 @@ def main() -> None:
 
     idx_path = OUT / "bpo_index.json"
     idx = json.loads(idx_path.read_text()) if idx_path.exists() else {"sell": {}, "avg": {}}
-    idx["ct"] = contract_offers(contracts, seen, systems)
+    bpo_seen = {k: single_bpo(v, blueprint_ids) for k, v in seen.items()}
+    idx["ct"] = contract_offers(contracts, bpo_seen, systems)
     idx["st"] = structure_offers(OUT / "structure_orders", structures, blueprint_ids)
     idx["contractsAt"] = now.isoformat(timespec="seconds")
     idx_path.write_text(json.dumps(idx, separators=(",", ":")))
-    print(json.dumps({"contracts": len(contracts), "known": len(seen), "readNow": len(todo), "errors": errors,
-                      "backlog": sum(1 for c in contracts if str(c["contract_id"]) not in seen),
+    stamp = now.isoformat(timespec="seconds")
+    cour = couriers(courier_rows, systems)
+    (OUT / "courier.json").write_text(json.dumps({"generated": stamp, "rows": cour}, separators=(",", ":")))
+    books = hub_books(OUT / "stations")
+    deal_rows = deals(contracts, seen, systems, books)
+    backlog = sum(1 for c in contracts if str(c["contract_id"]) not in seen)
+    (OUT / "deals.json").write_text(json.dumps({"generated": stamp, "tax": DEAL_TAX, "hubs": list(books),
+                                                "known": len(seen), "backlog": backlog, "rows": deal_rows},
+                                               separators=(",", ":")))
+    print(json.dumps({"couriers": len(cour), "deals": len(deal_rows), "hubs": len(books),
+                      "contracts": len(contracts), "known": len(seen), "readNow": len(todo), "errors": errors,
+                      "backlog": backlog,
                       "bpoContracts": sum(len(v) for v in idx["ct"].values()),
                       "bpoStructures": len(idx["st"]), "failedRegions": failed}))
 

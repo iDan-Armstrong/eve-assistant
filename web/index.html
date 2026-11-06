@@ -204,7 +204,12 @@
   .h-dest { background: #121b2c; border: 1px solid var(--panel-edge); border-radius: 3px; color: var(--ink);
     font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .h-dest[hidden] { display: none; }
-  .h-trip[hidden], .h-sell[hidden] { display: none; }
+  .h-trip[hidden], .h-sell[hidden], .h-cour[hidden], .h-deal[hidden] { display: none; }
+  .k-list li { display: block; }
+  .k-list .k-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .k-list .k-big { font-weight: 700; color: #2fe07a; }
+  .k-list .k-btns { display: flex; gap: 6px; margin-top: 4px; }
+  .k-list .k-warn { color: #ffb03a; }
   .s-paste { font-size: 12px; }
   .s-paste summary { cursor: pointer; color: var(--ink-dim); }
   .s-paste textarea { width: 100%; box-sizing: border-box; margin: 4px 0; background: rgba(13,19,31,.85); color: var(--ink);
@@ -737,6 +742,8 @@
     <div class="r-modes" role="group" aria-label="Haul mode">
       <button data-hmode="trip" aria-pressed="true">Round trips</button>
       <button data-hmode="sell" aria-pressed="false">Sell my cargo</button>
+      <button data-hmode="cour" aria-pressed="false">Courier jobs</button>
+      <button data-hmode="deal" aria-pressed="false">Contract deals</button>
     </div>
     <div class="h-grid">
       <label for="hAcct">Accounting</label><select id="hAcct"><option>0</option><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option></select><span class="h-unit" id="hTax"></span>
@@ -759,6 +766,27 @@
     <button class="h-dest" id="hFirst" hidden>Set destination: first buy stop only</button>
     <button class="h-dest" id="hHud" hidden>Open haul window</button>
     </div>
+    <div class="h-cour" hidden>
+      <div class="h-grid">
+        <label for="cReach">pickup</label><input type="text" id="cReach" inputmode="numeric" value="10"><span class="h-unit">jumps away at most</span>
+        <label for="cVol">hold</label><input type="text" id="cVol" inputmode="numeric" placeholder="any"><span class="h-unit">m³ at most</span>
+        <label for="cColl">collateral</label><input type="text" id="cColl" inputmode="numeric" placeholder="any"><span class="h-unit">million ISK at most</span>
+      </div>
+      <label class="m-heat"><input type="checkbox" id="cHigh" checked> Highsec only (pickup trip and haul)</label>
+      <button class="h-go" id="cGo">Find courier jobs</button>
+      <div class="r-sum" id="cSum">Public courier contracts, best reward per jump first, counting the trip to the pickup.</div>
+    </div>
+    <div class="h-deal" hidden>
+      <div class="h-grid">
+        <label for="dReach">reach</label><input type="text" id="dReach" inputmode="numeric" value="15"><span class="h-unit">jumps to the contract</span>
+        <label for="dBudget">budget</label><input type="text" id="dBudget" inputmode="numeric" placeholder="any"><span class="h-unit">million ISK at most</span>
+        <label for="dVol">hold</label><input type="text" id="dVol" inputmode="numeric" placeholder="any"><span class="h-unit">m³ at most</span>
+        <label for="dSort">sort</label><select id="dSort"><option value="profit">most profit</option><option value="perJump">profit per jump</option><option value="margin">best margin</option></select><span></span>
+      </div>
+      <label class="m-heat"><input type="checkbox" id="dHigh" checked> Highsec only</label>
+      <button class="h-go" id="dGo">Find contract deals</button>
+      <div class="r-sum" id="dSum">Item contracts worth more at a trade hub's buy orders than their price, after your sales tax.</div>
+    </div>
     <div class="h-sell" hidden>
       <div class="h-grid">
         <label for="sReach">reach</label><input type="text" id="sReach" inputmode="numeric" value="15"><span class="h-unit">jumps from here</span>
@@ -778,6 +806,8 @@
   </div>
   <ol id="hList" class="m-list h-trip"></ol>
   <div id="sOut" class="h-sell" hidden></div>
+  <ol id="cList" class="m-list h-cour k-list" hidden></ol>
+  <ol id="dList" class="m-list h-deal k-list" hidden></ol>
   <div class="r-note h-trip">Instant trades from this hour's NPC-station orders: buy from sell orders, sell into buy orders, sales tax only. Orders change all the time, so check prices in game before you buy.</div>
 </section>
 
@@ -2200,6 +2230,8 @@ boot().catch(err => {
 <script src="sell.js"></script>
 <script src="bpo_core.js"></script>
 <script src="bpo.js"></script>
+<script src="contract_core.js"></script>
+<script src="contracts.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>
 </body>

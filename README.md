@@ -300,6 +300,30 @@ if you are already there). The result lists each stop with what to sell,
 how many, the price and the ISK after tax, and one button sends the whole
 route to the game's autopilot.
 
+**Courier jobs** lists public courier contracts you can take: pickup
+within your chosen number of jumps, a route between pickup and drop-off
+(highsec only by default), and optional limits on volume and collateral.
+They are ranked by reward per jump, counting the trip to the pickup as well
+as the haul, and each shows the reward, volume, collateral, days to deliver
+and when the offer ends.
+
+**Contract deals** lists item-exchange contracts worth more than their
+price if you sell the contents into a trade hub's buy orders (Jita, Amarr,
+Dodixie, Rens or Hek, whichever pays most for that contract, honoring how
+many units each buyer wants). Profit is after your own sales tax; units no
+hub buys, and blueprint copies, count as zero. Sort by profit, profit per
+jump (to the contract, then on to the hub) or margin, with an optional
+budget and hold size.
+
+In both, player stations count only where your pilot may dock (the same
+check as above; without a signed-in pilot they are marked "docking not
+checked"). Contracts are accepted in game: **Open in game** shows the
+contract in your client (it asks once for CCP's open-window permission)
+and **Route to autopilot** sets the stops. The lists come from the hourly
+contract scan described under the blueprint finder, which now remembers
+each contract's full contents; `tools/fetch_contracts.py` writes
+`courier.json` and `deals.json`.
+
 The trades are instant (buy from sell orders, sell into buy orders), so
 the only fee is sales tax. The password is a soft gate on a public site:
 only its hash is in the code, and the data underneath is public.

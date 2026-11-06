@@ -20,8 +20,9 @@ const sellTax = () => {
 
 function setHaulMode(mode) {
   document.querySelectorAll("#haul [data-hmode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.hmode === mode)));
-  document.querySelectorAll("#haul .h-trip").forEach(el => { el.hidden = mode !== "trip"; });
-  document.querySelectorAll("#haul .h-sell").forEach(el => { el.hidden = mode !== "sell"; });
+  for (const m of ["trip", "sell", "cour", "deal"]) {
+    document.querySelectorAll(`#haul .h-${m}`).forEach(el => { el.hidden = mode !== m; });
+  }
   if (mode === "trip") haul.layer.addTo(map); else haul.layer.remove();
 }
 
