@@ -37,7 +37,7 @@
    POST /org        body {"token": ..., "action": ..., ...}
      list | mine | create {name, adminPassword, memberPassword}
      | join {org, password} | leave {org}
-     | admin {org, adminPassword, op: view|approve|boot|promote|demote|master|passwords|rename, target, newAdmin, newMember, name}
+     | admin {org, adminPassword, op: view|approve|boot|promote|demote|master|passwords|rename|jspace, target, newAdmin, newMember, name, value}
      | operator {org, op, target, newAdmin, newMember}   (the Atlas operator only)
      Rules in worker/org_core.js. Passwords are kept only as salted PBKDF2
      hashes; five wrong tries an hour per pilot per org.
@@ -319,7 +319,7 @@ export class OrgDirectory {
             const o = await this.get(id);
             if (!o || !o.members[who.id]) continue;
             Org.settleMaster(o, now);
-            mine.push({ id, name: o.name, role: o.members[who.id].role, master: Org.isMaster(o, who.id),
+            mine.push({ id, name: o.name, role: o.members[who.id].role, master: Org.isMaster(o, who.id), jspace: Org.jspaceOf(o),
                         temp: !!o.temp && String(o.temp.id) === String(who.id) });
           }
           return out({ orgs: mine });
@@ -376,7 +376,7 @@ export class OrgDirectory {
               const name = String(body.name || "").trim().toLowerCase();
               if (Object.entries(index).some(([id, n]) => id !== org.id && n.toLowerCase() === name)) throw new Error("That name is taken.");
             }
-            Org.adminAction(org, who, op, body.target, now, { operator, name: body.name });
+            Org.adminAction(org, who, op, body.target, now, { operator, name: body.name, value: body.value });
             if (op === "passwords") {
               if (body.newAdmin !== undefined && body.newAdmin !== "") {
                 if (!goodPassword(body.newAdmin)) throw new Error("Passwords need at least 6 characters.");
@@ -400,7 +400,7 @@ export class OrgDirectory {
           Org.touch(org, who.id, who.name, now);
           const settled = Org.settleMaster(org, now);
           if (settled || m.lastTouch !== mark) await this.save(org);
-          return out({ ok: true, name: org.name, role: m.role });
+          return out({ ok: true, name: org.name, role: m.role, jspace: Org.jspaceOf(org) });
         }
         default:
           return fail("Unknown org action.");
@@ -427,7 +427,7 @@ async function spaceOf(who, org, env) {
   if (org) {
     const c = await orgCall(env, { action: "check", org: String(org), who: { id: who.id, name: who.name } });
     if (!c.ok) throw new Error("Not an approved member of that org.");
-    return { key: `org:${org}`, label: `org:${org}`, org: { id: String(org), name: c.name } };
+    return { key: `org:${org}`, label: `org:${org}`, org: { id: String(org), name: c.name, jspace: c.jspace } };
   }
   const corp = await corporationOf(who.id);
   return { key: String(corp), label: corp, org: null };

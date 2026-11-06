@@ -412,6 +412,12 @@ login, so only approved members can read an org's data.
   Master Admin with the same powers. If the Master Admin returns, they hold
   it again at once; if 30 more days pass first, it becomes the temporary
   holder's for good.
+- **J-Space Survey sharing**: each org is **Org only** (the default) or
+  **Public**, set by the Master Admin in the admin window and shown to
+  every member. It decides how much of the org's J-Space survey data the
+  master J-Space map (still to come) shows outside the org. Known-space
+  survey data stays public either way, except wormhole entrances into the
+  org's own wormhole space.
 - **Disputes and forgotten passwords**: send an in-game mail to Varg Soth,
   the Atlas operator, who can reset an org's passwords, rename it, appoint
   a Master Admin and remove anyone. Operators are named in `wrangler.toml`

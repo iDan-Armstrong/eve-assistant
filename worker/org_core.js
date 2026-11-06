@@ -17,6 +17,13 @@
    hold it again at once; if 30 more days pass first, the temporary holder
    becomes the Master Admin for good.
 
+   J-Space Survey sharing: each org has one setting, "org" (Org only, the
+   default) or "public", chosen by the Master Admin. It decides how much of
+   the org's J-Space survey data the master J-Space map may show beyond the
+   org. Known-space survey data stays on the public map either way, except
+   wormhole entrances into the org's own wormhole space (applied when the
+   master map is built).
+
    The Atlas operator (Varg Soth) can reset an org's passwords, make any
    member Master Admin, and remove anyone, for disputes sent by game mail. */
 
@@ -30,7 +37,7 @@ const dayOf = t => new Date(t).toISOString().slice(0, 10);
 export function newOrg({ id, name, creator, now }) {
   if (!NAME_RE.test(name || "")) throw new Error("Org names are 3 to 40 letters, numbers, spaces or . ' _ -");
   return {
-    id, name: name.trim(), created: now, master: creator.id, temp: null,
+    id, name: name.trim(), created: now, master: creator.id, temp: null, jspace: "org",
     members: { [creator.id]: { name: creator.name, role: "admin", joined: now, lastSeen: now, act: { [dayOf(now)]: 1 }, lastTouch: now } },
     log: [{ at: now, by: creator.name, what: "created the org" }],
   };
@@ -181,6 +188,14 @@ export function adminAction(org, actor, action, targetId, now, opts = {}) {
       org.name = name;
       return "renamed";
     }
+    case "jspace": {
+      if (!master) throw new Error("Only the Master Admin sets J-Space sharing.");
+      const v = opts.value === "public" ? "public" : opts.value === "org" ? "org" : null;
+      if (!v) throw new Error("J-Space sharing is org or public.");
+      if (jspaceOf(org) !== v) log(org, now, actor.name, `set J-Space Survey sharing to ${v === "public" ? "Public" : "Org only"}`);
+      org.jspace = v;
+      return "jspace";
+    }
     case "passwords":
       if (!master) throw new Error("Only the Master Admin changes the passwords.");
       log(org, now, actor.name, "changed the passwords");
@@ -190,10 +205,13 @@ export function adminAction(org, actor, action, targetId, now, opts = {}) {
   }
 }
 
+/* J-Space Survey sharing for an org: "org" (default) or "public" */
+export const jspaceOf = org => (org.jspace === "public" ? "public" : "org");
+
 /* what an admin sees */
 export function adminView(org, now) {
   return {
-    id: org.id, name: org.name, master: org.master, temp: org.temp, effectiveMaster: effectiveMaster(org),
+    id: org.id, name: org.name, master: org.master, temp: org.temp, effectiveMaster: effectiveMaster(org), jspace: jspaceOf(org),
     members: Object.entries(org.members).map(([id, m]) => ({
       id: +id || id, name: m.name, role: m.role, joined: m.joined, lastSeen: m.lastSeen, activity: activity(m, now) })),
     log: (org.log || []).slice(-30),

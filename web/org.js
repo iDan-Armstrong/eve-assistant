@@ -28,6 +28,7 @@ async function orgCall(action, extra = {}) {
   return data;
 }
 
+const JSPACE_NAME = { org: "Org only", public: "Public" };
 const ROLE_NAME = o => o.role === "pending" ? "waiting for approval"
   : o.temp ? "Temporary Master Admin" : o.master ? "Master Admin" : o.role === "admin" ? "admin" : "member";
 
@@ -82,7 +83,7 @@ function drawOrgs(p, note) {
        must also tick its share boxes in the pilot menu as before.</p>` +
     `<div class="o-head">Your orgs</div>` +
     (AtlasOrg.mine.length ? `<ul class="o-list">` + AtlasOrg.mine.map(o =>
-      `<li><b>${esc(o.name)}</b> <span class="m-meta">${ROLE_NAME(o)}</span>
+      `<li><b>${esc(o.name)}</b> <span class="m-meta">${ROLE_NAME(o)}${o.role === "pending" ? "" : `, J-Space ${JSPACE_NAME[o.jspace] || "Org only"}`}</span>
          <span class="o-btns">${o.role === "admin" ? `<button data-admin="${esc(o.id)}">Admin</button>` : ""}
          <button data-leave="${esc(o.id)}">Leave</button></span></li>`).join("") + `</ul>` : `<p class="m-meta">None yet.</p>`) +
     `<div class="o-head">Join an org</div>` +
@@ -198,6 +199,12 @@ function drawAdmin(v, note) {
     `<p class="m-meta">Master Admin: <b>${esc(masterName)}</b>${tempName ? `, away; <b>${esc(tempName)}</b> is Temporary Master Admin` : ""}.
        After 30 quiet days the most active admin stands in; 30 more and it is theirs.</p>` +
     `<table class="h-tab o-members">${memberRows(v, me, master, "admin")}</table>` +
+    `<div class="o-head">J-Space Survey sharing</div>
+     <label class="m-heat"><input type="radio" name="oaJs" value="org"${v.jspace === "org" ? " checked" : ""}${master ? "" : " disabled"}> Org only</label>
+     <label class="m-heat"><input type="radio" name="oaJs" value="public"${v.jspace === "public" ? " checked" : ""}${master ? "" : " disabled"}> Public</label>
+     <p class="m-meta">Decides how much of the org's J-Space survey data the master J-Space map shows outside the org.
+       Known-space survey data stays on the public map either way, except wormhole entrances into the org's own space.
+       ${master ? "" : "Only the Master Admin can change this."}</p>` +
     (master ? `<form id="oaRen" class="o-form"><div class="o-head">Rename the org</div>
        <label>New name<input id="oaName" maxlength="40" autocomplete="off" value="${esc(v.name)}"></label>
        <button class="h-go" type="submit">Rename</button></form>` : "") +
@@ -211,6 +218,11 @@ function drawAdmin(v, note) {
   box.querySelectorAll("[data-op]").forEach(b => b.onclick = () => {
     if (["boot", "master", "demote"].includes(b.dataset.op) && !confirmInline(b, "Sure?")) return;
     adminRun(v.id, b.dataset.op, +b.dataset.t || b.dataset.t);
+  });
+  box.querySelectorAll('[name="oaJs"]').forEach(r => r.onchange = async () => {
+    await adminRun(v.id, "jspace", null, { value: r.value });
+    const o = AtlasOrg.mine.find(x => x.id === v.id);
+    if (o) o.jspace = r.value;
   });
   const ren = document.getElementById("oaRen");
   if (ren) ren.onsubmit = async e => {

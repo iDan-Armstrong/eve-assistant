@@ -44,7 +44,7 @@ test("create, join, approve, check, admin view, operator", async () => {
   assert.match((await call({ action: "admin", who: VARG, org, adminPassword: "member-secret", op: "view" })).error, /Wrong password/);
   const view = await call({ action: "admin", who: VARG, org, adminPassword: "admin-secret", op: "approve", target: ANN.id });
   assert.strictEqual(view.members.find(m => m.id === ANN.id).role, "member");
-  assert.deepStrictEqual(await call({ action: "check", who: ANN, org }), { ok: true, name: "Deep Divers", role: "member" });
+  assert.deepStrictEqual(await call({ action: "check", who: ANN, org }), { ok: true, name: "Deep Divers", role: "member", jspace: "org" });
   assert.match((await call({ action: "admin", who: ANN, org, adminPassword: "admin-secret", op: "view" })).error, /Admins only/);
 
   const mine = await call({ action: "mine", who: ANN });
@@ -81,4 +81,12 @@ test("rename keeps names unique and updates the list", async () => {
   assert.strictEqual((await call({ action: "admin", who: VARG, org: a, adminPassword: "adminpw1", op: "rename", name: "Gamma Org" })).name, "Gamma Org");
   assert.deepStrictEqual((await call({ action: "list", who: BOB })).orgs.map(o => o.name), ["Beta Org", "Gamma Org"]);
   assert.strictEqual((await call({ action: "mine", who: VARG })).orgs[0].name, "Gamma Org");
+});
+
+test("J-Space sharing shows in mine and check", async () => {
+  const { call } = directory();
+  const { id: org } = await call({ action: "create", who: VARG, name: "Js Org", adminPassword: "adminpw1", memberPassword: "memberpw1" });
+  assert.strictEqual((await call({ action: "mine", who: VARG })).orgs[0].jspace, "org");
+  await call({ action: "admin", who: VARG, org, adminPassword: "adminpw1", op: "jspace", value: "public" });
+  assert.strictEqual((await call({ action: "check", who: VARG, org })).jspace, "public");
 });

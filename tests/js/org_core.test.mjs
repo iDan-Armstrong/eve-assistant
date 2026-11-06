@@ -129,3 +129,14 @@ test("rename: Master Admin (or temporary holder) and the operator only, same nam
   O.adminAction(o, { id: 999, name: "Op" }, "rename", null, T0, { operator: true, name: "Op Named" });
   assert.strictEqual(o.name, "Op Named");
 });
+
+test("J-Space sharing: Org only by default, the Master Admin switches it", () => {
+  const o = org();
+  assert.strictEqual(O.jspaceOf(o), "org");
+  assert.strictEqual(O.jspaceOf({}), "org");
+  assert.throws(() => O.adminAction(o, A, "jspace", null, T0, { value: "public" }), /Only the Master Admin sets/);
+  assert.throws(() => O.adminAction(o, ME, "jspace", null, T0, { value: "everyone" }), /org or public/);
+  O.adminAction(o, ME, "jspace", null, T0, { value: "public" });
+  assert.strictEqual(O.adminView(o, T0).jspace, "public");
+  assert.match(o.log.at(-1).what, /Public/);
+});
