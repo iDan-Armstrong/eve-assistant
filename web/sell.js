@@ -10,6 +10,7 @@
    liveOrders, haulName) and pilot.js (pilotState, stationName). */
 "use strict";
 
+const JUNK_BID = 0.1;   /* a buy order under 10% of the item's average price is ignored */
 const sell = { plan: null, extraNames: new Map(), trees: new Map(), structNames: new Map(), structSystems: new Map(), capped: 0 };
 
 const sellName = t => sell.extraNames.get(+t) || haulName(t);
@@ -22,6 +23,13 @@ function setHaulMode(mode) {
   document.querySelectorAll("#haul [data-hmode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.hmode === mode)));
   for (const m of ["trip", "sell", "cour", "deal"]) {
     document.querySelectorAll(`#haul .h-${m}`).forEach(el => { el.hidden = mode !== m; });
+  }
+  /* courier jobs and contract deals start from the ship's hold (clear the box for any size) */
+  const hold = document.getElementById("hCargo").value;
+  for (const id of ["cVol", "dVol"]) {
+    const box = document.getElementById(id);
+    if (box && !box.dataset.touched && hold) box.value = hold;
+    if (box) box.oninput = () => { box.dataset.touched = "1"; };
   }
   if (mode === "trip") haul.layer.addTo(map); else haul.layer.remove();
 }
@@ -191,6 +199,14 @@ async function computeSale(items, origin, opts, sum) {
   if (pilot && opts.structs && structOrders.length) {
     const ok = await dockable(pilot, SellCore.structureCandidates(items, SellCore.planSale({ items, orders }), structOrders), sum);
     orders.push(...structOrders.filter(o => ok.has(o.location_id)));
+  }
+
+  /* junk bids: buy orders far below what the item normally trades at
+     (CCP's average price) are lowball traps, not buyers */
+  const avg = typeof pilotState !== "undefined" && pilotState.prices;
+  if (avg) {
+    const keep = o => { const a = avg.get(o.type_id); return !a || o.price >= JUNK_BID * a; };
+    for (let i = orders.length - 1; i >= 0; i--) if (!keep(orders[i])) orders.splice(i, 1);
   }
 
   const tax = sellTax();

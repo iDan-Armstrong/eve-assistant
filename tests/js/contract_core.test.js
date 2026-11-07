@@ -52,3 +52,9 @@ test("time left", () => {
   assert.strictEqual(C.timeLeft("2026-11-05T17:30:00Z", NOW), "5h");
   assert.strictEqual(C.timeLeft(GONE, NOW), "0m");
 });
+
+test("deals: rigs lost to repackaging ride along", () => {
+  const r = C.rankDeals([[21, 60000002, 2, 1e6, 9e6, 60003760, 120000, 2, [[648, 1]], 0, LATER, 3]], ctx, { tax: 0 }, NOW);
+  assert.strictEqual(r[0].rigsLost, 3);
+  assert.strictEqual(C.rankDeals([[22, 60000002, 2, 1e6, 9e6, 60003760, 1, 1, [], 0, LATER]], ctx, { tax: 0 }, NOW)[0].rigsLost, 0);
+});

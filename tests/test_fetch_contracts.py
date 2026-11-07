@@ -41,7 +41,7 @@ def test_deals_keep_only_profitable_contracts_best_first():
     rows = fc.deals(contracts, seen, {60004588: 30002510}, books)
     assert [r[0] for r in rows] == [1]
     assert rows[0][1:8] == [60004588, 30002510, 3_000_000, 5_000_000.0, 60003760, 10_000, 1]
-    assert rows[0][8] == [[34, 1_000_000]] and rows[0][9] == 0
+    assert rows[0][8] == [[34, 1_000_000]] and rows[0][9] == 0 and rows[0][11] == 0
 
 
 def test_couriers_rows():
@@ -66,3 +66,19 @@ def test_structure_offers_from_shards(tmp_path):
                                                  "34": {"s": [[5.0, 100, 1035466617946]]}}))
     out = fc.structure_offers(tmp_path, {"1035466617946": ["Perimeter - Tranquility Trading Tower", 30000144]}, BP)
     assert out == {"691": [[1035466617946, 30000144, 1200.0, 1]]}
+
+
+def test_deals_merge_repeats_and_drop_rigs_of_an_assembled_ship():
+    meta = {"648": ["", 6, 1, 0, 2500.0], "31000": ["R", 7, 2, 2, 10.0], "2048": ["L", 7, 2, 0, 5.0]}
+    books = {60003760: {648: (50e6, 10), 31000: (5e6, 10), 2048: (1e6, 10)}}
+    rec = [[648, 1, 0, 0, 0], [31000, 1, 0, 0, 0], [31000, 1, 0, 0, 0], [2048, 1, 0, 0, 0]]
+    # assembled: contract volume far above the packaged 2,525 m3
+    fitted = {"contract_id": 7, "start_location_id": 60004588, "price": 30e6, "volume": 120000}
+    row = fc.deals([fitted], {"7": rec}, {60004588: 30002510}, books, meta)[0]
+    assert row[4] == 51e6 and row[11] == 2               # hull + DC; the two rigs count for nothing
+    assert row[7] == 2 and sorted(t for t, _ in row[8]) == [648, 2048]
+    # packaged: rigs keep their value and repeats merge into one line
+    packed = {**fitted, "volume": 2600}
+    row = fc.deals([packed], {"7": rec}, {60004588: 30002510}, books, meta)[0]
+    assert row[4] == 61e6 and row[11] == 0
+    assert [31000, 2] in row[8]

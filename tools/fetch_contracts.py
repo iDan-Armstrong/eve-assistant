@@ -110,12 +110,44 @@ def hub_value(rec, books: dict):
     return best
 
 
-def deals(contracts: list[dict], seen: dict, systems: dict, books: dict) -> list:
+def merged(rec: list) -> list:
+    """the same item listed several times (fitted modules, split stacks) as one line"""
+    by = {}
+    for tid, qty, copy, me, te in rec:
+        k = (tid, copy)
+        by[k] = [tid, by.get(k, [0, 0])[1] + qty, copy, me, te]
+    return list(by.values())
+
+
+ASSEMBLED_RATIO = 1.5
+
+
+def assembled_ship(c: dict, rec: list, meta: dict) -> bool:
+    """A contract much bigger than the packaged size of its contents holds an
+    assembled ship (type_meta volumes are packaged sizes)."""
+    if not meta:
+        return False
+    if not any((meta.get(str(t)) or [0, 0])[1] == 6 for t, *_ in rec):
+        return False
+    packaged = sum(qty * ((meta.get(str(t)) or [0, 0, 0, 0, 0])[4] or 0) for t, qty, *_ in rec)
+    return c.get("volume", 0) > ASSEMBLED_RATIO * packaged + 1
+
+
+def deals(contracts: list[dict], seen: dict, systems: dict, books: dict, meta: dict | None = None) -> list:
+    """rows: [contractId, location, system, price, hub value, hub, volume m3, item kinds,
+    top 3 [[typeId, qty]], units no hub buys, expires, rigs lost (assembled ship, else 0)]"""
     out = []
     for c in contracts:
         rec = seen.get(str(c["contract_id"]))
         if not rec:
             continue
+        rec = merged(rec)
+        rigs_lost = 0
+        if assembled_ship(c, rec, meta or {}):
+            # repackaging the ship to sell it destroys its rigs: they are worth nothing
+            rigs = [r for r in rec if (meta.get(str(r[0])) or [""])[0] == "R"]
+            rigs_lost = sum(r[1] for r in rigs)
+            rec = [r for r in rec if r not in rigs]
         hub, gross, unsold = hub_value(rec, books)
         profit = gross * (1 - DEAL_TAX) - c["price"]
         if hub is None or profit < DEAL_MIN_PROFIT or profit < DEAL_MIN_MARGIN * c["price"]:
@@ -125,7 +157,7 @@ def deals(contracts: list[dict], seen: dict, systems: dict, books: dict) -> list
                      key=lambda x: -x[1] * ((book.get(x[0]) or (0, 0))[0] or 0))[:3]
         loc = c.get("start_location_id") or 0
         out.append([c["contract_id"], loc, systems.get(loc, 0), c["price"], round(gross, 2), hub,
-                    c.get("volume", 0), len(rec), [list(t) for t in top], unsold, c.get("date_expired", "")])
+                    c.get("volume", 0), len(rec), [list(t) for t in top], unsold, c.get("date_expired", ""), rigs_lost])
     out.sort(key=lambda r: -(r[4] * (1 - DEAL_TAX) - r[3]))
     return out[:DEAL_KEEP]
 
@@ -249,7 +281,9 @@ def main() -> None:
     cour = couriers(courier_rows, systems)
     (OUT / "courier.json").write_text(json.dumps({"generated": stamp, "rows": cour}, separators=(",", ":")))
     books = hub_books(OUT / "stations")
-    deal_rows = deals(contracts, seen, systems, books)
+    meta_path = DATA / "type_meta.json"
+    meta = json.loads(meta_path.read_text())["t"] if meta_path.exists() else {}
+    deal_rows = deals(contracts, seen, systems, books, meta)
     backlog = sum(1 for c in contracts if str(c["contract_id"]) not in seen)
     (OUT / "deals.json").write_text(json.dumps({"generated": stamp, "tax": DEAL_TAX, "hubs": list(books),
                                                 "known": len(seen), "backlog": backlog, "rows": deal_rows},

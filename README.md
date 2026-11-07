@@ -327,7 +327,10 @@ and when the offer ends.
 price if you sell the contents into a trade hub's buy orders (Jita, Amarr,
 Dodixie, Rens or Hek, whichever pays most for that contract, honoring how
 many units each buyer wants). Profit is after your own sales tax; units no
-hub buys, and blueprint copies, count as zero. Sort by profit, profit per
+hub buys, and blueprint copies, count as zero. A contract much bigger than
+the packaged size of its contents holds an assembled ship: repackaging it
+to sell destroys its rigs, so they count as zero too and the deal says so.
+The same item listed several times is shown as one line. Sort by profit, profit per
 jump (to the contract, then on to the hub) or margin, with an optional
 budget and hold size.
 

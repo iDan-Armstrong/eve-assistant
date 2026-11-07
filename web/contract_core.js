@@ -45,7 +45,7 @@
   /* opts: { tax, budget, maxVolume, minProfit, sort: "profit" | "perJump" | "margin" } */
   function rankDeals(rows, ctx, opts = {}, now = Date.now()) {
     const tax = opts.tax ?? 0.042, out = [];
-    for (const [cid, loc, sys, price, gross, hub, volume, kinds, top, unsold, expires] of rows) {
+    for (const [cid, loc, sys, price, gross, hub, volume, kinds, top, unsold, expires, rigsLost = 0] of rows) {
       if (opts.budget && price > opts.budget) continue;
       if (opts.maxVolume && volume > opts.maxVolume) continue;
       if (expires && Date.parse(expires) <= now) continue;
@@ -58,7 +58,7 @@
       const hubSys = ctx.sysOf ? ctx.sysOf(hub) : 0;
       const toHub = hubSys ? ctx.path(at.sys, hubSys) : Infinity;
       if (toHub === Infinity) continue;
-      out.push({ cid, at, price, gross, hub, hubSys, volume, kinds, top, unsold, expires, profit,
+      out.push({ cid, at, price, gross, hub, hubSys, volume, kinds, top, unsold, expires, profit, rigsLost,
                  margin: profit / price, toPickup, toHub, perJump: profit / Math.max(1, toPickup + toHub) });
     }
     const key = { perJump: d => d.perJump, margin: d => d.margin }[opts.sort] || (d => d.profit);

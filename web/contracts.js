@@ -149,7 +149,8 @@ async function findDeals() {
       `<div>${items}</div>` +
       `<div class="m-meta">At ${placeName(d.at.loc)}${accessTag(d.at)} (${jumpsTxt(d.toPickup)} away), ` +
       `${d.at.loc === d.hub ? "already at the hub" : `then ${jumpsTxt(d.toHub)} to the hub`}. ${Math.round(d.volume).toLocaleString()} m³. Offer ends in ${ContractCore.timeLeft(d.expires)}.` +
-      `${d.unsold ? ` <span class="k-warn">${d.unsold.toLocaleString()} unit${d.unsold === 1 ? "" : "s"} no hub buys (not counted).</span>` : ""}</div>` +
+      `${d.unsold ? ` <span class="k-warn">${d.unsold.toLocaleString()} unit${d.unsold === 1 ? "" : "s"} no hub buys (not counted).</span>` : ""}` +
+      `${d.rigsLost ? ` <span class="k-warn">Holds an assembled ship: repackaging it to sell destroys its ${d.rigsLost} rig${d.rigsLost === 1 ? "" : "s"} (not counted). Its full volume needs a big hold.</span>` : ""}</div>` +
       contractButtons(d.cid, d.at.loc === d.hub ? [d.hub] : [d.at.loc, d.hub]) + `</li>`;
   }).join("");
   wireContractButtons(list);
