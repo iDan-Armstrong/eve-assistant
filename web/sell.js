@@ -19,18 +19,25 @@ const sellTax = () => {
   return 0.075 * (1 - 0.11 * acct);
 };
 
+/* courier jobs and contract deals start from the ship's hold, read when
+   the search runs (the ship arrives after the panel opens); typing in the
+   box, or clearing it for any size, takes over */
+function syncHoldBoxes() {
+  const hold = document.getElementById("hCargo").value;
+  for (const id of ["cVol", "dVol"]) {
+    const box = document.getElementById(id);
+    if (!box) continue;
+    if (!box.dataset.touched && hold) box.value = hold;
+    box.oninput = () => { box.dataset.touched = "1"; };
+  }
+}
+
 function setHaulMode(mode) {
   document.querySelectorAll("#haul [data-hmode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.hmode === mode)));
   for (const m of ["trip", "sell", "cour", "deal"]) {
     document.querySelectorAll(`#haul .h-${m}`).forEach(el => { el.hidden = mode !== m; });
   }
-  /* courier jobs and contract deals start from the ship's hold (clear the box for any size) */
-  const hold = document.getElementById("hCargo").value;
-  for (const id of ["cVol", "dVol"]) {
-    const box = document.getElementById(id);
-    if (box && !box.dataset.touched && hold) box.value = hold;
-    if (box) box.oninput = () => { box.dataset.touched = "1"; };
-  }
+  syncHoldBoxes();
   if (mode === "trip") haul.layer.addTo(map); else haul.layer.remove();
 }
 

@@ -89,6 +89,7 @@ const SHOW = 100;
 const num = id => { const v = document.getElementById(id).value.trim(); return v ? +v : 0; };
 
 async function findCouriers() {
+  syncHoldBoxes();
   const sum = document.getElementById("cSum"), list = document.getElementById("cList");
   list.innerHTML = "";
   sum.textContent = "Loading this hour's courier contracts…";
@@ -117,6 +118,7 @@ async function findCouriers() {
 }
 
 async function findDeals() {
+  syncHoldBoxes();
   const sum = document.getElementById("dSum"), list = document.getElementById("dList");
   list.innerHTML = "";
   sum.textContent = "Loading this hour's contract deals…";
