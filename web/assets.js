@@ -121,6 +121,8 @@ async function scanAssets() {
     document.getElementById("aWho").textContent = `${who}${shipName ? ` in ${/^[aeiou]/i.test(shipName) ? "an" : "a"} ${shipName}` : ""}.`;
 
     fillKinds();
+    document.getElementById("aKindsSum").textContent =
+      `Kinds of items: ${assetsUi.kinds.size} of ${document.querySelectorAll("#aKinds [data-kind]").length} (blueprints off: tick to include)`;
     fillDest();
     document.getElementById("aGo").hidden = false;
     summarizeStacks();
