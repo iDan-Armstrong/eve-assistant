@@ -54,7 +54,7 @@ test("rows: owned left out, cheapest usable offer within reach, price against av
   assert.strictEqual(Math.round(slasher.vsAvg), 13);
   const dc = rows.find(r => r.tid === 2047);
   assert.deepStrictEqual([dc.best.kind, dc.best.cid, dc.best.me, dc.jumps], ["contract", 555, 10, 7]);
-  assert.strictEqual(Math.round(dc.vsAvg), -25);
+  assert.strictEqual(dc.vsAvg, null);                                   // researched: no comparison with the average
   const npcOnly = B.buildRows(bps, index, new Set(), jumps);
   assert.strictEqual(npcOnly.find(r => r.tid === 692).best.kind, "npc");
   assert.strictEqual(npcOnly.find(r => r.tid === 3000).best, null);
@@ -67,10 +67,10 @@ test("filters: kind, group, name words, reach, below and above average", () => {
   assert.deepStrictEqual(ids({ group: "60" }), [2047]);
   assert.deepStrictEqual(ids({ text: "control blue" }), [2047]);
   assert.deepStrictEqual(ids({ inReach: true }), [2047, 3000, 691, 692]);
-  assert.deepStrictEqual(ids({ mode: "below", pct: 20 }), [2047]);              // 25% under
-  assert.deepStrictEqual(ids({ mode: "above", pct: 0 }), [2047, 691]);           // at or under average
-  assert.deepStrictEqual(ids({ mode: "above", pct: 15 }), [2047, 691, 692]);     // Slasher 12.5% over
-  assert.deepStrictEqual(B.sortRows(B.filterRows(rows, { mode: "above", pct: 15 }), "deal").map(r => r.tid), [2047, 691, 692]);
+  assert.deepStrictEqual(ids({ mode: "below", pct: 10 }), [691]);               // Rifter 20% under
+  assert.deepStrictEqual(ids({ mode: "above", pct: 0 }), [691]);                 // at or under average
+  assert.deepStrictEqual(ids({ mode: "above", pct: 15 }), [691, 692]);           // Slasher 12.5% over
+  assert.deepStrictEqual(B.sortRows(B.filterRows(rows, { mode: "above", pct: 15 }), "deal").map(r => r.tid), [691, 692]);
 });
 
 test("purchase: cheapest offer of any kind within reach, grouped by station", () => {
@@ -121,4 +121,11 @@ test("lab bonuses: skill levels to research, copy, jobs and range", () => {
   assert.strictEqual(b.range, 15);
   const none = B.labBonuses({});
   assert.deepStrictEqual([none.me, none.te, none.copy, none.jobs, none.range], [0, 0, 0, 1, 0]);
+});
+
+test("price vs average: only for unresearched offers", () => {
+  const rows = B.buildRows(bps, index, new Set(), jumps, access, sysOf);
+  assert.strictEqual(rows.find(r => r.tid === 2047).best.me, 10);          // ME 10 contract is the best offer
+  assert.strictEqual(rows.find(r => r.tid === 2047).vsAvg, null);
+  assert.notStrictEqual(rows.find(r => r.tid === 692).vsAvg, null);
 });

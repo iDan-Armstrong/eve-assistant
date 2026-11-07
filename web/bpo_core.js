@@ -75,9 +75,13 @@
       /* the cheapest researched copy within reach, when the cheapest overall is not researched */
       const alt = best && !(best.me > 0 || best.te > 0) ? bestResearched : null;
       const avg = (index && index.avg && index.avg[id]) || 0;
-      const price = best ? best.price : anywhere ? anywhere.price : 0;
+      const shown = best || anywhere;
+      const price = shown ? shown.price : 0;
+      /* CCP's average is for unresearched blueprints (all the market sells):
+         a researched one is not compared with it */
+      const plain = shown && !(shown.me > 0 || shown.te > 0);
       rows.push({ tid, name, cat, group, best, jumps: best ? best.j : undefined, anywhere, avg, alt,
-                  vsAvg: price && avg ? (price / avg - 1) * 100 : null });
+                  vsAvg: price && avg && plain ? (price / avg - 1) * 100 : null });
     }
     return rows;
   }

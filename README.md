@@ -375,7 +375,9 @@ Market blueprints are always unresearched (CCP allows only those on the
 market), so a researched blueprint only ever shows up as a contract. Each
 row shows the price, an ME/TE badge (Material and Time Efficiency, green
 when researched), the market average and how far above or below it the
-price sits. When the cheapest offer is unresearched and a researched one
+price sits (unresearched offers only: CCP's average is for unresearched
+blueprints, so a researched contract is not compared with it, and the
+price filter leaves researched offers out). When the cheapest offer is unresearched and a researched one
 exists within reach, that one is shown underneath. Minimum ME and TE
 filters drop weaker offers entirely, so the list and the route then use
 the cheapest blueprint at or above that research, and the list can be
