@@ -1009,7 +1009,7 @@ function renderTimers() {
   if (!w.connected) {
     box.className = "card warn";
     box.innerHTML = `<div class="hint">Way home to ${esc(nameOf(home))}</div><div class="big">No mapped route</div>
-      <p class="hint">The chain has no path from here to home. Map the holes you came through.</p>`;
+      <p class="hint">The chain has no path from here to home. Map the holes you came through.</p>${lostHtml(home, id)}`;
     return;
   }
   if (!w.keys.length) {
@@ -1030,6 +1030,20 @@ function renderTimers() {
     ${w.unknown.length ? `<div class="hint" style="color:var(--warn)">Age unknown: ${w.unknown.map(k => esc(pairName(k))).join("; ")}. Paste its Show Info.</div>` : ""}
     ${w.crit.length ? `<div class="hint" style="color:var(--bad)">Mass critical: ${w.crit.map(k => esc(pairName(k))).join("; ")}. A heavy ship may close it.</div>` : ""}`;
   checkAlarms(w, left);
+}
+/* what to do when the chain home is gone: home's statics and the usual ways back */
+function lostHtml(home, here) {
+  const steps = C.isJ(home)
+    ? [`Home's statics: ${staticsHtml(home)}. Home always has these; their far ends move each time they respawn.`,
+       "Scan this system for a K162 or a hole to home's class. A scout sitting in home can scan home's statics and tell you where they lead now.",
+       "No way in? Get to known space, dock up safe, and wait for home's static to roll into reach. Public Thera and Turnur connections help.",
+       "Staying out a while? Use Set as home here to get countdowns for the place you are now, then set the real home again when you are back."]
+    : C.isJ(here)
+      ? ["Scan this system for any hole to known space (K162 or a static to HS, LS or NS).",
+         "Once in known space, open the Atlas Route planner to get the gates back to home.",
+         "Paste Show Info on every hole you take so the countdown can watch it."]
+      : ["You are in known space: open the Atlas Route planner for the gates home."];
+  return `<ol class="hint" style="margin:6px 0 0 18px;padding:0">${steps.map(t => `<li>${t}</li>`).join("")}</ol>`;
 }
 const pairName = k => { const l = S.chain.links[k]; return l ? `${nameOf(l.a)} to ${nameOf(l.b)}` : k; };
 /* one alarm per threshold crossed; when several are crossed at once (a hole
