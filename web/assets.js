@@ -118,7 +118,7 @@ async function scanAssets() {
     document.getElementById("aHoldNote").textContent = cap
       ? `m³ free: ${shipName} holds ${Math.round(cap).toLocaleString()}, ${Math.round(used).toLocaleString()} in use (base hold, before skills and expanders)`
       : "m³ free (type your hold)";
-    document.getElementById("aWho").textContent = `${who}${shipName ? ` in a ${shipName}` : ""}.`;
+    document.getElementById("aWho").textContent = `${who}${shipName ? ` in ${/^[aeiou]/i.test(shipName) ? "an" : "a"} ${shipName}` : ""}.`;
 
     fillKinds();
     fillDest();
@@ -133,9 +133,11 @@ function fillKinds() {
   const counts = new Map();
   for (const s of assetsUi.stacks) { const c = catOfType(s.type_id); counts.set(c, (counts.get(c) || 0) + 1); }
   const name = c => (market.meta && market.meta.cats[c]) || "Other";
-  assetsUi.kinds = new Set(counts.keys());
+  /* blueprint originals are research assets: left out unless ticked */
+  const BLUEPRINT = 9;
+  assetsUi.kinds = new Set([...counts.keys()].filter(c => c !== BLUEPRINT));
   document.getElementById("aKinds").innerHTML = [...counts].sort((a, b) => name(a[0]).localeCompare(name(b[0])))
-    .map(([c, n]) => `<label><input type="checkbox" data-kind="${c}" checked> ${esc(name(c))} <span class="m-meta">(${n})</span></label>`).join("");
+    .map(([c, n]) => `<label><input type="checkbox" data-kind="${c}"${c === BLUEPRINT ? "" : " checked"}> ${esc(name(c))} <span class="m-meta">(${n})</span></label>`).join("");
   document.querySelectorAll("#aKinds [data-kind]").forEach(b => b.onchange = () => {
     if (b.checked) assetsUi.kinds.add(+b.dataset.kind); else assetsUi.kinds.delete(+b.dataset.kind);
     const all = assetsUi.kinds.size === counts.size;
@@ -216,7 +218,7 @@ async function planAssets() {
     const last = plan.stops[plan.stops.length - 1];
     const from = state.byId.get(last.sys);
     sale = await computeSale(plan.carried, { id: last.sys, name: from.name }, {
-      hs: t.hs, reach: 15, minStop: Math.max(0, +document.getElementById("aMin").value || 0) * 1e6, structs: true }, sum);
+      hs: t.hs, reach: Number.isFinite(t.reach) ? Math.max(5, t.reach) : 15, minStop: Math.max(0, +document.getElementById("aMin").value || 0) * 1e6, structs: true }, sum);
   }
   assetsUi.plan = { plan, sale, t, mode, at: new Date() };
   drawAssetPlan();

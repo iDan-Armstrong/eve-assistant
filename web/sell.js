@@ -180,8 +180,8 @@ async function computeSale(items, origin, opts, sum) {
   for (const t of tids) for (const r of regions) jobs.push([t, r]);
   const orders = [], structOrders = [];
   let done = 0;
-  for (let i = 0; i < jobs.length; i += 12) {
-    await Promise.all(jobs.slice(i, i + 12).map(async ([t, r]) => {
+  for (let i = 0; i < jobs.length; i += 24) {
+    await Promise.all(jobs.slice(i, i + 24).map(async ([t, r]) => {
       try {
         for (const o of await liveOrders(r, t, "buy")) {
           if (near(o.system_id) && o.location_id >= 60000000 && o.location_id < 64000000) orders.push(o);

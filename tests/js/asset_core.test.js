@@ -67,3 +67,9 @@ test("consolidate: clears the most stacks per jump, skips the destination, ends 
   assert.strictEqual(p.stacksLeft, 1);                       // the 500 m3 stack does not fit
   assert.deepStrictEqual(A.suggestDest([st(1, 1, 34, 10, 1, 5), st(2, 2, 34, 1, 1, 5), st(1, 1, 35, 1, 1, 1)]).loc, 1);
 });
+
+test("stacks: blueprint copies are never pickups", () => {
+  const assets = [{ item_id: 1, location_id: JITA, location_flag: "Hangar", type_id: 691, quantity: 10, is_blueprint_copy: true },
+                  { item_id: 2, location_id: JITA, location_flag: "Hangar", type_id: 692, quantity: 1 }];
+  assert.deepStrictEqual(A.stacksFrom(assets, catOf).map(s => s.type_id), [692]);
+});

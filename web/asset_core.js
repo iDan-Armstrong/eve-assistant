@@ -6,7 +6,7 @@
    container sitting in that hangar. Fitted modules, anything inside a ship,
    assembled ships and assembled containers themselves are left out (you
    cannot put an assembled ship in a hold; a container's contents are listed
-   instead).
+   instead). Blueprint copies are left out too: the market cannot sell them.
 
    planPickups() picks the stops that fill the hold, one at a time from where
    the pilot is:
@@ -28,6 +28,7 @@
     const stacks = new Map();
     for (const a of assets) {
       if (a.is_singleton && (catOf(a.type_id) === SHIP || hasChildren.has(a.item_id))) continue;
+      if (a.is_blueprint_copy) continue;          /* copies cannot be sold on the market */
       let top = a, inside = false, ok = true;
       while (byId.has(top.location_id)) {
         const parent = byId.get(top.location_id);

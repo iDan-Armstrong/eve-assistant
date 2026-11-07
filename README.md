@@ -452,7 +452,9 @@ the same kind as a corporation's.
 **Asset clean-up** (Tools, Assets) gathers items scattered across stations
 into your hold. **Scan my assets** reads the active pilot's assets and lists
 every loose stack: items in a station's hangar and items inside containers
-there (fitted modules, ship cargo and assembled ships stay where they are).
+there (fitted modules, ship cargo and assembled ships stay where they are,
+and blueprint copies are skipped since the market cannot sell them).
+Blueprint originals start unticked under the kinds of items.
 Each stack gets its packaged volume (from the SDE, or from CCP for ships)
 and what the best trade hub's buy orders pay for it. The free hold is your
 ship's cargo capacity minus what is already in it; change it to allow for
