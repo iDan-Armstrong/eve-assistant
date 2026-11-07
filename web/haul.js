@@ -9,19 +9,11 @@
    earning in both directions. Loops are ranked by ISK per jump over the
    whole circuit, home to home.
 
-   The page asks for a password first. This is a soft gate on a public
-   site, not security: only a hash of the password is in the code, and
-   the market data underneath is CCP's public data. */
+   Open to everyone: the market data underneath is CCP's public data. */
 "use strict";
 
-const HAUL_HASH = "a8bdc05a86857c614f27b9586f31d76efdd45b5fa8b1920d1ecf7f7a2fd5796a";
 const haul = { data: null, names: null, layer: L.layerGroup(), loops: [], sort: "perJump" };
 
-async function sha256hex(text) {
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, "0")).join("");
-}
-const haulUnlocked = () => { try { return sessionStorage.getItem("atlas.haul") === "1"; } catch { return false; } };
 
 /* BFS over the stargate graph (optionally highsec only): distance and parent */
 function bfs(from, highsecOnly) {
@@ -60,6 +52,17 @@ function buildLegs(cargo, budget, tax) {
     if (filled.profit > 0) legs.push({ ...g, ...filled });
   }
   return legs;
+}
+
+/* A return leg that buys at the outbound leg's buy station, or sells at
+   its sell station, meets orders the outbound leg already used: those
+   units come off before the return leg fills its hold. */
+function afterLeg(L2, L1, cargo, budget) {
+  const sameBuy = L2.a === L1.a, sameSell = L2.b === L1.b;
+  if (!sameBuy && !sameSell) return L2;
+  const used = new Map(L1.take.map(x => [x.tid, x.n]));
+  const items = L2.items.map(it => used.has(it.tid) ? { ...it, units: it.units - used.get(it.tid) } : it).filter(it => it.units > 0);
+  return { ...L2, items, ...fillHold(items, cargo, budget) };
 }
 
 /* fill the hold with the items that earn the most per m3, within budget */
@@ -111,7 +114,7 @@ function walkLive(asks, bids, tax) {
   }
   return { units, cost, gross };
 }
-async function verifyLeg(L) {
+async function verifyLeg(L, before = null) {
   const { tax, cargo, budget } = haul.ctx;
   const candidates = [...L.items].sort((x, y) => y.net / y.v - x.net / x.v).slice(0, 25);
   const live = [], gone = [];
@@ -120,7 +123,11 @@ async function verifyLeg(L) {
       const [asks, bids] = await Promise.all([
         liveOrders(regionOf(L.asys), it.tid, "sell").then(o => o.filter(x => x.location_id === L.a)),
         liveOrders(regionOf(L.bsys), it.tid, "buy").then(o => o.filter(x => x.location_id === L.b))]);
-      const w = walkLive(asks, bids, tax);
+      /* the outbound leg, checked first, already bought or sold some of these */
+      const used = before && (before.take.find(x => x.tid === it.tid) || {}).n;
+      const a2 = used && before.a === L.a ? consume(asks, used, (x, y) => x.price - y.price) : asks;
+      const b2 = used && before.b === L.b ? consume(bids, used, (x, y) => y.price - x.price) : bids;
+      const w = walkLive(a2, b2, tax);
       if (!w.units) { gone.push(it.tid); return; }
       live.push({ tid: it.tid, v: it.v, units: w.units, c: w.cost / w.units, g: w.gross / w.units,
                   net: w.gross / w.units * (1 - tax) - w.cost / w.units });
@@ -130,8 +137,19 @@ async function verifyLeg(L) {
   const wasTaken = new Set(L.take.map(x => x.tid));
   return { ...L, ...filled, gone: gone.filter(t => wasTaken.has(t)), checked: new Date() };
 }
+/* a copy of an order book with n units taken off, best orders first */
+function consume(orders, n, best) {
+  const out = orders.map(o => ({ ...o })).sort(best);
+  for (const o of out) {
+    const t = Math.min(n, o.volume_remain);
+    o.volume_remain -= t; n -= t;
+    if (!n) break;
+  }
+  return out.filter(o => o.volume_remain > 0);
+}
 async function verifyLoop(o) {
-  const [L1, L2] = await Promise.all([verifyLeg(o.L1), o.L2 ? verifyLeg(o.L2) : null]);
+  const L1 = await verifyLeg(o.L1);
+  const L2 = o.L2 ? await verifyLeg(o.L2, L1) : null;
   o.L1 = L1;
   if (L2) o.L2 = L2;
   o.total = o.L1.profit + (o.L2 ? o.L2.profit : 0);
@@ -171,12 +189,14 @@ function planHauls() {
     const fromB = tree(o.L1.bsys);
     const homeAlone = home.dist.get(o.L1.bsys) ?? Infinity;
     let best = { L2: null, j2: homeAlone, profit: 0 };
-    for (const L2 of legs) {
-      if (L2.a === o.L1.a && L2.b === o.L1.b) continue;      /* the outbound leg already took those orders */
-      const bc = fromB.dist.get(L2.asys);
+    for (const L2raw of legs) {
+      if (L2raw.a === o.L1.a && L2raw.b === o.L1.b) continue;      /* the outbound leg already took those orders */
+      const bc = fromB.dist.get(L2raw.asys);
       if (bc == null || bc > maxOut) continue;
-      const cd = tree(L2.asys).dist.get(L2.bsys), dh = home.dist.get(L2.bsys);
+      const cd = tree(L2raw.asys).dist.get(L2raw.bsys), dh = home.dist.get(L2raw.bsys);
       if (cd == null || dh == null) continue;
+      const L2 = afterLeg(L2raw, o.L1, cargo, budget);
+      if (L2.profit <= 0) continue;
       const j2 = bc + cd + dh;
       if ((o.L1.profit + L2.profit) / (o.j1 + j2) > (o.L1.profit + best.profit) / (o.j1 + best.j2)) {
         best = { L2, j2, profit: L2.profit };
@@ -329,7 +349,6 @@ async function fillShip() {
 
 async function openHaul(open) {
   const panel = document.getElementById("haul");
-  if (open && !haulUnlocked()) { askHaulPassword(); return; }
   panel.hidden = !open;
   document.getElementById("haulBtn").setAttribute("aria-expanded", String(open));
   if (!open) { haul.layer.remove(); document.body.classList.remove("route-open"); return; }
@@ -353,32 +372,6 @@ async function openHaul(open) {
       document.getElementById("hSum").textContent = "Trade pairs are not published yet; they arrive with the next hourly update.";
     }
   }
-}
-
-function askHaulPassword() {
-  const box = document.createElement("div");
-  box.className = "consent";
-  box.innerHTML = `<form class="c-card"><h3>Haul planner</h3>
-    <p>This planner is password protected.</p>
-    <input type="password" id="haulPw" autocomplete="off" placeholder="password"
-      style="width:100%;padding:7px 9px;background:rgba(13,19,31,.85);color:var(--ink);border:1px solid var(--panel-edge);border-radius:3px;font:inherit">
-    <p class="c-small" id="haulPwMsg"></p>
-    <div class="c-buttons"><button type="submit">Unlock</button><button type="button" data-act="cancel">Cancel</button></div></form>`;
-  document.body.appendChild(box);
-  const input = box.querySelector("#haulPw");
-  input.focus();
-  box.querySelector("[data-act=cancel]").onclick = () => box.remove();
-  box.querySelector("form").onsubmit = async e => {
-    e.preventDefault();
-    if (await sha256hex("new-eden-atlas:" + input.value) === HAUL_HASH) {
-      try { sessionStorage.setItem("atlas.haul", "1"); } catch { /* private mode */ }
-      box.remove();
-      openHaul(true);
-    } else {
-      box.querySelector("#haulPwMsg").textContent = "That is not the password.";
-      input.select();
-    }
-  };
 }
 
 function wireHaul() {

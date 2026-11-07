@@ -189,7 +189,7 @@ puts every other tool behind **Tools**, grouped by job: Travel (route
 planner, J-Space Survey), Trading and hauling (Find item and each Haul
 planner mode: round trips, sell my cargo, courier jobs, contract deals)
 and Industry (fit shopper, blueprint finder). A Haul entry opens the
-planner straight in that mode, after the password if it is still locked.
+planner straight in that mode.
 
 ### Market
 
@@ -253,7 +253,7 @@ shopping list, a Multibuy copy, and the autopilot destination.
 
 ### Haul planner
 
-**Haul** (behind a password) plans round trips that make ISK in both
+**Haul** plans round trips that make ISK in both
 directions. Each hour `tools/haul.py` keeps every NPC station's five
 cheapest sell orders and five highest buy orders for every item, pairs the
 cheapest-selling stations with the highest-buying ones, and walks both
@@ -262,14 +262,16 @@ legs sized to your ship's cargo hold (read from the ship you are flying),
 your budget and your sales tax (7.5%, less 11% per Accounting level):
 each leg fills the hold with the items that earn the most per m3 between
 the same two stations. A loop is one leg out from home and the leg that
-best brings you back, ranked by ISK per jump over the whole circuit, with
+best brings you back (a return leg that buys or sells at one of the
+outbound leg's stations only counts the orders the outbound leg left),
+ranked by ISK per jump over the whole circuit, with
 a highsec-only option and a minimum stock (items with fewer units on the
 market than that are skipped, since thin stock is often gone on arrival).
 Picking a loop re-reads every item from CCP right then and rebuilds the
 legs from what is really on the market, listing anything bought out since
 the hourly snapshot. Click a loop to draw it on the map and send the
-first buy stop to your autopilot, or send the whole trip: every jump of
-the circuit as a waypoint, docking at each trade station.
+first buy stop to your autopilot, or send the whole trip: the turn points
+that hold the game to the circuit, docking at each trade station.
 
 Sending a trip opens a **haul window** (`web/hud.html`), a small pop-out
 to keep beside the game. It asks CCP where the pilot is every 10 seconds
@@ -339,8 +341,8 @@ each contract's full contents; `tools/fetch_contracts.py` writes
 `courier.json` and `deals.json`.
 
 The trades are instant (buy from sell orders, sell into buy orders), so
-the only fee is sales tax. The password is a soft gate on a public site:
-only its hash is in the code, and the data underneath is public.
+the only fee is sales tax. The planner is open to everyone; the data
+underneath is CCP's public market data.
 
 ### Blueprint finder
 

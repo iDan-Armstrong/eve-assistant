@@ -21,7 +21,7 @@
     show(false);
     const [tool, mode] = b.dataset.tool.split(":");
     if (tool === "haul") {
-      /* also applies when the Haul password has to be entered first */
+      /* set the mode now if the planner is already open, else when it opens */
       haul.pendingMode = mode;
       if (!document.getElementById("haul").hidden) { setHaulMode(mode); haul.pendingMode = null; }
       else openHaul(true);
