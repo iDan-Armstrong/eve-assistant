@@ -37,3 +37,9 @@ class_name = "OrgDirectory"
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["OrgDirectory"]
+
+# J-Space Survey planet scan pictures (private: served only through the relay
+# to pilots allowed to read the scan)
+[[r2_buckets]]
+binding = "SHOTS"
+bucket_name = "atlas-survey-shots"
