@@ -93,16 +93,28 @@ export function starRGB(tempK) {
                [0.6, [248, 248, 255]], [0.78, [205, 220, 255]], [1, [160, 185, 255]]],
               (Math.log((tempK || 5500) / 2500)) / Math.log(30000 / 2500));
 }
+/* the colour the star's own type names ("Sun O1 (Bright Blue)", "Sun K5 (Red Giant)",
+   "Sun G5 (Gold Immanence)"); the temperature decides only when the type names none */
+const NAMED = [
+  [/gold/i, [255, 205, 95]], [/divine/i, [255, 250, 235]], [/glory/i, [215, 230, 255]], [/fruitful/i, [190, 255, 200]],
+  [/bright blue/i, [140, 175, 255]], [/blue/i, [170, 195, 255]], [/white/i, [245, 246, 255]],
+  [/red/i, [255, 110, 75]], [/orange/i, [255, 165, 85]], [/yellow/i, [255, 225, 130]], [/pink/i, [255, 175, 190]],
+];
+export function starColorOf(type, tempK) {
+  const m = String(type || "").match(/\(([^)]+)\)/);
+  if (m) for (const [re, c] of NAMED) if (re.test(m[1])) return c;
+  return starRGB(tempK);
+}
 const cache = new Map();
-export function starTextureFor(tempK, seed) {
-  const key = `star:${Math.round(tempK || 0)}:${seed}`;
+export function starTextureFor(tempK, seed, type) {
+  const key = `star:${type || ""}:${Math.round(tempK || 0)}:${seed}`;
   if (cache.has(key)) return cache.get(key);
-  const n = noise3(seed), base = starRGB(tempK);
+  const n = noise3(seed), base = starColorOf(type, tempK);
   const t = paint(512, 256, (x, y, z) => {
     /* fine granulation, a few faint darker spots, brighter faculae: a lit plasma surface, not rock */
     const g = fbm(n, x * 14, y * 14, z * 14, 4), spots = smooth(0.66, 0.74, fbm(n, x * 2.2 + 7, y * 2.2, z * 2.2, 3));
     const fac = smooth(0.6, 0.75, ridge(n, x * 6 + 3, y * 6, z * 6, 3));
-    const k = 0.95 + 0.1 * (g - 0.5) - 0.12 * spots + 0.08 * fac;
+    const k = 0.97 + 0.08 * (g - 0.5) - 0.07 * spots + 0.06 * fac;
     return scale(base, k).map(v => Math.min(255, v));
   });
   cache.set(key, t);

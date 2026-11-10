@@ -12,7 +12,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "./vendor/three/OrbitControls.js";
-import { planetSkin, moonMaterial, stationModel, starTextureFor, softGlow } from "./orrery_skins.js";
+import { planetSkin, moonMaterial, stationModel, starTextureFor, starColorOf, softGlow } from "./orrery_skins.js";
 
 /* a stable number from a name, for bodies without an id */
 const hashOf = s => { let h = 2166136261; for (const ch of String(s)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
@@ -163,7 +163,7 @@ export function openOrrery(host, data, onClose) {
   const sTemp = cel.star ? cel.star.tempK : 0;
   const star = body(new THREE.Mesh(
     new THREE.SphereGeometry(3.2, 48, 32),
-    new THREE.MeshBasicMaterial({ map: starTextureFor(sTemp, cel.star?.id || hashOf(system.name)) })),
+    new THREE.MeshBasicMaterial({ map: starTextureFor(sTemp, cel.star?.id || hashOf(system.name), cel.star?.type) })),
     { kind: "Star", name: cel.star ? (cel.star.name || system.name + " - Star") : "Star",
       sub: cel.star ? `${cel.star.type}, ${sTemp.toLocaleString()} K` : "",
       rows: cel.star ? [
@@ -176,7 +176,7 @@ export function openOrrery(host, data, onClose) {
       ] : [] },
     null);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowTexture(), color: starColor(sTemp),
+    map: glowTexture(), color: new THREE.Color(`rgb(${starColorOf(cel.star?.type, sTemp).map(Math.round).join(",")})`),
     transparent: true, opacity: .8, depthWrite: false }));
   glow.scale.setScalar(16);
   scene.add(glow);
