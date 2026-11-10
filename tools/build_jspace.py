@@ -1,4 +1,4 @@
-"""Build the J-space (wormhole space) reference data for J-Space Survey.
+"""Build the J-space (wormhole space) reference data for N-Space Survey.
 
 Reads CCP's Static Data Export in its JSON Lines form and writes:
 

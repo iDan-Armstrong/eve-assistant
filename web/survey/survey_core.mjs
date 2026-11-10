@@ -1,4 +1,4 @@
-/* J-Space Survey: pastes, directional scans, hole life, the way home, the
+/* N-Space Survey: pastes, directional scans, hole life, the way home, the
    lasting knowledge base, and surveyor points and badges.
 
    Pure functions (no DOM, no network), imported by the survey page, by the

@@ -1,4 +1,4 @@
-"""Compact known-space index for J-Space Survey.
+"""Compact known-space index for N-Space Survey.
 
 The survey page needs two things about k-space: a system's name, security and region
 (to label wormhole exits), and which systems share a stargate, special gates included

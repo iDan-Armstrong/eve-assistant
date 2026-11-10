@@ -186,7 +186,7 @@ so a planet, moon or belt sends its system.
 
 The header keeps two everyday buttons, **Route** and **Pilot login**, and
 puts every other tool behind **Tools**, grouped by job: Travel (route
-planner, J-Space Survey), Trading and hauling (Find item and each Haul
+planner, N-Space Survey), Trading and hauling (Find item and each Haul
 planner mode: round trips, sell my cargo, courier jobs, contract deals)
 and Industry (fit shopper, blueprint finder). A Haul entry opens the
 planner straight in that mode.
@@ -572,11 +572,11 @@ Its **Corp view** option fades every system where the corporation has
 nothing going on and tucks the other overlays away, leaving corp mates,
 your own pilots and assets, and the corp's reserve sightings.
 
-### J-Space Survey (wormhole chain mapper)
+### N-Space Survey (wormhole chain mapper)
 
 Wormhole space has no stargates, no local chat until someone speaks, and
 connections that open and close every day, so no public feed can map it.
-[J-Space Survey](https://idan-armstrong.github.io/eve-assistant/survey/) is a
+[N-Space Survey](https://idan-armstrong.github.io/eve-assistant/survey/) is a
 companion page for mapping it while you fly, built for a second screen, and
 it feeds the Atlas. While it is in development the page asks testers for a
 password (a soft gate: only a hash of it is in the code). It needs Chrome or

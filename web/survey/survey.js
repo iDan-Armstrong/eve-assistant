@@ -1,4 +1,4 @@
-/* J-Space Survey: wormhole chain mapper that feeds the New Eden Atlas.
+/* N-Space Survey: wormhole chain mapper that feeds the New Eden Atlas.
 
    - Logins are the Atlas's own (shared localStorage on this origin); CCP
      returns to the Atlas page, which hands the pilot back here.
@@ -1223,7 +1223,7 @@ function isChromium() {
 async function start() {
   if (!isChromium()) {
     modal(`<h3 style="margin-top:0">Please use Chrome or Edge</h3>
-      <p>J-Space Survey needs Google Chrome or Microsoft Edge (or another Chromium browser) for Survey Link and
+      <p>N-Space Survey needs Google Chrome or Microsoft Edge (or another Chromium browser) for Survey Link and
          background timers. Open this page in one of those.</p>`);
     return;
   }
@@ -1302,7 +1302,7 @@ function gate() {
     box.className = "consent";
     box.style.background = "var(--bg)";
     box.innerHTML = `<div>
-      <h3 style="margin-top:0">J-Space Survey is in development</h3>
+      <h3 style="margin-top:0">N-Space Survey is in development</h3>
       <p>Testers only for now. Enter the password to continue, or go <a href="../">back to the Atlas</a>.</p>
       <form class="row" id="gateForm"><input type="password" id="gatePw" autocomplete="off" placeholder="password" autofocus>
         <button class="primary">Open</button></form>
@@ -1321,4 +1321,4 @@ function gate() {
     };
   });
 }
-gate().then(start).catch(e => { document.body.insertAdjacentHTML("beforeend", `<div class="toast">J-Space Survey failed to start: ${esc(e.message)}</div>`); });
+gate().then(start).catch(e => { document.body.insertAdjacentHTML("beforeend", `<div class="toast">N-Space Survey failed to start: ${esc(e.message)}</div>`); });

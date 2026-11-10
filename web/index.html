@@ -693,7 +693,7 @@
       <label hidden><input type="checkbox" id="tPilots" checked> <i class="sw" style="border-color:#ffcf4a"></i>my pilots, assets and corp mates</label>
       <label><input type="checkbox" id="tStrat"> <i class="sw" style="border-color:#ff6b3d"></i>entry systems, chokepoints</label>
       <label><input type="checkbox" id="tHoles"> <i class="sw" style="border-color:#ff8fd8"></i>Thera / Turnur holes</label>
-      <label><input type="checkbox" id="tSurvey" checked> <i class="sw" style="border-color:#7ef0ff"></i>J-Space Survey chain</label>
+      <label><input type="checkbox" id="tSurvey" checked> <i class="sw" style="border-color:#7ef0ff"></i>N-Space Survey chain</label>
     </div>
   </details>
   <button class="route-btn" id="routeBtn" aria-expanded="false" aria-controls="route">Route</button>
@@ -702,7 +702,7 @@
     <div class="pilot-menu tools-menu" id="toolsMenu" hidden>
       <div class="tm-group">Travel</div>
       <button data-tool="route"><b>Route planner</b><span>Safest or shortest route, sent to autopilot</span></button>
-      <button data-tool="survey"><b>J-Space Survey</b><span>Map wormhole chains with your surveyors</span></button>
+      <button data-tool="survey"><b>N-Space Survey</b><span>Map wormhole chains with your surveyors</span></button>
       <div class="tm-group">Trading and hauling</div>
       <button data-tool="market"><b>Find item</b><span>Where to buy or sell an item, with filters</span></button>
       <button data-tool="haul:trip"><b>Round trips</b><span>Profitable buy-here, sell-there hauls</span></button>
@@ -1404,7 +1404,7 @@ async function boot() {
   }
   const tHoles = document.getElementById("tHoles");
   tHoles.onchange = () => tHoles.checked ? holeLayer.addTo(map) : holeLayer.remove();
-  /* J-Space Survey chain (survey/ page, same origin): wormhole links saved in
+  /* N-Space Survey chain (survey/ page, same origin): wormhole links saved in
      this browser, corp-shared ones included once synced. Links between two
      known-space systems draw as lines; a link into wormhole space rings its
      known-space end. Refreshes when the survey tab saves. */

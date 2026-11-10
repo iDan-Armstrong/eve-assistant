@@ -1,4 +1,4 @@
-/* J-Space Survey: pure chain logic (no DOM, no network).
+/* N-Space Survey: pure chain logic (no DOM, no network).
 
    Imported by the survey page, by the Cloudflare relay (worker/index.js) and by
    `node --test`, so the page and the relay apply exactly the same merge rules.

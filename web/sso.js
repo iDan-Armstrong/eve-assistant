@@ -38,7 +38,7 @@
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const randomString = n => b64url(crypto.getRandomValues(new Uint8Array(n)));
   /* CCP sends the pilot back to one registered address, the Atlas page. A page
-     elsewhere on the site (J-Space Survey) sets EveSSO.redirectUri to that
+     elsewhere on the site (N-Space Survey) sets EveSSO.redirectUri to that
      address and gets the pilot back through `returnTo` once login completes;
      both pages share this origin's localStorage, so the login is shared too. */
   const redirectUri = () => EveSSO.redirectUri || location.origin + location.pathname;

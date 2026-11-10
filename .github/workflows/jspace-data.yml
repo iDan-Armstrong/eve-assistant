@@ -19,7 +19,7 @@ jobs:
       - name: Download the SDE (JSON Lines)
         run: |
           curl -fsSL -o sde.zip \
-            -A "J-Space Survey (https://idan-armstrong.github.io/eve-assistant/)" \
+            -A "N-Space Survey (https://idan-armstrong.github.io/eve-assistant/)" \
             https://developers.eveonline.com/static-data/eve-online-static-data-latest-jsonl.zip
           unzip -l sde.zip | head -60
       - name: Build J-space data

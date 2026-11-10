@@ -1,10 +1,10 @@
 <#
-  Survey Link: the clipboard and chat-log bridge for J-Space Survey.
+  Survey Link: the clipboard and chat-log bridge for N-Space Survey.
 
   Run it with Start-SurveyLink.bat (double-click). It does two things while open:
 
   1. Clipboard. When you copy in EVE (probe scanner, directional scan, or a
-     wormhole's Show Info), it hands that copy to the J-Space Survey page, so you
+     wormhole's Show Info), it hands that copy to the N-Space Survey page, so you
      never have to click over to the second screen and paste. Anything else on
      your clipboard (passwords, chat, documents) is ignored and never leaves this
      window: only copies shaped like those three EVE windows are passed on.
@@ -14,7 +14,7 @@
      a second after it happens.
 
   It talks only to this computer (http://localhost:47321) and only answers the
-  J-Space Survey page. Nothing is sent anywhere else, nothing is written to disk,
+  N-Space Survey page. Nothing is sent anywhere else, nothing is written to disk,
   and copies are forgotten after ten minutes. It never touches the game client.
   Close the window to stop it.
 #>
@@ -189,7 +189,7 @@ try { $http.Start() } catch {
 Write-Host ""
 Write-Host "  Survey Link $Version is running." -ForegroundColor Cyan
 Write-Host "  Keep this window open while you survey; close it to stop."
-Write-Host "  Talks only to the J-Space Survey page on this computer."
+Write-Host "  Talks only to the N-Space Survey page on this computer."
 if (Test-Path $LogDir) { Write-Host "  Reading jumps from $LogDir" }
 else { Write-Host "  EVE chat logs not found at $LogDir (jumps will come from the survey page instead)." -ForegroundColor Yellow }
 Write-Host ""

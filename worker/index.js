@@ -25,7 +25,7 @@
 
    POST /chain      body {"token": ...} -> {"corporation", "chain", "board", "me"}
    POST /chain/ops  body {"token": ..., "ops": [...]} -> the same, plus "awards" and "kb"
-     The J-Space Survey wormhole chain, shared inside one corporation and
+     The N-Space Survey wormhole chain, shared inside one corporation and
      returned only to a verified member. Ops and merge rules come from
      web/survey/chain_core.mjs, the same module the survey page runs.
      Knowledge-base ops (visit, static, dscan) keep what stays true about a
