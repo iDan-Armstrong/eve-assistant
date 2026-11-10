@@ -12,6 +12,10 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "./vendor/three/OrbitControls.js";
+import { planetSkin, moonMaterial, stationModel, starTextureFor, softGlow } from "./orrery_skins.js";
+
+/* a stable number from a name, for bodies without an id */
+const hashOf = s => { let h = 2166136261; for (const ch of String(s)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 
 /* Services that earn a station the ★ overlay. "Compression" does not
    exist on any NPC station today (it is an Upwell-structure capability),
@@ -125,8 +129,8 @@ export function openOrrery(host, data, onClose) {
   controls.enableDamping = true;
 
   /* lighting: the star is the only real light, plus a whisper of fill */
-  scene.add(new THREE.AmbientLight(0x303848, 1.2));
-  const starLight = new THREE.PointLight(0xffffff, 2.2, 0, 0);
+  scene.add(new THREE.AmbientLight(0x404a5c, 1.4));
+  const starLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
   scene.add(starLight);
 
   /* faint starfield for depth */
@@ -138,7 +142,7 @@ export function openOrrery(host, data, onClose) {
       color: 0x3a4a66, size: 1.6, sizeAttenuation: false })));
   }
 
-  const pickables = [], labels = [];
+  const pickables = [], labels = [], spinners = [];
   const tip = host.querySelector(".orr-tip");
 
   function body(mesh, info, labelText, labelCls, labelDy) {
@@ -158,8 +162,8 @@ export function openOrrery(host, data, onClose) {
   /* star */
   const sTemp = cel.star ? cel.star.tempK : 0;
   const star = body(new THREE.Mesh(
-    new THREE.SphereGeometry(3.2, 32, 32),
-    new THREE.MeshBasicMaterial({ color: starColor(sTemp) })),
+    new THREE.SphereGeometry(3.2, 48, 32),
+    new THREE.MeshBasicMaterial({ map: starTextureFor(sTemp, cel.star?.id || hashOf(system.name)) })),
     { kind: "Star", name: cel.star ? (cel.star.name || system.name + " - Star") : "Star",
       sub: cel.star ? `${cel.star.type}, ${sTemp.toLocaleString()} K` : "",
       rows: cel.star ? [
@@ -188,11 +192,9 @@ export function openOrrery(host, data, onClose) {
       ? pl.name.slice(system.name.length).trim() : pl.name;
     const kindName = (pl.type || "").replace("Planet (", "").replace(")", "");
     const size = Math.min(2.2, Math.max(.55, Math.log10((pl.radiusKm || 3000) / 900)));
-    const pc = PLANET_COLORS[kindName] ?? 0x8899aa;
-    const mesh = body(new THREE.Mesh(
-      new THREE.SphereGeometry(size, 24, 24),
-      new THREE.MeshLambertMaterial({ color: pc,
-        emissive: new THREE.Color(pc).multiplyScalar(.28) })),
+    const skin = planetSkin({ kind: kindName, seed: pl.id || hashOf(pl.name), tempK: pl.st ? pl.st[0] : 0, size });
+    spinners.push(...skin.spin);
+    const mesh = body(skin.surface,
       { kind: `Planet (${kindName})`, name: pl.name,
         sub: `${rAu.toFixed(1)} AU from star, r ${pl.radiusKm.toLocaleString()} km`
              + (pl.moons.length ? `, ${pl.moons.length} moons` : "")
@@ -207,6 +209,16 @@ export function openOrrery(host, data, onClose) {
                ...(pl.scanRows || [])] },
       pl.tag ? `${short} · ${pl.tag}` : short, "pl" + (pl.tagCls ? " " + pl.tagCls : ""));
     mesh.position.copy(p);
+    mesh.rotation.z = ((pl.id || hashOf(pl.name)) % 40 - 20) * Math.PI / 180;   /* a little axial tilt */
+    for (const x of skin.extra) {
+      if (x.glow) {
+        const air = new THREE.Sprite(new THREE.SpriteMaterial({ map: softGlow(), color: x.glow,
+          transparent: true, opacity: .35, depthWrite: false }));
+        air.scale.setScalar(x.scale);
+        air.position.copy(p);
+        scene.add(air);
+      } else mesh.add(x);
+    }
 
     /* orbit ring through the planet's compressed radius */
     const ring = new THREE.RingGeometry(p.length() - .02, p.length() + .02, 128);
@@ -223,8 +235,8 @@ export function openOrrery(host, data, onClose) {
       const mv = new THREE.Vector3(off[0] / d, off[1] / d, -off[2] / d)
         .multiplyScalar(md).add(p);
       const mm = body(new THREE.Mesh(
-        new THREE.SphereGeometry(.16, 10, 10),
-        new THREE.MeshLambertMaterial({ color: 0x9aa4b5, emissive: 0x2c3440 })),
+        new THREE.SphereGeometry(.16, 16, 12),
+        moonMaterial(m.id || hashOf(m.name), m.st ? m.st[0] : (pl.st ? pl.st[0] : 0))),
         { kind: "Moon", name: m.name, sub: `orbits ${short}`,
           rows: [["Orbits", pl.name], ...statRows(m.st)] }, null);
       mm.position.copy(mv);
@@ -315,10 +327,11 @@ export function openOrrery(host, data, onClose) {
       v = place(st.pos);
     }
     const scol = STATION_CLASS_COLORS[st.svcClass] ?? STATION_CLASS_COLORS.basic;
+    /* an invisible box takes the clicks; the model it carries shows the empire style,
+       and its light keeps the service colour of the legend */
     const mesh = body(new THREE.Mesh(
-      new THREE.BoxGeometry(.8, .3, .3),
-      new THREE.MeshLambertMaterial({ color: scol,
-        emissive: new THREE.Color(scol).multiplyScalar(.35) })),
+      new THREE.BoxGeometry(.9, .9, .9),
+      new THREE.MeshBasicMaterial({ visible: false })),
       { kind: "Station", name: st.name,
         sub: `${Math.hypot(...st.pos).toFixed(1)} AU from star`,
         rows: [["Operator", st.corp || ""],
@@ -333,6 +346,13 @@ export function openOrrery(host, data, onClose) {
                ["Distance from star", F.au(Math.hypot(...st.pos))]] }, null);
     mesh.position.copy(v);
     mesh.lookAt(0, 0, 0);
+    const model = stationModel(st, st.id || hashOf(st.name), scol);
+    model.scale.setScalar(1.25);
+    mesh.add(model);
+    const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map: softGlow(), color: scol,
+      transparent: true, opacity: .55, depthWrite: false }));
+    beacon.scale.setScalar(1.6);
+    mesh.add(beacon);
     if ((st.svc || []).some(s => STAR_SERVICES.includes(s))) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
         map: starTexture(), color: 0xffd966,
@@ -437,14 +457,18 @@ export function openOrrery(host, data, onClose) {
   }
 
   let alive = true;
-  (function loop() {
+  const loop = function loop() {
     if (!alive) return;
     requestAnimationFrame(loop);
     controls.update();
+    const now = performance.now(), dt = Math.min(0.1, (now - (loop.t || now)) / 1000); loop.t = now;
+    for (const sp of spinners) sp.obj.rotation.y += sp.rate * dt;
+    star.rotation.y += 0.01 * dt;
     glow.position.copy(star.position);
     renderer.render(scene, camera);
     placeLabels();
-  })();
+  };
+  loop();
 
   function onResize() {
     const w2 = host.clientWidth, h2 = host.clientHeight;

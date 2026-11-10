@@ -423,8 +423,8 @@ async function open3d(b) {
     }
     const n = Object.keys(got).length;
     planets.push({
-      name: pname, type: tname, pos: au(p.slice(3, 6)), radiusKm: p[6], st: null, belts: [],
-      moons: p[7].map(m => ({ name: `${pname} - Moon ${m[1]}`, pos: au(m.slice(2, 5)) })),
+      id: p[0], name: pname, type: tname, pos: au(p.slice(3, 6)), radiusKm: p[6], st: null, belts: [],
+      moons: p[7].map(m => ({ id: m[0], name: `${pname} - Moon ${m[1]}`, pos: au(m.slice(2, 5)) })),
       pi: res, scanRows: rows,
       tag: res.length ? `${n}/${res.length}` : "", tagCls: res.length && n >= res.length ? "scanned" : "",
     });
@@ -439,7 +439,7 @@ async function open3d(b) {
       keys: `<span class="orr-key"><i class="k-moon"></i> moon</span>
              <span class="orr-key" style="color:#8ff0b0">green label = every resource scanned</span>
              <span class="orr-key">click a planet for its scans and pictures</span>`,
-      cel: { star: st ? { name: `${name} - Star`, type: st, tempK: SPECTRAL_K[(st.match(/Sun ([OBAFGKM])/) || [])[1]] || 0,
+      cel: { star: st ? { id: sys, name: `${name} - Star`, type: st, tempK: SPECTRAL_K[(st.match(/Sun ([OBAFGKM])/) || [])[1]] || 0,
                           radiusKm: b.star[1] } : null,
              planets, gates: [] },
       stations: [], secColor: "#e0524f", closeLabel: "✕ close",

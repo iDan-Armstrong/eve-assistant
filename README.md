@@ -31,6 +31,17 @@ enlarged, and the view says so). Jita's four stacked gates really do sit
 within a thousandth of an AU of each other; the view fans their labels
 instead of pretending otherwise.
 
+Every body is skinned from its own data, with textures drawn by code (no
+game art): stars take their colour from their temperature; planets are
+drawn by type (gas bands, storm swirls, continents and oceans with clouds,
+ice sheets, glowing lava and plasma, cratered barren rock, shattered
+crust) and tinted by surface temperature; moons are cratered, bluer when
+cold and browner when hot. Stations get a model in their empire's style
+(a gold spire, stacked towers, a sphere and ring, a rusty scaffold) with
+lit windows, and a light in the colour of their services, so the legend
+still reads. The same body always looks the same: its id seeds its
+texture. J-systems open in the same view from the J-Space Survey.
+
 No build step, no framework, no account needed. The map is a static site:
 the same `web/` folder deploys unchanged to GitHub Pages.
 
