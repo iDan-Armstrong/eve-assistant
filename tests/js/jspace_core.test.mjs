@@ -20,7 +20,7 @@ test("planet kinds and their resources", () => {
 test("reading a capture: text as the recognition returned it from a real scan", () => {
   const text = `Search for anything\n® J170949\n#® J170949 Ill\nScan\nAqueous Liquids Raw Resource\nNo\nfilter\n` +
     `Resource Density: 58%\nAqueaus Liquids QD .-\nRequired For\ng: Base Metals\nWater Tier 1\nIonic Solutions\nNoble Gas`;
-  assert.deepStrictEqual(J.parseScanText(text), { system: "J170949", index: 3, resource: "Aqueous Liquids", density: 58 });
+  assert.deepStrictEqual(J.parseScanText(text), { system: "J170949", index: 3, resource: "Aqueous Liquids", density: 58, sure: true });
   assert.strictEqual(J.parseScanText("Nobie Gas Raw Resource\nResource Density: 1O%").resource, "Noble Gas");
   assert.strictEqual(J.parseScanText("Nobie Gas Raw Resource\nResource Density: 1O%").density, 10);
   assert.strictEqual(J.matchResource("Non-CS Crystais"), "Non-CS Crystals");
@@ -41,6 +41,7 @@ test("reading a capture: text as the recognition returned it from a real scan", 
   assert.strictEqual(J.findProduct("after the water"), "Water");
   assert.strictEqual(J.findProduct("later after"), null);
   assert.strictEqual(J.findProduct("0xygen Tit 1"), "Oxygen");
+  assert.strictEqual(J.parseScanText("Noble Gas\nResource Density: 40%").sure, false);
   assert.strictEqual(J.parseScanText("Plasmoids Tier 1").resource, "Suspended Plasma");
 });
 

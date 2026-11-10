@@ -108,10 +108,11 @@ export function findProduct(text) {
   return best ? best.prod : null;
 }
 
-/* text read from a capture -> { system, index, resource, density } (null where not found) */
+/* text read from a capture -> { system, index, resource, density, sure } (null where not found);
+   sure: the resource came from its Tier 1 product, not from a name near the density line */
 export function parseScanText(text, names = ALL_RESOURCES) {
   const t = String(text || "");
-  const out = { system: null, index: null, resource: null, density: null };
+  const out = { system: null, index: null, resource: null, density: null, sure: false };
   const pm = t.match(/\b(J ?\d{6}|Thera|J\d{4,5})\s+([IVXl1|!]{1,5})(?=\s|$)/m);
   if (pm) {
     const n = fromRoman(pm[2].replace(/[l1|!]/g, "I"));
@@ -119,7 +120,7 @@ export function parseScanText(text, names = ALL_RESOURCES) {
   }
   /* surest first: the Tier 1 product the tooltip says the resource is required for */
   const prod = findProduct(t);
-  if (prod && names.includes(RESOURCE_OF[prod])) out.resource = RESOURCE_OF[prod];
+  if (prod && names.includes(RESOURCE_OF[prod])) { out.resource = RESOURCE_OF[prod]; out.sure = true; }
   const rm = !out.resource && t.match(/([A-Za-z\- ]{3,40}?)\s*Raw\s*Res[a-z]*/i);
   if (rm) out.resource = matchResource(rm[1], names);
   const dm = t.match(/Res[a-z]*\s*Dens[a-z]*\s*[:;.]?\s*([0-9OoIl]{1,3})\s*%/i);

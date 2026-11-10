@@ -212,7 +212,7 @@ function renderCapture() {
   box.innerHTML = `<h3>Scan capture</h3>
     ${on ? `<p class="ok-text">Waiting for scan pictures.</p>
       <ol class="tight"><li>Pick the planet in the list here, then in game open it and press <b>Scan</b>.</li>
-      <li>Click a resource, then hover it so the tooltip shows its <b>Resource Density</b>.</li>
+      <li>Click a resource, then hover it so the tooltip shows its <b>Resource Density</b> and what it is <b>Required For</b>.</li>
       <li>Press <b>Win+Shift+S</b> and capture the panel, the tooltip and the planet.</li>
       <li>${X.S.link.ok ? "Survey Link brings the picture here." : "Click this page and press <b>Ctrl+V</b>."} Repeat for each resource.</li></ol>`
       : `<p class="hint">Press <b>Input scan results</b> on a planet to start. Pictures are only taken while capturing is on.</p>`}
@@ -342,7 +342,8 @@ async function place(c, got) {
   const what = [where, c.resource || (got.resource ? `${got.resource} (not on this planet)` : "resource not read"),
     got.density != null ? `${got.density}%` : "density not read"].join(", ");
   if (otherSys) { c.state = "fix"; c.text = `This picture looks like ${got.system}, not ${X.nameOf(V.sys)}. Read: ${what}. Check and save.`; }
-  else if (p && c.resource && c.d != null) { c.state = "ready"; c.text = what; }
+  else if (p && c.resource && c.d != null && got.sure) { c.state = "ready"; c.text = what; }
+  else if (p && c.resource && c.d != null) { c.state = "fix"; c.text = `Read: ${what}. The resource name was not certain: check it and save.`; }
   else { c.state = "fix"; c.text = `Read: ${what}. Check and save.`; }
   if (p && p[0] !== V.planet) { V.planet = p[0]; save(); render(); }
 }
