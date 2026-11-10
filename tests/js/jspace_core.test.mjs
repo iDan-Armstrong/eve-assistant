@@ -34,6 +34,13 @@ test("reading a capture: text as the recognition returned it from a real scan", 
     "&: Base Metals\nRequired For\nlonic Solutions\n57 Reactive Metals Tier |\nNoble Gas\n.* Suspended Plast [";
   assert.deepStrictEqual([J.parseScanText(bm).resource, J.parseScanText(bm).density], ["Base Metals", 69]);
   assert.strictEqual(J.parseScanText("Oxygen Tier 1").resource, "Noble Gas");
+  // a Noble Gas capture: "Tier" read as "Tit", the list's Ionic Solutions read just above the density
+  const ng = "# J170949\n4 J178949 III\nBuild\nScan\nNo filter\n7 Aqueous Liquids\nF Base Metals\nNoble Gas\n.\nlonic Solutions\n" +
+    "Resource Density: 78%\ni Noble Gas\nRequired For\n.* Suspended Plasr CENIEEEED\nn\nOxygen Tit |";
+  assert.deepStrictEqual([J.parseScanText(ng).resource, J.parseScanText(ng).density], ["Noble Gas", 78]);
+  assert.strictEqual(J.findProduct("after the water"), "Water");
+  assert.strictEqual(J.findProduct("later after"), null);
+  assert.strictEqual(J.findProduct("0xygen Tit 1"), "Oxygen");
   assert.strictEqual(J.parseScanText("Plasmoids Tier 1").resource, "Suspended Plasma");
 });
 

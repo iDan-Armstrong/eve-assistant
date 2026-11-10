@@ -88,6 +88,26 @@ export function matchResource(phrase, names = ALL_RESOURCES) {
   return best ? best.name : null;
 }
 
+/* a Tier 1 product named anywhere in the text (any line, any position), or null.
+   Short names must match within one letter, so ordinary words do not pass for them */
+export function findProduct(text) {
+  let best = null;
+  for (const line of String(text || "").split(/\n|\|/)) {
+    const words = line.toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean);
+    for (const prod of Object.keys(RESOURCE_OF)) {
+      const k = prod.split(" ").length, target = prod.toLowerCase();
+      /* a short name read with a letter wrong only counts on its "Tier" line (often read as Tit, Tie) */
+      const tierLine = /\bti[a-z]{0,3}\b/.test(words.join(" "));
+      const limit = target.length < 8 ? (tierLine ? 1 : 0) : Math.max(2, Math.floor(target.length / 5));
+      for (let i = 0; i + k <= words.length; i++) {
+        const d = lev(words.slice(i, i + k).join(" "), target);
+        if (d <= limit && (!best || d < best.d)) best = { prod, d };
+      }
+    }
+  }
+  return best ? best.prod : null;
+}
+
 /* text read from a capture -> { system, index, resource, density } (null where not found) */
 export function parseScanText(text, names = ALL_RESOURCES) {
   const t = String(text || "");
@@ -98,10 +118,8 @@ export function parseScanText(text, names = ALL_RESOURCES) {
     if (n) { out.system = pm[1].replace(" ", ""); out.index = n; }
   }
   /* surest first: the Tier 1 product the tooltip says the resource is required for */
-  for (const m of t.matchAll(/([A-Za-z ]{3,40}?)\s*Tier\b/gi)) {
-    const prod = matchResource(m[1], Object.keys(RESOURCE_OF));
-    if (prod && names.includes(RESOURCE_OF[prod])) { out.resource = RESOURCE_OF[prod]; break; }
-  }
+  const prod = findProduct(t);
+  if (prod && names.includes(RESOURCE_OF[prod])) out.resource = RESOURCE_OF[prod];
   const rm = !out.resource && t.match(/([A-Za-z\- ]{3,40}?)\s*Raw\s*Res[a-z]*/i);
   if (rm) out.resource = matchResource(rm[1], names);
   const dm = t.match(/Res[a-z]*\s*Dens[a-z]*\s*[:;.]?\s*([0-9OoIl]{1,3})\s*%/i);
