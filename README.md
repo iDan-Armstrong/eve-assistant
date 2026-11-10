@@ -676,6 +676,42 @@ structure, starbase, deployable, drone and fighter types that appear on
 directional scan, refreshed by the manual "J-space reference data" workflow;
 `tools/build_kspace_index.py` writes a 0.4 MB known-space name and gate index.
 
+### J-Space Survey (systems, planets and scans)
+
+The **Systems** tab of the survey page is the J-Space Survey: a record of
+each J-system built one system at a time. Pick a system (or press Where I
+am) and it opens already filled in from the game data: class, effect,
+statics seen by surveyors, the star, and every planet with its type and
+moons. Planet and moon positions are in the data too, for the 3D view.
+
+**Planet scans.** The game's planetary scan cannot be copied as text, so a
+scan is captured as a picture, one resource at a time:
+
+1. Pick the planet in the list and press **Input scan results**.
+2. In game, open the planet, press Scan, click a resource and hover it so
+   the tooltip shows its Resource Density.
+3. Press Win+Shift+S and capture the panel, the tooltip and the planet.
+   Survey Link 1.4 hands the picture to the page while it is waiting for
+   scans (and ignores pictures at any other time); without it, click the
+   page and press Ctrl+V.
+
+Text recognition (Tesseract, in the browser) reads the resource and its
+density from the picture and saves the scan with the pilot's
+**resolution**: Planetology plus Advanced Planetology, 0 to 10, read from
+the pilot's skills (the survey asks once for permission to read skills).
+Anything it could not read is left for the pilot to pick before saving.
+Scans are kept per resource. A new capture replaces the stored one when its
+resolution is higher, or the same and the capture is newer (to show another
+side of the planet, say); a lower resolution never replaces a better scan.
+The replaced picture is deleted.
+
+**Where scans go.** With sharing on, scans and pictures go to the Atlas
+relay: the org's own copy, or the public copy when the org's J-Space
+Survey sharing is Public. Everyone reads both, the better scan per resource
+winning. Pictures are stored in Cloudflare R2 and served only to pilots who
+may read them. Without sharing, or until R2 is set up, they stay in the
+browser.
+
 ### Live data
 
 Live inputs refresh hourly: a scheduled GitHub Action runs

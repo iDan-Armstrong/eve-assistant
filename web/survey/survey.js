@@ -18,6 +18,7 @@
      chain_core.mjs and survey_core.mjs, shared with the relay and tested. */
 import * as C from "./chain_core.mjs";
 import * as X from "./survey_core.mjs";
+import * as JV from "./jspace_view.mjs";
 
 /* In development: the page asks for a password first. A soft gate on a
    public site, not security; only a hash of the password is in the code. */
@@ -285,7 +286,7 @@ async function linkPoll() {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 1500);
   try {
-    const r = await fetch(`${LINK_URL}?since=${S.link.seq}`, { signal: ctl.signal, cache: "no-store" });
+    const r = await fetch(`${LINK_URL}?since=${S.link.seq}${JV.armed() ? "&img=1" : ""}`, { signal: ctl.signal, cache: "no-store" });
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || r.status);
     if (!S.link.ok) feed("Survey Link connected: copies from EVE now arrive here on their own", "link");
@@ -309,6 +310,7 @@ async function linkPoll() {
       S.link.seq = it.seq;
       if (it.kind === "paste") routePaste(it.text, "Survey Link");
       else if (it.kind === "system") onLogSystem(it);
+      else if (it.kind === "image") linkImage(it.seq);
     }
     S.link.next = Date.now() + 700;
   } catch (e) {
@@ -320,6 +322,13 @@ async function linkPoll() {
     S.link.busy = false;
     renderLinkChip();
   }
+}
+/* a scan picture Survey Link caught while the Systems view was waiting for one */
+async function linkImage(seq) {
+  try {
+    const r = await fetch(`${LINK_URL.replace("/events", "/image")}?seq=${seq}`, { cache: "no-store" });
+    if (r.ok) JV.takeImage(await r.blob(), "Survey Link");
+  } catch { /* gone or helper closed */ }
 }
 function onLogSystem(it) {
   const id = lookup(it.system);
@@ -547,6 +556,12 @@ function setView(v) {
   document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
   $("#chainView").hidden = v !== "chain";
   $("#surveyorView").hidden = v !== "surveyor";
+  $("#systemsView").hidden = v !== "systems";
+  const jspace = v === "systems";
+  document.title = jspace ? "J-Space Survey" : "N-Space Survey";
+  $("#wmName").textContent = jspace ? "J-Space Survey" : "N-Space Survey";
+  $("#wmSub").textContent = jspace ? "wormhole systems, planets and scans for the New Eden Atlas" : "wormhole chain mapper for the New Eden Atlas";
+  if (jspace) { JV.show(S.here && C.isJ(S.here.system) && !store.get("atlas.jspace.sel", null) ? S.here.system : null); return; }
   render(true);
 }
 
@@ -567,6 +582,7 @@ function setRoot(id) {
 
 /* force=false (timers) leaves panels alone while the pilot is typing in them */
 function render(force = false) {
+  if (S.view === "systems") return;
   if (S.view === "surveyor") renderSurveyor(force);
   else renderChain(force);
 }
@@ -1268,12 +1284,21 @@ async function start() {
   /* paste anywhere: Ctrl+V on the page (outside text boxes) routes the copy */
   document.addEventListener("paste", e => {
     if (e.target.closest("input, textarea")) return;
+    const file = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"))?.getAsFile();
+    if (file && S.view === "systems") {
+      e.preventDefault();
+      if (!JV.armed()) toast("Press Input scan results on a planet first.");
+      else JV.takeImage(file, "paste");
+      return;
+    }
     const text = e.clipboardData?.getData("text");
     if (text) { e.preventDefault(); routePaste(text, "paste"); }
   });
   document.addEventListener("pointerdown", () => { if (audio?.state === "suspended") audio.resume(); }, { once: false });
 
-  setView(S.view === "chain" ? "chain" : "surveyor");
+  JV.init({ S, $, esc, store, toast, feed, modal, pilots, surveyor, sharing, relayPost, shareOrg, nameOf, label,
+            systemMeta, staticsHtml, lookup, attachSuggest, age, isJ: C.isJ });
+  setView(["chain", "systems"].includes(S.view) ? S.view : "surveyor");
   renderPilots();
   renderStatus();
   renderLinkChip();

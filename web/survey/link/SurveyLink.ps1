@@ -1,5 +1,5 @@
 <#
-  Survey Link: the clipboard and chat-log bridge for N-Space Survey.
+  Survey Link: the clipboard and chat-log bridge for the N-Space and J-Space Surveys.
 
   Run it with Start-SurveyLink.bat (double-click). It does two things while open:
 
@@ -13,6 +13,11 @@
      system. Survey Link reads those lines, so the survey knows about a jump about
      a second after it happens.
 
+  3. Planet scan pictures. Only while the J-Space Survey page is waiting for
+     scan captures (you pressed Input scan results there), a picture you put on
+     the clipboard (Win+Shift+S or Print Screen) is handed to that page. At any
+     other time pictures are ignored. The last few are kept in memory only.
+
   It talks only to this computer (http://localhost:47321) and only answers the
   N-Space Survey page. Nothing is sent anywhere else, nothing is written to disk,
   and copies are forgotten after ten minutes. It never touches the game client.
@@ -21,7 +26,8 @@
 param([int]$Port = 47321)
 
 $ErrorActionPreference = 'Stop'
-$Version = '1.3'
+Add-Type -AssemblyName System.Drawing
+$Version = '1.4'
 $Allowed = @('https://idan-armstrong.github.io', 'http://localhost:8799')
 $KeepMs = 10 * 60 * 1000
 
@@ -30,6 +36,8 @@ $script:seq = 0
 $script:lastClip = $null
 $script:logs = @{}          # path -> @{ pos; char }
 $script:where = @{}         # character -> system name
+$script:images = @{}        # seq -> PNG bytes, only while the page asks for pictures
+$script:wantImageUntil = 0
 
 function NowMs { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
 
@@ -74,13 +82,27 @@ function Check-Clipboard {
   if ($n -eq $script:lastSeqNo) { return }
   $script:lastSeqNo = $n
   try { $text = Get-Clipboard -Raw } catch { return }
-  if ($null -eq $text) { return }
+  if ($null -eq $text) { Check-Image; return }
   $script:lastClip = $text
   $kind = Get-EveKind $text
   if ($kind) {
     Add-Item 'paste' @{ text = $text }
     Write-Host ("{0:HH:mm:ss}  passed on a {1}" -f (Get-Date), $kind) -ForegroundColor Cyan
   }
+}
+
+# a picture on the clipboard is passed on only while the survey page waits for scan captures
+function Check-Image {
+  if ((NowMs) -gt $script:wantImageUntil) { return }
+  try { $img = Get-Clipboard -Format Image } catch { return }
+  if ($null -eq $img) { return }
+  $ms = New-Object System.IO.MemoryStream
+  try { $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png) } finally { $img.Dispose() }
+  Add-Item 'image' @{ size = $ms.Length }
+  $script:images[$script:seq] = $ms.ToArray()
+  $ms.Dispose()
+  foreach ($k in @($script:images.Keys | Sort-Object | Select-Object -SkipLast 5)) { $script:images.Remove($k) }
+  Write-Host ("{0:HH:mm:ss}  passed on a scan picture" -f (Get-Date)) -ForegroundColor Cyan
 }
 
 # ---- Local chat logs ---------------------------------------------------------
@@ -169,7 +191,21 @@ function Handle($ctx) {
     Send $ctx 204 ''
     return
   }
+  if ($req.Url.AbsolutePath -eq '/image') {
+    $n = 0
+    [void][long]::TryParse($req.QueryString['seq'], [ref]$n)
+    $bytes = $script:images[[int]$n]
+    if (-not $bytes) { Send $ctx 404 '{"error":"no such picture"}'; return }
+    $res.StatusCode = 200
+    $res.Headers['Cache-Control'] = 'no-store'
+    $res.ContentType = 'image/png'
+    $res.ContentLength64 = $bytes.Length
+    $res.OutputStream.Write($bytes, 0, $bytes.Length)
+    $res.Close()
+    return
+  }
   if ($req.Url.AbsolutePath -ne '/events') { Send $ctx 404 '{"error":"not found"}'; return }
+  if ($req.QueryString['img'] -eq '1') { $script:wantImageUntil = (NowMs) + 5000 }
   $since = 0
   [void][long]::TryParse($req.QueryString['since'], [ref]$since)
   $cut = (NowMs) - $KeepMs

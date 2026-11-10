@@ -120,6 +120,21 @@
   .consent > div { background: var(--panel); border: 1px solid var(--ink-faint); border-radius: 8px; padding: 18px;
                    max-width: 520px; line-height: 1.5; }
 
+  /* systems view (J-Space Survey) */
+  .js { grid-template-columns: minmax(280px, 0.9fr) 1.3fr minmax(260px, 0.8fr); gap: 10px; padding: 10px; overflow: hidden; }
+  .jtable tr.jrow { cursor: pointer; }
+  .jtable tr.jrow:hover td, .jtable tr.jrow.on td { background: #15203a; }
+  .jres { display: grid; gap: 8px; }
+  .jr { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: center; border: 1px solid var(--panel-edge); border-radius: 6px; padding: 6px; }
+  .jthumb { width: 150px; height: 100px; display: grid; place-items: center; background: #0a101b; border-radius: 4px; overflow: hidden; cursor: zoom-in; }
+  .jthumb img { width: 100%; height: 100%; object-fit: contain; }
+  .jd { display: inline-block; width: 140px; height: 8px; background: #111a2a; border-radius: 4px; overflow: hidden; }
+  .jd span { display: block; height: 100%; background: linear-gradient(90deg, var(--c1), var(--c4), var(--c6)); }
+  .jcap { border: 1px solid var(--panel-edge); border-radius: 6px; padding: 6px 8px; margin: 6px 0; font-size: 13px; }
+  .jcap.ok { border-color: #1f5a35; color: var(--ok); } .jcap.bad { border-color: var(--bad); color: var(--bad); } .jcap.warn { border-color: var(--warn); }
+  .ok-text { color: var(--ok); margin: 0 0 6px; }
+  @media (max-width: 1100px) { .js { grid-template-columns: 1fr; overflow: auto; } }
+
   svg text { font-family: inherit; }
   .node rect { fill: #0b1220; stroke: var(--panel-edge); stroke-width: 1.5; }
   .node.sel rect { stroke: var(--focus); stroke-width: 2.5; }
@@ -139,9 +154,9 @@
 </head>
 <body>
 <header>
-  <div class="wordmark">N-Space Survey<small>wormhole chain mapper for the New Eden Atlas</small></div>
+  <div class="wordmark"><span id="wmName">N-Space Survey</span><small id="wmSub">wormhole chain mapper for the New Eden Atlas</small></div>
   <a href="../">Back to Atlas</a>
-  <nav class="views"><button data-view="surveyor" aria-pressed="true">Surveyor</button><button data-view="chain" aria-pressed="false">Chain</button></nav>
+  <nav class="views"><button data-view="surveyor" aria-pressed="true">Surveyor</button><button data-view="chain" aria-pressed="false">Chain</button><button data-view="systems" aria-pressed="false" title="J-Space Survey: systems, planets and scans">Systems</button></nav>
   <span class="spacer"></span>
   <button id="linkChip" class="chip off">Survey Link off</button>
   <button id="scoreChip" class="chip" title="Your survey rank and points">Cadet · 0 pts</button>
@@ -158,6 +173,11 @@
   <section id="svLinks" class="card"></section>
   <section id="svDscan" class="card"></section>
   <section id="svFeed" class="card"></section>
+</main>
+<main id="systemsView" class="js" hidden>
+  <section id="jsSystem" class="card"></section>
+  <section id="jsPlanet" class="card"></section>
+  <section id="jsCapture" class="card"></section>
 </main>
 <main id="chainView" hidden>
   <section id="chainWrap">

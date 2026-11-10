@@ -13,7 +13,7 @@ const src = readFileSync(new URL("../../worker/index.js", import.meta.url), "utf
 const dir = mkdtempSync(join(tmpdir(), "orgdir-"));
 const core = pathToFileURL(new URL("../../worker/org_core.js", import.meta.url).pathname).href;
 writeFileSync(join(dir, "w.mjs"), `import * as Org from ${JSON.stringify(core)};\n` +
-  `const ACTIVE_MINUTES=0, diffLedger=0, freshPresence=0, mergeSightings=0, prune=0, reserveRows=0, applyOp=0, emptyChain=0, pruneChain=0, applyKbOp=0, award=0, chainEvents=0, leaderboard=0, WORMHOLES={}, JSYSTEMS={}, CLASSES={};\n` + src);
+  `const ACTIVE_MINUTES=0, diffLedger=0, freshPresence=0, mergeSightings=0, prune=0, reserveRows=0, applyOp=0, emptyChain=0, pruneChain=0, applyKbOp=0, award=0, chainEvents=0, leaderboard=0, applyScan=0, mergeStores=0, resolutionOf=0, WORMHOLES={}, JSYSTEMS={}, CLASSES={};\n` + src);
 const { OrgDirectory } = await import(pathToFileURL(join(dir, "w.mjs")).href);
 
 function directory() {

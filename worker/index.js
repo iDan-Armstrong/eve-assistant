@@ -50,7 +50,12 @@
    of the corporation's, so a pilot shares with their corp or one of their
    orgs, never both at once.
 
-   Bindings: SIGHTINGS (KV), CORP and ORGS (Durable Objects), CLIENT_ID,
+   J-Space Survey planet scans:
+   POST /jspace/get   body {"token", "org", "systems": [ids]} -> {"planets": {system: {planet: {resource: scan}}}, "shots"}
+   POST /jspace/scan  body {"token", "org", "system", "planet", "resource", "d", "image": base64 JPEG}
+   POST /jspace/shot  body {"token", "org", "key"} -> the JPEG, for pilots who can read its room
+
+   Bindings: SIGHTINGS (KV), CORP and ORGS (Durable Objects), SHOTS (R2, optional), CLIENT_ID,
    ALLOWED_ORIGINS and OPERATORS (vars: operator character names). The
    salt for pilot hashes is made on first use and kept in KV, which is
    private to the Worker; a SALT secret, if set, takes its place. */
@@ -60,6 +65,7 @@ import { ACTIVE_MINUTES, diffLedger, freshPresence, mergeSightings, prune,
 import { applyOp, emptyChain, prune as pruneChain } from "../web/survey/chain_core.mjs";
 import { applyKbOp, award, chainEvents, leaderboard } from "../web/survey/survey_core.mjs";
 import * as Org from "./org_core.js";
+import { applyScan, mergeStores, resolutionOf } from "../web/survey/jspace_core.mjs";
 import WORMHOLES from "../web/data/jspace/wormholes.json";
 import JSYSTEMS from "../web/data/jspace/systems.json";
 import CLASSES from "../web/data/jspace/classes.json";
@@ -205,6 +211,23 @@ export class CorpRoom {
         if (rec) out[sys] = rec;
       }
       return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" } });
+    }
+    if (url.pathname === "/jp-get") {
+      const { systems } = await req.json();
+      const out = {};
+      for (const sys of (systems || []).slice(0, 100)) {
+        const rec = await st.get(`jp:${sys}`);
+        if (rec) out[sys] = rec;
+      }
+      return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" } });
+    }
+    if (url.pathname === "/jp-scan") {
+      const { op } = await req.json();
+      const sys = String(op.system);
+      const store = { [sys]: (await st.get(`jp:${sys}`)) || {} };
+      const r = applyScan(store, op);
+      if (r.applied) await st.put(`jp:${sys}`, store[sys]);
+      return new Response(JSON.stringify(r), { headers: { "Content-Type": "application/json" } });
     }
     if (url.pathname === "/chain-get" || url.pathname === "/chain-ops") {
       const body = await req.json();
@@ -466,6 +489,57 @@ async function presence(req, env) {
   return { shared: true };
 }
 
+/* ---- J-Space Survey: planet scans ----------------------------------------
+   Records live in a room like the chain: the org's (or corporation's) room,
+   or the shared "jspace:public" room when the org's J-Space sharing is
+   Public. Readers get both, the better scan per resource winning. Pictures
+   go to R2 (binding SHOTS) under "<room>/<system>/<planet>/<resource>/<at>.jpg"
+   and are served only to pilots who can read that room. Resolution is read
+   from the pilot's own skills here, never taken from the page. */
+const PUBLIC_ROOM = "jspace:public";
+const scanRoom = sp => (sp.org && sp.org.jspace === "public" ? PUBLIC_ROOM : sp.key);
+const readRooms = sp => [...new Set([sp.key, PUBLIC_ROOM])];
+const MAX_SHOT = 600000;          // base64 characters, about 450 KB of JPEG
+
+async function jspaceGet(body, env) {
+  const who = await verify(body.token, env);
+  const sp = await spaceOf(who, body.org, env);
+  const systems = (body.systems || []).map(Number).filter(Boolean).slice(0, 100);
+  const copies = await Promise.all(readRooms(sp).map(k => room(env, k).fetch("https://room/jp-get",
+    { method: "POST", body: JSON.stringify({ systems }) }).then(r => r.json())));
+  return { planets: mergeStores(...copies), shots: !!env.SHOTS, room: scanRoom(sp) };
+}
+
+async function jspaceScan(body, env) {
+  const who = await verify(body.token, env);
+  if (!who.scp.includes("esi-skills.read_skills.v1")) throw new Error("scope missing: esi-skills.read_skills.v1");
+  const sp = await spaceOf(who, body.org, env);
+  const skills = await esiAuthed(`/characters/${who.id}/skills`, body.token);
+  const res = resolutionOf(skills.skills);
+  const target = scanRoom(sp), at = Date.now();
+  const image = typeof body.image === "string" && env.SHOTS ? body.image : null;
+  if (image && image.length > MAX_SHOT) throw new Error("picture is too large");
+  const shot = image ? `${target}/${+body.system}/${+body.planet}/${String(body.resource).replace(/[^A-Za-z-]/g, "")}/${at}.jpg` : null;
+  const op = { system: +body.system, planet: +body.planet, resource: String(body.resource), d: body.d, res, by: who.name, at, shot };
+  const r = await room(env, target).fetch("https://room/jp-scan", { method: "POST", body: JSON.stringify({ op }) }).then(x => x.json());
+  if (r.applied && shot) {
+    await env.SHOTS.put(shot, Uint8Array.from(atob(image), c => c.charCodeAt(0)), { httpMetadata: { contentType: "image/jpeg" } });
+  }
+  if (r.applied && r.replaced && r.replaced.shot && env.SHOTS) await env.SHOTS.delete(r.replaced.shot);
+  return { applied: r.applied, reason: r.reason || null, res, by: who.name, at, shot, room: target, shots: !!env.SHOTS };
+}
+
+async function jspaceShot(body, env, headers) {
+  const who = await verify(body.token, env);
+  const sp = await spaceOf(who, body.org, env);
+  const key = String(body.key || "");
+  if (!env.SHOTS) throw new Error("picture storage is not set up");
+  if (!readRooms(sp).some(k => key.startsWith(`${k}/`))) throw new Error("not your org's picture");
+  const obj = await env.SHOTS.get(key);
+  if (!obj) return json({ error: "picture not found" }, 404, headers);
+  return new Response(obj.body, { headers: { ...headers, "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400" } });
+}
+
 export default {
   async fetch(req, env) {
     const headers = cors(req, env);
@@ -516,6 +590,15 @@ export default {
         const r = await room(env, corp).fetch("https://room/kb-get",
           { method: "POST", body: JSON.stringify({ systems: (body.systems || []).map(Number).filter(Boolean) }) });
         return json({ corporation: sp.label, org: sp.org, kb: await r.json() }, 200, { ...headers, "Cache-Control": "no-store" });
+      }
+      if (req.method === "POST" && url.pathname === "/jspace/get") {
+        return json(await jspaceGet(await req.json(), env), 200, { ...headers, "Cache-Control": "no-store" });
+      }
+      if (req.method === "POST" && url.pathname === "/jspace/scan") {
+        return json(await jspaceScan(await req.json(), env), 200, { ...headers, "Cache-Control": "no-store" });
+      }
+      if (req.method === "POST" && url.pathname === "/jspace/shot") {
+        return await jspaceShot(await req.json(), env, headers);
       }
       if (req.method === "POST" && url.pathname === "/report") {
         return json(await report(req, env), 200, headers);
