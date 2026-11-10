@@ -90,22 +90,22 @@ export function openOrrery(host, data, onClose) {
   host.innerHTML = `
     <div class="orr-top">
       <div>
-        <div class="orr-crumbs">${system.region} ‹ ${system.constellation}${system.bulwark
-          ? ` · ${system.bulwark.faction} Bulwark${system.bulwark.hq ? " (War HQ)" : ""}` : ""}</div>
+        <div class="orr-crumbs">${data.crumbs || `${system.region} ‹ ${system.constellation}${system.bulwark
+          ? ` · ${system.bulwark.faction} Bulwark${system.bulwark.hq ? " (War HQ)" : ""}` : ""}`}</div>
         <div class="orr-title">${system.name}
           <span style="color:${data.secColor}">${system.sec.toFixed(1)}</span></div>
       </div>
-      <button class="orr-close" aria-label="Back to map">✕ map</button>
+      <button class="orr-close" aria-label="Close the 3D view">${data.closeLabel || "✕ map"}</button>
     </div>
     <div class="orr-note">
-    <span class="orr-key"><i class="k-gate"></i> stargate</span>
+    ${data.keys || `<span class="orr-key"><i class="k-gate"></i> stargate</span>
     <span class="orr-key">stations:
       <i class="k-station k-st-market"></i> market
       <i class="k-station k-st-industry"></i> industry
       <i class="k-station k-st-cloning"></i> clone bay
       <span class="k-starred">★</span> refinery / compression</span>
     <span class="orr-key"><i class="k-belt"></i> asteroid belt</span>
-    <span class="orr-key"><i class="k-moon"></i> moon</span><br>
+    <span class="orr-key"><i class="k-moon"></i> moon</span>`}<br>
     directions true · distances log-compressed · bodies enlarged
       · drag to orbit, scroll to zoom · hover anything</div>
     <div class="orr-tip" hidden></div>
@@ -203,8 +203,9 @@ export function openOrrery(host, data, onClose) {
                ["PI resources", (pl.pi && pl.pi.length) ? pl.pi.join(", ")
                   : (kindName === "Shattered" ? "none (cannot be colonized)" : "")],
                ["Sov power", pl.power ? pl.power.toLocaleString() : ""],
-               ["Sov workforce", pl.workforce ? pl.workforce.toLocaleString() : ""]] },
-      short, "pl");
+               ["Sov workforce", pl.workforce ? pl.workforce.toLocaleString() : ""],
+               ...(pl.scanRows || [])] },
+      pl.tag ? `${short} · ${pl.tag}` : short, "pl" + (pl.tagCls ? " " + pl.tagCls : ""));
     mesh.position.copy(p);
 
     /* orbit ring through the planet's compressed radius */

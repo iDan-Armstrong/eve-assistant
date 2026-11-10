@@ -117,7 +117,7 @@
   #suggest div:hover, #suggest div.on { background: #15203a; }
   .toast { position: fixed; bottom: 16px; left: 16px; background: var(--panel); border: 1px solid var(--ink-faint);
            padding: 10px 14px; border-radius: 6px; max-width: 420px; z-index: 10; }
-  .consent { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: grid; place-items: center; z-index: 20; }
+  .consent { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: grid; place-items: center; z-index: 2000; }
   .consent > div { background: var(--panel); border: 1px solid var(--ink-faint); border-radius: 8px; padding: 18px;
                    max-width: 520px; line-height: 1.5; }
 
@@ -135,6 +135,81 @@
   .jcap.ok { border-color: #1f5a35; color: var(--ok); } .jcap.bad { border-color: var(--bad); color: var(--bad); } .jcap.warn { border-color: var(--warn); }
   .ok-text { color: var(--ok); margin: 0 0 6px; }
   @media (max-width: 1100px) { .js { grid-template-columns: 1fr; overflow: auto; } }
+
+  /* ---- 3D system view ---------------------------------------------- */
+  #orrery {
+    position: fixed; inset: 0; z-index: 1500; display: none;
+    background: radial-gradient(ellipse at 50% 45%, #0a101d 0%, #05080f 75%);
+  }
+  #orrery canvas { position: absolute; inset: 0; }
+  .orr-top {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 18px; pointer-events: none;
+  }
+  .orr-top > * { pointer-events: auto; }
+  .orr-crumbs { font-size: 12px; color: var(--ink-dim); }
+  .orr-title { font-size: 24px; font-weight: 600; letter-spacing: .03em; }
+  .orr-title span { font-size: 16px; margin-left: 10px; }
+  .orr-close {
+    background: rgba(13,19,31,.85); color: var(--ink);
+    border: 1px solid var(--panel-edge); border-radius: 3px;
+    font: inherit; font-size: 13px; padding: 7px 14px; cursor: pointer;
+  }
+  .orr-close:hover { background: #162032; }
+  .orr-close:focus-visible { outline: 2px solid var(--focus); }
+  .orr-note {
+    position: absolute; bottom: 14px; left: 18px; z-index: 2;
+    font-size: 11.5px; color: var(--ink-faint); line-height: 1.9;
+  }
+  .orr-key { margin-right: 14px; color: var(--ink-dim); }
+  .orr-key i { display: inline-block; margin-right: 5px; vertical-align: -1px; }
+  .k-gate { width: 9px; height: 9px; background: #e8d26a; transform: rotate(45deg); }
+  .k-station { width: 11px; height: 5px; background: #9fd9ff; }
+  .k-st-basic { background: #9fd9ff; }
+  .k-st-market { background: #74c476; margin-left: 8px; }
+  .k-st-industry { background: #e0a84f; margin-left: 8px; }
+  .k-st-cloning { background: #e8828c; margin-left: 8px; }
+  .k-starred { color: #ffd966; margin-left: 8px; }
+  .k-belt { width: 10px; height: 10px;
+    background: radial-gradient(circle at 30% 40%, #c9a86a 1.5px, transparent 2px),
+                radial-gradient(circle at 70% 30%, #c9a86a 1.5px, transparent 2px),
+                radial-gradient(circle at 55% 75%, #c9a86a 1.5px, transparent 2px); }
+  .k-moon { width: 7px; height: 7px; border-radius: 50%; background: #9aa4b5; }
+  .orr-label {
+    position: absolute; z-index: 3; white-space: nowrap;
+    font-size: 12.5px; font-weight: 600; color: #eef3fa; pointer-events: none;
+    text-shadow: 0 0 2px #05080f, 0 0 5px #05080f, 0 1px 3px #000, 0 0 9px #05080f;
+  }
+  .orr-label.gate { color: #f2dc72; }
+  .orr-tip {
+    position: absolute; z-index: 3; pointer-events: none;
+    background: rgba(13,19,31,.95); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 6px 10px; font-size: 12px; max-width: 280px;
+  }
+  .orr-tip b { font-weight: 600; }
+  .orr-profile {
+    position: absolute; top: 76px; right: 18px; z-index: 4;
+    width: 272px; max-height: calc(100% - 130px); overflow-y: auto;
+    background: rgba(11,16,26,.96); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 13px 15px 11px;
+  }
+  .orr-pkind { font-size: 11px; color: var(--ink-dim); }
+  .orr-pname { font-size: 15.5px; font-weight: 600; margin: 2px 0 9px; line-height: 1.3; }
+  .orr-profile table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .orr-profile td { padding: 3.5px 0; vertical-align: top; }
+  .orr-profile td:first-child { color: var(--ink-dim); padding-right: 10px; white-space: nowrap; }
+  .orr-profile td:last-child { text-align: right; }
+  .orr-pclose {
+    position: absolute; top: 6px; right: 6px;
+    background: none; border: 0; color: var(--ink-dim);
+    font-size: 14px; cursor: pointer; padding: 3px 7px;
+  }
+  .orr-pclose:hover { color: var(--ink); }
+  .orr-pclose:focus-visible { outline: 2px solid var(--focus); }
+  .orr-label.pl.scanned { color: #8ff0b0; }
+  .orr-profile td img { display: block; width: 100%; max-width: 230px; margin: 4px 0 2px auto; border-radius: 3px; cursor: zoom-in; }
+  .orr-profile { width: 300px; }
 
   svg text { font-family: inherit; }
   .node rect { fill: #0b1220; stroke: var(--panel-edge); stroke-width: 1.5; }
@@ -196,7 +271,9 @@
   </section>
   <aside id="side"><p class="hint">Pick a system in the chain, or type one in the Root box.</p></aside>
 </main>
+<div id="orrery" role="region" aria-label="3D system view"></div>
 <div id="suggest" hidden></div>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.js" } }</script>
 <script src="../sso.js"></script>
 <script type="module" src="survey.js"></script>
 </body>

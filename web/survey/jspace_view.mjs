@@ -154,10 +154,13 @@ export async function render() {
     <div class="meta">${X.systemMeta(V.sys)}</div>
     <div class="row">${X.isJ(V.sys) ? `<span class="hint">Statics:</span> ${X.staticsHtml(V.sys)}` : ""}</div>
     <div class="meta">Star: ${X.esc(typeName(b?.star?.[0]) || "unknown")}</div>
+    ${b ? `<div class="row"><button id="js3d">3D view</button></div>` : ""}
     <h3>Planets</h3>
     ${b ? `<table class="jtable"><thead><tr><th></th><th>Type</th><th>Moons</th><th>Scanned</th></tr></thead><tbody>${rows}</tbody></table>`
         : `<p class="hint">No planet data for this system.</p>`}`;
   wirePicker();
+  const b3 = X.$("#js3d");
+  if (b3) b3.onclick = () => open3d(b);
   left.querySelectorAll(".jrow").forEach(tr => tr.onclick = () => { V.planet = +tr.dataset.p; save(); render(); });
   renderPlanet(b);
   renderCapture();
@@ -392,4 +395,61 @@ function askSkills(p) {
        Sign in once more and allow skills to be read. Nothing else changes.</p>
     <div class="row" style="justify-content:flex-end"><button data-close>Not now</button><button class="primary" id="jsSkills">Sign in</button></div>`);
   X.$("#jsSkills").onclick = () => window.EveSSO.login([SKILLS_SCOPE]);
+}
+
+/* ---- 3D system view ------------------------------------------------------------------
+   The Atlas's own orrery, fed from the game data in bodies/ (positions in km,
+   turned to AU) and the scans: a scanned planet's profile lists each resource
+   with its density, resolution and picture. */
+const AU_KM = 1.495978707e8;
+const SPECTRAL_K = { O: 30000, B: 15000, A: 9000, F: 7000, G: 5600, K: 4500, M: 3200 };
+async function open3d(b) {
+  const sys = V.sys, L = X.label(sys), name = X.nameOf(sys);
+  const au = p => [p[0] / AU_KM, p[1] / AU_KM, p[2] / AU_KM];
+  const scans = V.jp[sys] || {};
+  const planets = [];
+  for (const p of b.planets) {
+    const tname = typeName(p[2]), pname = `${name} ${J.roman(p[1])}`;
+    const res = J.resourcesOf(tname), got = scans[p[0]] || {};
+    const rows = [];
+    for (const r of res) {
+      const s = got[r];
+      let cell = s ? `<b>${s.d}%</b> · res ${s.res} · ${X.esc(s.by || "")} · ${X.age(s.at)} ago` : "not scanned";
+      if (s) {
+        const url = await shotUrl(sys, p[0], r, s).catch(() => null);
+        if (url) cell += `<img src="${url}" alt="${X.esc(r)} scan" data-full="${url}">`;
+      }
+      rows.push([X.esc(r), cell]);
+    }
+    const n = Object.keys(got).length;
+    planets.push({
+      name: pname, type: tname, pos: au(p.slice(3, 6)), radiusKm: p[6], st: null, belts: [],
+      moons: p[7].map(m => ({ name: `${pname} - Moon ${m[1]}`, pos: au(m.slice(2, 5)) })),
+      pi: res, scanRows: rows,
+      tag: res.length ? `${n}/${res.length}` : "", tagCls: res.length && n >= res.length ? "scanned" : "",
+    });
+  }
+  const st = typeName(b.star?.[0]);
+  const host = X.$("#orrery");
+  try {
+    const { openOrrery } = await import("../orrery.js");
+    openOrrery(host, {
+      system: { name, sec: -1, region: "", constellation: "" },
+      crumbs: `${X.esc(L.cls)} · ${X.esc(L.sub || "no effect")} · J-Space Survey`,
+      keys: `<span class="orr-key"><i class="k-moon"></i> moon</span>
+             <span class="orr-key" style="color:#8ff0b0">green label = every resource scanned</span>
+             <span class="orr-key">click a planet for its scans and pictures</span>`,
+      cel: { star: st ? { name: `${name} - Star`, type: st, tempK: SPECTRAL_K[(st.match(/Sun ([OBAFGKM])/) || [])[1]] || 0,
+                          radiusKm: b.star[1] } : null,
+             planets, gates: [] },
+      stations: [], secColor: "#e0524f", closeLabel: "✕ close",
+    });
+    host.onclick = e => {
+      const img = e.target.closest(".orr-profile img");
+      if (img) X.modal(`<img src="${img.dataset.full}" style="max-width:min(1200px,90vw);display:block" alt="">
+        <div class="row" style="justify-content:flex-end"><button data-close>Close</button></div>`);
+    };
+  } catch (err) {
+    X.toast(`The 3D view could not start (${err.message || err}).`);
+  }
 }
