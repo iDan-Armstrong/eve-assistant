@@ -430,8 +430,8 @@ function dscanLine(sum) {
 /* ---- corp sharing via the Atlas relay ------------------------------------------ */
 /* the Atlas pilot menu's Organizations > Share with: an org id, or empty for the corp */
 const shareOrg = () => { try { return localStorage.getItem("atlas.shareTo") || undefined; } catch { return undefined; } };
-async function relayPost(path, extra) {
-  const p = pilots()[0];
+async function relayPost(path, extra, pilot) {
+  const p = pilot || pilots()[0];
   const r = await fetch(`${S.relay}${path}`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: await EveSSO.token(p.id), org: shareOrg(), ...extra }) });
   const body = await r.json();

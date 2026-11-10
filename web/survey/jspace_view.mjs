@@ -356,7 +356,7 @@ async function commit(c) {
     if (X.sharing() && p) {
       if (!p.scopes.includes(SKILLS_SCOPE)) { askSkills(p); throw new Error("the survey needs permission to read skills"); }
       const image = c.jpeg ? await b64(c.jpeg) : null;
-      const r = await X.relayPost("/jspace/scan", { system: V.sys, planet: c.planet, resource: c.resource, d: c.d, image });
+      const r = await X.relayPost("/jspace/scan", { system: V.sys, planet: c.planet, resource: c.resource, d: c.d, image }, p);
       if (!r.applied) throw new Error(r.reason || "not saved");
       J.applyScan(V.jp, { system: V.sys, planet: c.planet, resource: c.resource, d: c.d, res: r.res, by: r.by, at: r.at, shot: r.shot });
       if (!r.shot && c.jpeg) await keepLocal(c);
