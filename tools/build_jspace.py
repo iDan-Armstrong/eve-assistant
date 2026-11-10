@@ -8,6 +8,11 @@ Reads CCP's Static Data Export in its JSON Lines form and writes:
                                       (to = target class id, life = hours, mass and jump in kg,
                                       regen = kg per day)
     web/data/jspace/classes.json     class id -> label (C1..C6, HS, LS, NS, Thera, ...)
+    web/data/jspace/bodies/<n>.json  {systemId: {"star": [typeId, radiusKm], "planets": [[planetId, index,
+                                      typeId, xKm, yKm, zKm, radiusKm, [[moonId, index, xKm, yKm, zKm], ...]], ...]}}
+                                      for J-space systems, split in 16 files by systemId % 16
+                                      (positions are in the system's own frame, the star at 0,0,0)
+    web/data/jspace/body_types.json  {typeId: name} for the planet and star types used there
     web/data/jspace/scan_types.json  {typeId: [name, group, cat]} for what shows on directional
                                       scan: S ship, U Upwell structure, P starbase, D deployable,
                                       R drone, F fighter, O orbital (customs offices)
@@ -122,6 +127,35 @@ def main(src_path: Path, out: Path) -> None:
     except FileNotFoundError:
         print("note: no mapSecondarySuns file; effects left blank")
 
+    def km(row, key="position"):
+        v = row.get(key)
+        if isinstance(v, dict):
+            v = [v.get("x", 0), v.get("y", 0), v.get("z", 0)]
+        return [round((c or 0) / 1000) for c in (v or [0, 0, 0])]
+
+    is_j = lambda sid: bool(sid) and 31000000 <= sid < 32000000
+    bodies, body_types = {}, {}
+    try:
+        for i, row in enumerate(src.rows("mapStars")):
+            if i == 0:
+                print("mapStars keys:", sorted(row.keys()))
+            sid = row.get("solarSystemID")
+            if is_j(sid):
+                bodies.setdefault(sid, {"star": None, "planets": []})["star"] = [row.get("typeID"), round((row.get("radius") or 0) / 1000)]
+                body_types[row.get("typeID")] = types.get(row.get("typeID"), ("",))[0]
+    except FileNotFoundError:
+        print("note: no mapStars file")
+    moons_of = {}
+    try:
+        for i, row in enumerate(src.rows("mapMoons")):
+            if i == 0:
+                print("mapMoons keys:", sorted(row.keys()))
+            if is_j(row.get("solarSystemID")):
+                moons_of.setdefault(row.get("orbitID"), []).append(
+                    [rid(row, "moonID"), row.get("orbitIndex") or row.get("celestialIndex") or 0, *km(row)])
+    except FileNotFoundError:
+        print("note: no mapMoons file")
+
     planets_per, moons_per = {}, {}
     try:
         for i, row in enumerate(src.rows("mapPlanets")):
@@ -130,6 +164,12 @@ def main(src_path: Path, out: Path) -> None:
             sid = row.get("solarSystemID")
             if sid and 31000000 <= sid < 32000000:
                 planets_per[sid] = planets_per.get(sid, 0) + 1
+                pid = rid(row, "planetID")
+                moons = sorted(moons_of.get(pid, []), key=lambda m: m[1])
+                bodies.setdefault(sid, {"star": None, "planets": []})["planets"].append(
+                    [pid, row.get("celestialIndex") or 0, row.get("typeID"), *km(row),
+                     round((row.get("radius") or 0) / 1000), moons])
+                body_types[row.get("typeID")] = types.get(row.get("typeID"), ("",))[0]
                 moons_per[sid] = moons_per.get(sid, 0) + len(row.get("moonIDs") or [])
     except FileNotFoundError:
         print("note: no mapPlanets file")
@@ -185,6 +225,18 @@ def main(src_path: Path, out: Path) -> None:
     (out / "wormholes.json").write_text(json.dumps(dict(sorted(wormholes.items())), separators=(",", ":")))
     (out / "classes.json").write_text(json.dumps(CLASS_LABELS, separators=(",", ":")))
     (out / "scan_types.json").write_text(json.dumps(scan_types, separators=(",", ":")))
+    bdir = out / "bodies"
+    bdir.mkdir(exist_ok=True)
+    shards = {}
+    for sid, b in bodies.items():
+        b["planets"].sort(key=lambda p: p[1])
+        shards.setdefault(sid % 16, {})[str(sid)] = b
+    for n in range(16):
+        (bdir / f"{n}.json").write_text(json.dumps(shards.get(n, {}), separators=(",", ":")))
+    (out / "body_types.json").write_text(json.dumps({str(k): v for k, v in body_types.items() if k}, separators=(",", ":")))
+    sample = next(iter(bodies.items()), None)
+    print("bodies:", len(bodies), "planets:", sum(len(b["planets"]) for b in bodies.values()),
+          "sample:", json.dumps(sample)[:400] if sample else None)
     by_class = {}
     for v in systems.values():
         by_class[v[1]] = by_class.get(v[1], 0) + 1
