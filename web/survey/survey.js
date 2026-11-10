@@ -38,6 +38,9 @@ const K_CHAIN = "atlas.survey.chain", K_ROOT = "atlas.survey.root", K_HOME = "at
 const CAPSULES = new Set([670, 33328]);
 const POLL_MS = 10e3, SYNC_MS = 15e3;
 const LINK_URL = "http://localhost:47321/events";
+const LINK_LATEST = "1.5";              /* the Survey Link version on this site */
+const older = (a, b) => { const x = String(a || "0").split(".").map(Number), y = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
 const ALARMS = [[30 * 60e3, "30 minutes"], [10 * 60e3, "10 minutes"], [0, "now"]];
 
 const S = {
@@ -290,7 +293,7 @@ async function linkPoll() {
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || r.status);
     if (!S.link.ok) feed("Survey Link connected: copies from EVE now arrive here on their own", "link");
-    S.link.ok = true; S.link.err = ""; S.link.logs = !!body.logs;
+    S.link.ok = true; S.link.err = ""; S.link.logs = !!body.logs; S.link.version = body.version;
     const items = [].concat(body.items || []);
     if (body.seq < S.link.seq) S.link.primed = false;        // helper restarted
     if (!S.link.primed) {
@@ -541,7 +544,9 @@ function renderStatus() {
 function renderLinkChip() {
   const c = $("#linkChip");
   c.className = `chip ${S.link.ok ? "ok" : "off"}`;
-  c.textContent = S.link.ok ? `Survey Link on${S.link.logs ? "" : " (no chat logs)"}` : "Survey Link off";
+  const old = S.link.ok && older(S.link.version, LINK_LATEST);
+  c.textContent = old ? `Survey Link ${S.link.version || "old"} is out of date` : S.link.ok ? `Survey Link on${S.link.logs ? "" : " (no chat logs)"}` : "Survey Link off";
+  if (old) c.className = "chip warn";
   c.title = S.link.ok ? "Copies from EVE arrive here on their own" : "Start Survey Link on this computer";
 }
 function renderScore() {
@@ -1227,6 +1232,9 @@ function showLinkHelp() {
       <li>Double-click <b>Start-SurveyLink.bat</b>. A window opens; leave it open while you survey. Close it to stop.</li>
       <li>The first time, Chrome or Edge asks to let this site reach apps on your device. Click <b>Allow</b>.</li>
     </ol>
+    ${S.link.ok && older(S.link.version, LINK_LATEST) ? `<p style="color:var(--warn)">You are running Survey Link ${esc(S.link.version || "")}; the latest is ${LINK_LATEST}.
+       Close it and start it again: from version 1.5 the start file fetches the latest on every start. If it still says
+       ${esc(S.link.version || "")}, download the two files below again, once, into the same folder.</p>` : ""}
     <p class="hint">Status: ${S.link.ok ? `connected${S.link.logs ? ", reading chat logs" : ", chat logs not found"}` : `not connected (${esc(S.link.err || "not started")})`}.</p>
     <div class="row" style="justify-content:flex-end"><button data-close>Close</button></div>`);
 }
