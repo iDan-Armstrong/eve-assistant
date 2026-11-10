@@ -19,7 +19,7 @@ import * as J from "./jspace_core.mjs";
 const TESS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 const SKILLS_SCOPE = "esi-skills.read_skills.v1";
 const K_JP = "atlas.jspace.planets", K_LOCALSHOT = "atlas.jspace.localShots", K_SEL = "atlas.jspace.sel";
-const ARM_MS = 15 * 60e3;
+const ARM_MS = 3 * 3600e3;          /* capturing stays on until stopped, or three hours without a picture */
 const MAX_JPEG = 430e3;
 
 let X;            // the page's helpers, from init()
@@ -38,6 +38,11 @@ export function init(ctx) {
   if (sel) { V.sys = sel.sys; V.planet = sel.planet; }
 }
 export const armed = () => Date.now() < V.armed;
+/* called every few seconds: when capturing has timed out, the panels say so */
+let shownArmed = false;
+export function tick() {
+  if (armed() !== shownArmed) { shownArmed = armed(); if (X && X.$("#jsCapture")) render(); }
+}
 const save = () => { X.store.set(K_JP, V.jp); X.store.set(K_LOCALSHOT, V.localShots); X.store.set(K_SEL, { sys: V.sys, planet: V.planet }); };
 
 /* ---- reference data ------------------------------------------------------------- */
@@ -203,6 +208,7 @@ function renderCapture() {
   const box = X.$("#jsCapture");
   if (!box) return;
   const on = armed();
+  shownArmed = on;
   box.innerHTML = `<h3>Scan capture</h3>
     ${on ? `<p class="ok-text">Waiting for scan pictures.</p>
       <ol class="tight"><li>Pick the planet in the list here, then in game open it and press <b>Scan</b>.</li>
@@ -286,6 +292,7 @@ let nextId = 1;
 /* a picture from Survey Link or a paste */
 export async function takeImage(blob, source) {
   if (!armed()) return false;
+  V.armed = Date.now() + ARM_MS;       /* each picture keeps capturing on */
   V.queue.push({ blob, source });
   if (!V.busy) drain();
   return true;

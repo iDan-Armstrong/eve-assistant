@@ -1317,6 +1317,7 @@ async function start() {
   setInterval(linkPoll, 350);
   setInterval(sync, SYNC_MS);
   setInterval(renderTimers, 1000);
+  setInterval(() => { if (S.view === "systems") JV.tick(); }, 5000);
   setInterval(() => { C.prune(S.chain, Date.now()); saveLocal(); render(); }, 60e3);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(); sync(); } });
   sync();
