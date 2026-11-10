@@ -27,7 +27,7 @@ param([int]$Port = 47321)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$Version = '1.4'
+$Version = '1.5'
 $Allowed = @('https://idan-armstrong.github.io', 'http://localhost:8799')
 $KeepMs = 10 * 60 * 1000
 
@@ -38,6 +38,8 @@ $script:logs = @{}          # path -> @{ pos; char }
 $script:where = @{}         # character -> system name
 $script:images = @{}        # seq -> PNG bytes, only while the page asks for pictures
 $script:wantImageUntil = 0
+$script:clipPending = $false
+$script:clipAt = 0
 
 function NowMs { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
 
@@ -78,24 +80,36 @@ public static extern uint GetClipboardSequenceNumber();
 $script:lastSeqNo = [SurveyLink.Native]::GetClipboardSequenceNumber()
 
 function Check-Clipboard {
+  # a copy is looked at again for a few seconds: the snipping tool finishes
+  # writing its picture a moment after the clipboard changes
   $n = [SurveyLink.Native]::GetClipboardSequenceNumber()
-  if ($n -eq $script:lastSeqNo) { return }
-  $script:lastSeqNo = $n
-  try { $text = Get-Clipboard -Raw } catch { return }
-  if ($null -eq $text) { Check-Image; return }
-  $script:lastClip = $text
-  $kind = Get-EveKind $text
-  if ($kind) {
-    Add-Item 'paste' @{ text = $text }
-    Write-Host ("{0:HH:mm:ss}  passed on a {1}" -f (Get-Date), $kind) -ForegroundColor Cyan
+  if ($n -ne $script:lastSeqNo) { $script:lastSeqNo = $n; $script:clipAt = NowMs; $script:clipPending = $true }
+  if (-not $script:clipPending) { return }
+  $text = $null
+  try { $text = Get-Clipboard -Raw } catch { }
+  if (-not [string]::IsNullOrEmpty($text)) {
+    $script:clipPending = $false
+    $script:lastClip = $text
+    $kind = Get-EveKind $text
+    if ($kind) {
+      Add-Item 'paste' @{ text = $text }
+      Write-Host ("{0:HH:mm:ss}  passed on a {1}" -f (Get-Date), $kind) -ForegroundColor Cyan
+    }
+    return
   }
+  if (Check-Image) { $script:clipPending = $false; return }
+  if ((NowMs) - $script:clipAt -gt 3000) { $script:clipPending = $false }
 }
 
 # a picture on the clipboard is passed on only while the survey page waits for scan captures
 function Check-Image {
-  if ((NowMs) -gt $script:wantImageUntil) { return }
-  try { $img = Get-Clipboard -Format Image } catch { return }
-  if ($null -eq $img) { return }
+  try { $img = Get-Clipboard -Format Image } catch { return $false }
+  if ($null -eq $img) { return $false }
+  if ((NowMs) -gt $script:wantImageUntil) {
+    $img.Dispose()
+    Write-Host ("{0:HH:mm:ss}  picture ignored: the J-Space Survey page is not waiting for scans" -f (Get-Date)) -ForegroundColor DarkGray
+    return $true
+  }
   $ms = New-Object System.IO.MemoryStream
   try { $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png) } finally { $img.Dispose() }
   Add-Item 'image' @{ size = $ms.Length }
@@ -103,6 +117,7 @@ function Check-Image {
   $ms.Dispose()
   foreach ($k in @($script:images.Keys | Sort-Object | Select-Object -SkipLast 5)) { $script:images.Remove($k) }
   Write-Host ("{0:HH:mm:ss}  passed on a scan picture" -f (Get-Date)) -ForegroundColor Cyan
+  return $true
 }
 
 # ---- Local chat logs ---------------------------------------------------------
@@ -205,7 +220,7 @@ function Handle($ctx) {
     return
   }
   if ($req.Url.AbsolutePath -ne '/events') { Send $ctx 404 '{"error":"not found"}'; return }
-  if ($req.QueryString['img'] -eq '1') { $script:wantImageUntil = (NowMs) + 5000 }
+  if ($req.QueryString['img'] -eq '1') { $script:wantImageUntil = (NowMs) + 60000 }
   $since = 0
   [void][long]::TryParse($req.QueryString['since'], [ref]$since)
   $cut = (NowMs) - $KeepMs
