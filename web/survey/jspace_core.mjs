@@ -26,6 +26,15 @@ export const PLANET_RESOURCES = {
   Temperate: ["Aqueous Liquids", "Autotrophs", "Carbon Compounds", "Complex Organisms", "Micro Organisms"],
 };
 export const ALL_RESOURCES = [...new Set(Object.values(PLANET_RESOURCES).flat())].sort();
+/* each raw resource makes exactly one Tier 1 product: the tooltip's "Required For" line names it */
+export const PRODUCT_OF = {
+  "Aqueous Liquids": "Water", "Autotrophs": "Industrial Fibers", "Base Metals": "Reactive Metals",
+  "Carbon Compounds": "Biofuels", "Complex Organisms": "Proteins", "Felsic Magma": "Silicon",
+  "Heavy Metals": "Toxic Metals", "Ionic Solutions": "Electrolytes", "Micro Organisms": "Bacteria",
+  "Noble Gas": "Oxygen", "Noble Metals": "Precious Metals", "Non-CS Crystals": "Chiral Structures",
+  "Planktic Colonies": "Biomass", "Reactive Gas": "Oxidizing Compound", "Suspended Plasma": "Plasmoids",
+};
+const RESOURCE_OF = Object.fromEntries(Object.entries(PRODUCT_OF).map(([r, p]) => [p, r]));
 
 /* "Planet (Storm)" -> "Storm" */
 export const planetKind = typeName => (String(typeName || "").match(/\(([^)]+)\)/) || [])[1] || String(typeName || "");
@@ -88,7 +97,12 @@ export function parseScanText(text, names = ALL_RESOURCES) {
     const n = fromRoman(pm[2].replace(/[l1|!]/g, "I"));
     if (n) { out.system = pm[1].replace(" ", ""); out.index = n; }
   }
-  const rm = t.match(/([A-Za-z\- ]{3,40}?)\s*Raw\s*Res[a-z]*/i);
+  /* surest first: the Tier 1 product the tooltip says the resource is required for */
+  for (const m of t.matchAll(/([A-Za-z ]{3,40}?)\s*Tier\b/gi)) {
+    const prod = matchResource(m[1], Object.keys(RESOURCE_OF));
+    if (prod && names.includes(RESOURCE_OF[prod])) { out.resource = RESOURCE_OF[prod]; break; }
+  }
+  const rm = !out.resource && t.match(/([A-Za-z\- ]{3,40}?)\s*Raw\s*Res[a-z]*/i);
   if (rm) out.resource = matchResource(rm[1], names);
   const dm = t.match(/Res[a-z]*\s*Dens[a-z]*\s*[:;.]?\s*([0-9OoIl]{1,3})\s*%/i);
   if (!out.resource && dm) {

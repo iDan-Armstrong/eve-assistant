@@ -29,6 +29,12 @@ test("reading a capture: text as the recognition returned it from a real scan", 
   assert.deepStrictEqual([web.resource, web.density], ["Aqueous Liquids", 58]);
   assert.strictEqual(J.parseScanText("#: J170949 Xx :\n2 J170949 Ill x\n4 al Aqueous Liquids =. ©... a\nNo filter Resource Density: 58%").resource, "Aqueous Liquids");
   assert.strictEqual(J.matchResource("Search for anything"), null);
+  // a Base Metals capture where the list row beside the tooltip was read between its title and density
+  const bm = "ov\n¢: J178949\n# J178949 [Il\nBuild\nScan\nNo filter\nBase Metals\nJ Aqueous Liquids\nResource Density: 69%\n" +
+    "&: Base Metals\nRequired For\nlonic Solutions\n57 Reactive Metals Tier |\nNoble Gas\n.* Suspended Plast [";
+  assert.deepStrictEqual([J.parseScanText(bm).resource, J.parseScanText(bm).density], ["Base Metals", 69]);
+  assert.strictEqual(J.parseScanText("Oxygen Tier 1").resource, "Noble Gas");
+  assert.strictEqual(J.parseScanText("Plasmoids Tier 1").resource, "Suspended Plasma");
 });
 
 test("replacing: higher resolution, or the same and newer; lower never", () => {
