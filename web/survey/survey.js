@@ -38,7 +38,7 @@ const K_CHAIN = "atlas.survey.chain", K_ROOT = "atlas.survey.root", K_HOME = "at
 const CAPSULES = new Set([670, 33328]);
 const POLL_MS = 10e3, SYNC_MS = 15e3;
 const LINK_URL = "http://localhost:47321/events";
-const LINK_LATEST = "1.5";              /* the Survey Link version on this site */
+const LINK_LATEST = "1.6";              /* the Survey Link version on this site */
 const older = (a, b) => { const x = String(a || "0").split(".").map(Number), y = b.split(".").map(Number);
   for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
 const ALARMS = [[30 * 60e3, "30 minutes"], [10 * 60e3, "10 minutes"], [0, "now"]];

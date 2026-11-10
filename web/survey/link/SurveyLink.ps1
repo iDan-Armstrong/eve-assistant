@@ -27,7 +27,7 @@ param([int]$Port = 47321)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$Version = '1.5'
+$Version = '1.6'
 $Allowed = @('https://idan-armstrong.github.io', 'http://localhost:8799')
 $KeepMs = 10 * 60 * 1000
 
@@ -40,6 +40,8 @@ $script:images = @{}        # seq -> PNG bytes, only while the page asks for pic
 $script:wantImageUntil = 0
 $script:clipPending = $false
 $script:clipAt = 0
+$script:lastImageHash = ''
+$script:lastImageAt = 0
 
 function NowMs { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
 
@@ -112,9 +114,14 @@ function Check-Image {
   }
   $ms = New-Object System.IO.MemoryStream
   try { $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png) } finally { $img.Dispose() }
-  Add-Item 'image' @{ size = $ms.Length }
-  $script:images[$script:seq] = $ms.ToArray()
+  $bytes = $ms.ToArray()
   $ms.Dispose()
+  # the snipping tool writes the same picture twice: pass it on once
+  $hash = [Convert]::ToBase64String([System.Security.Cryptography.SHA256]::Create().ComputeHash($bytes))
+  if ($hash -eq $script:lastImageHash -and (NowMs) - $script:lastImageAt -lt 15000) { return $true }
+  $script:lastImageHash = $hash; $script:lastImageAt = NowMs
+  Add-Item 'image' @{ size = $bytes.Length }
+  $script:images[$script:seq] = $bytes
   foreach ($k in @($script:images.Keys | Sort-Object | Select-Object -SkipLast 5)) { $script:images.Remove($k) }
   Write-Host ("{0:HH:mm:ss}  passed on a scan picture" -f (Get-Date)) -ForegroundColor Cyan
   return $true
