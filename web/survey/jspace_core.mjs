@@ -152,6 +152,7 @@ export function applyScan(store, op) {
   if (!(d >= 0 && d <= 100) || !(res >= 0 && res <= 10)) return { applied: false, reason: "out of range" };
   const sys = String(op.system), pl = String(op.planet);
   const rec = { d, res, by: op.by || "", at: op.at || Date.now(), shot: op.shot || null };
+  if (op.org) rec.org = String(op.org);
   const planet = ((store[sys] ||= {})[pl] ||= {});
   const old = planet[op.resource] || null;
   if (!replaces(old, rec)) return { applied: false, replaced: null, reason: `stored scan has a higher resolution (${old.res})` };

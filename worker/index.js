@@ -346,6 +346,12 @@ export class OrgDirectory {
           }
           return out({ orgs: orgs.sort((a, b) => a.name.localeCompare(b.name)), open });
         }
+        case "public": {
+          /* orgs whose J-Space Survey scans anyone may read, right now */
+          const ids = [];
+          for (const id of Object.keys(index)) { const o = await this.get(id); if (o && Org.jspaceOf(o) === "public") ids.push(id); }
+          return out({ orgs: ids });
+        }
         case "mine": {
           const mine = [];
           if (body.isOperator) {
@@ -502,22 +508,26 @@ async function presence(req, env) {
 }
 
 /* ---- J-Space Survey: planet scans ----------------------------------------
-   Records live in a room like the chain: the org's (or corporation's) room,
-   or the shared "jspace:public" room when the org's J-Space sharing is
-   Public. Readers get both, the better scan per resource winning. Pictures
-   go to R2 (binding SHOTS) under "<room>/<system>/<planet>/<resource>/<at>.jpg"
-   and are served only to pilots who can read that room. Resolution is read
-   from the pilot's own skills here, never taken from the page. */
-const PUBLIC_ROOM = "jspace:public";
-const scanRoom = sp => (sp.org && sp.org.jspace === "public" ? PUBLIC_ROOM : sp.key);
-const readRooms = sp => [...new Set([sp.key, PUBLIC_ROOM])];
+   Every scan stays in the room of the org (or corporation) that captured it,
+   and its picture under that room's name in R2 (binding SHOTS):
+   "<room>/<system>/<planet>/<resource>/<at>.jpg". Who may read is decided
+   at read time: a pilot reads their own room plus the room of every org
+   whose J-Space Survey sharing is Public right now. Switching an org to Org
+   only hides all of its scans and pictures from outsiders at once; switching
+   back shows them again. Resolution is read from the pilot's own skills
+   here, never taken from the page. */
+const scanRoom = sp => sp.key;
+async function readRooms(sp, env) {
+  const pub = await orgCall(env, { action: "public" }).then(r => r.orgs || []).catch(() => []);
+  return [...new Set([sp.key, ...pub.map(id => `org:${id}`)])];
+}
 const MAX_SHOT = 600000;          // base64 characters, about 450 KB of JPEG
 
 async function jspaceGet(body, env) {
   const who = await verify(body.token, env);
   const sp = await spaceOf(who, body.org, env);
   const systems = (body.systems || []).map(Number).filter(Boolean).slice(0, 100);
-  const copies = await Promise.all(readRooms(sp).map(k => room(env, k).fetch("https://room/jp-get",
+  const copies = await Promise.all((await readRooms(sp, env)).map(k => room(env, k).fetch("https://room/jp-get",
     { method: "POST", body: JSON.stringify({ systems }) }).then(r => r.json())));
   return { planets: mergeStores(...copies), shots: !!env.SHOTS, room: scanRoom(sp) };
 }
@@ -532,7 +542,8 @@ async function jspaceScan(body, env) {
   const image = typeof body.image === "string" && env.SHOTS ? body.image : null;
   if (image && image.length > MAX_SHOT) throw new Error("picture is too large");
   const shot = image ? `${target}/${+body.system}/${+body.planet}/${String(body.resource).replace(/[^A-Za-z-]/g, "")}/${at}.jpg` : null;
-  const op = { system: +body.system, planet: +body.planet, resource: String(body.resource), d: body.d, res, by: who.name, at, shot };
+  const op = { system: +body.system, planet: +body.planet, resource: String(body.resource), d: body.d, res, by: who.name, at, shot,
+               org: sp.org ? sp.org.name : null };
   const r = await room(env, target).fetch("https://room/jp-scan", { method: "POST", body: JSON.stringify({ op }) }).then(x => x.json());
   if (r.applied && shot) {
     await env.SHOTS.put(shot, Uint8Array.from(atob(image), c => c.charCodeAt(0)), { httpMetadata: { contentType: "image/jpeg" } });
@@ -546,7 +557,7 @@ async function jspaceShot(body, env, headers) {
   const sp = await spaceOf(who, body.org, env);
   const key = String(body.key || "");
   if (!env.SHOTS) throw new Error("picture storage is not set up");
-  if (!readRooms(sp).some(k => key.startsWith(`${k}/`))) throw new Error("not your org's picture");
+  if (!(await readRooms(sp, env)).some(k => key.startsWith(`${k}/`))) throw new Error("not your org's picture");
   const obj = await env.SHOTS.get(key);
   if (!obj) return json({ error: "picture not found" }, 404, headers);
   return new Response(obj.body, { headers: { ...headers, "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400" } });

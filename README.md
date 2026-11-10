@@ -711,11 +711,12 @@ side of the planet, say); a lower resolution never replaces a better scan.
 The replaced picture is deleted.
 
 **Where scans go.** With sharing on, scans and pictures go to the Atlas
-relay: the org's own copy, or the public copy when the org's J-Space
-Survey sharing is Public. Everyone reads both, the better scan per resource
-winning. Pictures are stored in Cloudflare R2 and served only to pilots who
-may read them. Without sharing, or until R2 is set up, they stay in the
-browser.
+relay and stay with the org (or corporation) that captured them. The org's
+J-Space Survey sharing decides who else may read them, at the moment they
+are read: Org only keeps them inside the org, Public lets every pilot read
+them. Switching an org from Public to Org only hides all of its scans,
+old ones included. Pictures are stored in Cloudflare R2 and served only to
+pilots who may read the scan. Without sharing they stay in the browser.
 
 ### Live data
 

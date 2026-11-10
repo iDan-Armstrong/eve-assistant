@@ -116,6 +116,9 @@ test("open mode: no passwords, joins approved at once, waiting pilots let in", a
   const closed = await call({ action: "create", who: VARG, name: "Closed Org", adminPassword: "admin-secret", memberPassword: "member-secret" });
   assert.strictEqual((await call({ action: "join", who: BOB, org: closed.id, password: "member-secret" })).role, "pending");
   assert.strictEqual((await call({ action: "join", who: BOB, org: closed.id, open: true })).role, "member");
+  assert.deepStrictEqual((await call({ action: "public" })).orgs, []);
+  await call({ action: "admin", who: VARG, org, op: "jspace", value: "public", open: true });
+  assert.deepStrictEqual((await call({ action: "public" })).orgs, [org]);
   const view = await call({ action: "admin", who: VARG, org, op: "view", open: true });
   assert.ok(!view.error, view.error);
 });

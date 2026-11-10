@@ -36,9 +36,10 @@ test("scans are stored per system and replaced by the rules", async () => {
   assert.strictEqual(got["31000001"]["40000001"]["Noble Gas"].d, 44);
 });
 
-test("rooms: public orgs write to the public room; everyone reads both", () => {
-  assert.strictEqual(scanRoom({ key: "org:a", org: { jspace: "public" } }), "jspace:public");
-  assert.strictEqual(scanRoom({ key: "org:a", org: { jspace: "org" } }), "org:a");
+test("rooms: scans stay in their own org; readers add every org that is Public now", async () => {
+  assert.strictEqual(scanRoom({ key: "org:a", org: { jspace: "public" } }), "org:a");
   assert.strictEqual(scanRoom({ key: "98000001", org: null }), "98000001");
-  assert.deepStrictEqual(readRooms({ key: "org:a" }), ["org:a", "jspace:public"]);
+  const env = { ORGS: { idFromName: () => 1, get: () => ({ fetch: async () => new Response(JSON.stringify({ orgs: ["b", "a"] })) }) } };
+  assert.deepStrictEqual(await readRooms({ key: "org:a" }, env), ["org:a", "org:b"]);
+  assert.deepStrictEqual(await readRooms({ key: "98000001" }, env), ["98000001", "org:b", "org:a"]);
 });
