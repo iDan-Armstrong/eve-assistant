@@ -424,6 +424,11 @@ login, so only approved members can read an org's data.
   Master Admin with the same powers. If the Master Admin returns, they hold
   it again at once; if 30 more days pass first, it becomes the temporary
   holder's for good.
+- **Development mode**: while `ORG_OPEN` is `"1"` in `wrangler.toml`, orgs
+  ask for no passwords and anyone who joins is a member at once (pilots
+  already waiting are let in when they press Join again). Set it to `"0"`
+  to bring passwords and approval back; orgs made without passwords then
+  have random ones until the Master Admin sets real ones.
 - **J-Space Survey sharing**: each org is **Org only** (the default) or
   **Public**, set by the Master Admin in the admin window and shown to
   every member. It decides how much of the org's J-Space survey data the

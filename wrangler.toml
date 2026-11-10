@@ -12,6 +12,8 @@ CLIENT_ID = "38a2c041bdfd428ebd8cb580b750efdd"
 ALLOWED_ORIGINS = "https://idan-armstrong.github.io,http://localhost:8765"
 # Atlas operator characters (comma separated): reset org passwords, settle disputes
 OPERATORS = "Varg Soth"
+# development: "1" = orgs ask for no passwords and approve joins at once; "0" = passwords and approval
+ORG_OPEN = "1"
 
 [[kv_namespaces]]
 binding = "SIGHTINGS"

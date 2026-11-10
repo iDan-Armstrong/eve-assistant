@@ -50,7 +50,7 @@ async function refreshOrgs(note = "") {
   box.innerHTML = `<p class="m-meta">Loading…</p>`;
   try {
     const [mine, all] = await Promise.all([orgCall("mine"), orgCall("list")]);
-    AtlasOrg.mine = mine.orgs; AtlasOrg.all = all.orgs; AtlasOrg.operator = !!mine.operator;
+    AtlasOrg.mine = mine.orgs; AtlasOrg.all = all.orgs; AtlasOrg.operator = !!mine.operator; AtlasOrg.open = !!all.open;
     if (AtlasOrg.shareTo() && !mine.orgs.some(o => o.id === AtlasOrg.shareTo() && o.role !== "pending")) AtlasOrg.setShareTo("");
     drawOrgs(p, note);
   } catch (e) {
@@ -69,12 +69,14 @@ function drawOrgs(p, note) {
     `<button class="h-go" id="orgCreateBtn">Create Org</button>` +
     `<form id="orgCreate" class="o-form" hidden>
        <label>Org name<input id="ocName" maxlength="40" autocomplete="off"></label>
+       ${AtlasOrg.open ? `<p class="m-meta">You become Master Admin. While the Atlas is in development, orgs need no
+         passwords and anyone who joins is a member at once.</p>` : `
        <label>Admin password<input id="ocAdmin" type="password" autocomplete="new-password"></label>
        <label>Admin password again<input id="ocAdmin2" type="password" autocomplete="new-password"></label>
        <label>Member password<input id="ocMember" type="password" autocomplete="new-password"></label>
        <label>Member password again<input id="ocMember2" type="password" autocomplete="new-password"></label>
        <p class="m-meta">You become Master Admin. Members join with the member password and wait for an admin to approve them.
-         The admin password opens the admin window. At least 6 characters each, and different from each other.</p>
+         The admin password opens the admin window. At least 6 characters each, and different from each other.</p>`}
        <button class="h-go" type="submit">Create</button></form>` +
     `<div class="o-head">Share with</div>
      <label class="m-heat"><input type="radio" name="oShare" value=""${share ? "" : " checked"}> My corporation</label>` +
@@ -89,8 +91,8 @@ function drawOrgs(p, note) {
     `<div class="o-head">Join an org</div>` +
     (others.length ? `<form id="orgJoin" class="o-form">
        <label>Org<select id="ojOrg">${others.map(o => `<option value="${esc(o.id)}">${esc(o.name)} (${o.members})</option>`).join("")}</select></label>
-       <label>Member password<input id="ojPw" type="password" autocomplete="off"></label>
-       <button class="h-go" type="submit">Ask to join</button></form>` : `<p class="m-meta">No other orgs yet.</p>`) +
+       ${AtlasOrg.open ? "" : `<label>Member password<input id="ojPw" type="password" autocomplete="off"></label>`}
+       <button class="h-go" type="submit">${AtlasOrg.open ? "Join" : "Ask to join"}</button></form>` : `<p class="m-meta">No other orgs yet.</p>`) +
     (AtlasOrg.operator ? `<button class="h-dest" id="orgOperator">Operator: all orgs</button>` : "") +
     `<div id="orgAdmin"></div>` +
     `<p class="r-note">Forgotten password or a dispute? Send an in-game mail to <b>Varg Soth</b>.</p>`;
@@ -98,7 +100,7 @@ function drawOrgs(p, note) {
   document.getElementById("orgCreateBtn").onclick = () => { const f = document.getElementById("orgCreate"); f.hidden = !f.hidden; };
   document.getElementById("orgCreate").onsubmit = async e => {
     e.preventDefault();
-    const v = id => document.getElementById(id).value;
+    const v = id => document.getElementById(id)?.value ?? "";
     if (v("ocAdmin") !== v("ocAdmin2") || v("ocMember") !== v("ocMember2")) { refreshOrgs("The passwords you typed twice do not match."); return; }
     try {
       const o = await orgCall("create", { name: v("ocName"), adminPassword: v("ocAdmin"), memberPassword: v("ocMember") });
@@ -113,7 +115,7 @@ function drawOrgs(p, note) {
   if (join) join.onsubmit = async e => {
     e.preventDefault();
     try {
-      const o = await orgCall("join", { org: document.getElementById("ojOrg").value, password: document.getElementById("ojPw").value });
+      const o = await orgCall("join", { org: document.getElementById("ojOrg").value, password: document.getElementById("ojPw")?.value ?? "" });
       refreshOrgs(o.role === "pending" ? `Asked to join ${o.name}: an admin has to approve you.` : `You are in ${o.name}.`);
     } catch (err) { refreshOrgs(err.message); }
   };
@@ -145,7 +147,7 @@ function confirmInline(btn, question) {
 function adminGate(orgId) {
   const box = document.getElementById("orgAdmin");
   const o = AtlasOrg.mine.find(x => x.id === orgId);
-  if (AtlasOrg.operator) { adminRun(orgId, "view"); return; }          /* Master Admin standing everywhere, no password */
+  if (AtlasOrg.operator || AtlasOrg.open) { adminRun(orgId, "view"); return; }   /* operator, or open mode: no password */
   if (AtlasOrg.adminPw.has(orgId)) { adminRun(orgId, "view"); return; }
   box.innerHTML = `<div class="o-head">Admin: ${esc(o.name)}</div>
     <form id="oaGate" class="o-form"><label>Admin password<input id="oaPw" type="password" autocomplete="off"></label>

@@ -43,6 +43,9 @@
      in "mine", any org's data, every admin and Master Admin control,
      without the org's passwords. Not stored as a member, so an org's own
      Master Admin and the 30-day rules are unaffected.
+     While ORG_OPEN is "1" (development), no passwords are asked for and a
+     join is approved at once; "list" answers open: true so the page hides
+     the password boxes. Set it to "0" to bring passwords and approval back.
      Rules in worker/org_core.js. Passwords are kept only as salted PBKDF2
      hashes; five wrong tries an hour per pilot per org.
    Every sharing endpoint above also takes "org": <id>. The relay checks the
@@ -324,7 +327,10 @@ export class OrgDirectory {
         if (Org.settleMaster(org, now)) await this.save(org);
         return org;
       };
+      /* open mode (ORG_OPEN = "1" while in development): no passwords, joins approved at once */
+      const open = !!body.open;
       const passwordGate = async (org, rec) => {
+        if (open) return;
         if (Org.tooManyTries(org, who.id, now)) throw new Error("Too many wrong passwords: try again in an hour.");
         const ok = await checkPassword(body.adminPassword ?? body.password, rec);
         Org.noteTry(org, who.id, ok, now);
@@ -338,7 +344,7 @@ export class OrgDirectory {
             const o = await this.get(id);
             if (o) orgs.push({ id, name: o.name, members: Object.values(o.members).filter(m => m.role !== "pending").length });
           }
-          return out({ orgs: orgs.sort((a, b) => a.name.localeCompare(b.name)) });
+          return out({ orgs: orgs.sort((a, b) => a.name.localeCompare(b.name)), open });
         }
         case "mine": {
           const mine = [];
@@ -362,8 +368,13 @@ export class OrgDirectory {
         case "create": {
           const name = String(body.name || "").trim();
           if (Object.values(index).some(n => n.toLowerCase() === name.toLowerCase())) throw new Error("That name is taken.");
-          if (!goodPassword(body.adminPassword) || !goodPassword(body.memberPassword)) throw new Error("Passwords need at least 6 characters.");
-          if (body.adminPassword === body.memberPassword) throw new Error("The admin and member passwords must differ.");
+          if (!open && (!goodPassword(body.adminPassword) || !goodPassword(body.memberPassword))) throw new Error("Passwords need at least 6 characters.");
+          if (!open && body.adminPassword === body.memberPassword) throw new Error("The admin and member passwords must differ.");
+          if (!name) throw new Error("Give the org a name.");
+          /* in open mode an org made without passwords gets random ones; the Master Admin can set real ones later */
+          const rnd = () => [...crypto.getRandomValues(new Uint8Array(12))].map(b => b.toString(16).padStart(2, "0")).join("");
+          if (!goodPassword(body.adminPassword)) body.adminPassword = rnd();
+          if (!goodPassword(body.memberPassword) || body.memberPassword === body.adminPassword) body.memberPassword = rnd();
           const id = [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(36).padStart(2, "0")).join("").slice(0, 10);
           const org = Org.newOrg({ id, name, creator: who, now });
           org.pw = { admin: await hashPassword(body.adminPassword), member: await hashPassword(body.memberPassword) };
@@ -373,9 +384,10 @@ export class OrgDirectory {
         }
         case "join": {
           const org = await load();
-          if (org.members[who.id]) return out({ id: org.id, name: org.name, role: org.members[who.id].role });
+          if (org.members[who.id] && !(open && org.members[who.id].role === "pending")) return out({ id: org.id, name: org.name, role: org.members[who.id].role });
           await passwordGate(org, org.pw.member);
-          const role = Org.join(org, who, now);
+          let role = org.members[who.id] ? org.members[who.id].role : Org.join(org, who, now);
+          if (open && role === "pending") { org.members[who.id].role = role = "member"; }
           await this.save(org);
           await this.setPilotOrgs(who.id, [...await this.pilotOrgs(who.id), org.id]);
           return out({ id: org.id, name: org.name, role });
@@ -550,7 +562,7 @@ export default {
         const body = await req.json();
         const who = await verify(body.token, env);
         const { token, ...rest } = body;
-        const payload = { ...rest, who: { id: who.id, name: who.name }, isOperator: isOperator(who, env) };
+        const payload = { ...rest, who: { id: who.id, name: who.name }, isOperator: isOperator(who, env), open: env.ORG_OPEN === "1" };
         const data = await orgCall(env, payload);
         return json({ ...data, operator: payload.isOperator }, 200, { ...headers, "Cache-Control": "no-store" });
       }

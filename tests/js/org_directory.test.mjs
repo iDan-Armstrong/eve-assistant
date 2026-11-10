@@ -103,3 +103,19 @@ test("the operator holds Master Admin standing in every org, without being a mem
   assert.ok(!v.members.some(m => m.id === VARG.id));                                     // never added as a member
   assert.strictEqual(String(v.master), String(ANN.id));                                  // the org's own Master Admin stays
 });
+
+test("open mode: no passwords, joins approved at once, waiting pilots let in", async () => {
+  const { call } = directory();
+  const made = await call({ action: "create", who: VARG, name: "Open Org", open: true });
+  assert.ok(made.id);
+  const org = made.id;
+  assert.strictEqual((await call({ action: "list", who: ANN, open: true })).open, true);
+  assert.strictEqual((await call({ action: "join", who: ANN, org, open: true })).role, "member");
+  assert.strictEqual((await call({ action: "check", who: ANN, org })).ok, true);
+  // a pilot who asked before open mode is let in when they join again
+  const closed = await call({ action: "create", who: VARG, name: "Closed Org", adminPassword: "admin-secret", memberPassword: "member-secret" });
+  assert.strictEqual((await call({ action: "join", who: BOB, org: closed.id, password: "member-secret" })).role, "pending");
+  assert.strictEqual((await call({ action: "join", who: BOB, org: closed.id, open: true })).role, "member");
+  const view = await call({ action: "admin", who: VARG, org, op: "view", open: true });
+  assert.ok(!view.error, view.error);
+});
