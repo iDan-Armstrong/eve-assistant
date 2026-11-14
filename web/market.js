@@ -91,6 +91,47 @@ async function fetchItemOrders(typeId, side, progress) {
   return out;
 }
 
+/* edit distance with swapped neighbours counted as one edit (noxcium: nocxium),
+   capped: stops early once past `max` */
+function editDistance(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev2 = null, prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let low = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (prev2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) cur[j] = Math.min(cur[j], prev2[j - 2] + 1);
+      if (cur[j] < low) low = cur[j];
+    }
+    if (low > max) return max + 1;
+    prev2 = prev;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/* the item names closest to a misspelt query: the query against the start of
+   each name, and against each run of words as long as the query */
+function closeNames(q, types, limit) {
+  const max = Math.max(1, Math.floor(q.length / 4));
+  const qWords = q.split(/\s+/).length;
+  const scored = [];
+  for (const t of types) {
+    const n = t[1].toLowerCase();
+    let best = editDistance(q, n.slice(0, q.length), max);
+    if (best > 0) {
+      const words = n.split(/\s+/);
+      for (let i = 0; i + qWords <= words.length && best > 0; i++) {
+        best = Math.min(best, editDistance(q, words.slice(i, i + qWords).join(" "), max));
+      }
+    }
+    if (best <= max) scored.push([best, n.length, t]);
+  }
+  scored.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  return scored.slice(0, limit).map(x => x[2]);
+}
+
 function marketOrigin() {
   const typed = document.getElementById("mFrom").value.trim().toLowerCase();
   if (typed) {
@@ -340,11 +381,18 @@ function wireMarket() {
       else if (n.includes(q)) { has.push(t); total++; }
       if (!pass && starts.length >= LIMIT) break;
     }
-    const hits = [...starts, ...has].slice(0, LIMIT);
-    results.innerHTML = hits.map(t => `<button data-id="${t[0]}"><span class="m-tag">${esc(itemTag(t[0]))}</span>${esc(t[1])}</button>`).join("") +
+    let hits = [...starts, ...has].slice(0, LIMIT);
+    /* nothing by name: a misspelling, so offer the closest names */
+    const fuzzy = !hits.length && q.length >= 4 ? closeNames(q, market.types.filter(t => !pass || pass(t[0])), 8) : [];
+    if (fuzzy.length) hits = fuzzy;
+    results.innerHTML = (fuzzy.length ? `<div class="m-count">No item is called that. Did you mean:</div>` : "") + hits.map(t => `<button data-id="${t[0]}"><span class="m-tag">${esc(itemTag(t[0]))}</span>${esc(t[1])}</button>`).join("") +
       (pass && total > hits.length ? `<div class="m-count">${total} items match; type more of the name to narrow it</div>` : "") +
       (pass && !total ? `<div class="m-count">No items match these filters${q ? " and that name" : ""}.</div>` : "");
     results.classList.toggle("open", hits.length > 0 || !!pass);
+    if (!hits.length && q.length >= 4 && !pass) {
+      results.innerHTML = `<div class="m-count">No item name is close to that.</div>`;
+      results.classList.add("open");
+    }
     results.querySelectorAll("button").forEach(b => b.onclick = () => {
       const label = b.lastChild.textContent;
       market.item = [+b.dataset.id, label];
