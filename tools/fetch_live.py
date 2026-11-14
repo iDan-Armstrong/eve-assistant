@@ -37,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import traffic  # noqa: E402
 import lowsec_traffic  # noqa: E402
+import wh_activity  # noqa: E402
 from ambush import summarize  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[1] / "web" / "data" / "live"
@@ -367,6 +368,24 @@ def main() -> None:
         lowsec_traffic.run(hist_dir, activity, hour, now, OUT, status, relay_hours)
     except Exception as exc:                         # noqa: BLE001 - never block the rest
         status["lowsecTraffic"] = f"error: {exc}"
+    try:
+        wh_daily = load_json(hist_dir / "wh_daily.json", {"days": {}})["days"] if hist_dir else {}
+        names = load_json(hist_dir / "corp_names.json", {}) if hist_dir else {}
+        want = [c for c in wh_activity.top_corps(wh_daily) if str(c) not in names]
+        for i in range(0, len(want), 1000):
+            body = json.dumps(want[i:i + 1000]).encode()
+            try:
+                for rec in http(f"{ESI}/universe/names", data=body, esi=True):
+                    names[str(rec["id"])] = rec["name"]
+            except Exception:                        # noqa: BLE001 - names are a nicety
+                pass
+        if hist_dir:
+            (hist_dir / "corp_names.json").write_text(json.dumps(names, separators=(",", ":")))
+        whdoc = wh_activity.summarize(wh_daily, names, now)
+        (OUT / "wormhole_activity.json").write_text(json.dumps(whdoc, separators=(",", ":")))
+        status["whActivity"] = f"{len(whdoc['systems'])} wormhole systems with kills over {len(whdoc['days'])} days"
+    except Exception as exc:                         # noqa: BLE001
+        status["whActivity"] = f"error: {exc}"
     for name, doc in (("activity", activity), ("ganks", ganks_now), ("history", history),
                       ("wormholes", wormholes), ("pvp_history", pvp),
                       ("traffic", traffic.summarize(store, now))):

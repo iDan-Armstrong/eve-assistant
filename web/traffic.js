@@ -5,7 +5,7 @@
    viewer's own time. */
 "use strict";
 
-const trafficUi = { doc: null, sel: null, local: true };
+const trafficUi = { doc: null, sel: null, local: true, mode: "low", wh: null, jsys: null, wsel: null };
 
 function openTraffic(open) {
   const panel = document.getElementById("traffic");
@@ -42,6 +42,7 @@ const tHourLabel = h => { const x = ((h + Math.round(tOffset())) % 24 + 24) % 24
 const tZone = () => (trafficUi.local ? "your time" : "EVE time");
 
 function renderTraffic() {
+  if (trafficUi.mode === "wh") { renderWh(); return; }
   const doc = trafficUi.doc;
   if (!doc) return;
   const region = document.getElementById("tRegion").value;
@@ -135,8 +136,94 @@ function trafficDetail(s) {
   </div>`;
 }
 
+/* ---- wormhole activity (killmails) ------------------------------------------------ */
+async function loadWh() {
+  const sum = document.getElementById("tSum");
+  sum.textContent = "Loading wormhole activity…";
+  try {
+    const [a, j, c] = await Promise.all([
+      fetch("data/live/wormhole_activity.json", { cache: "no-cache" }).then(r => { if (!r.ok) throw 0; return r.json(); }),
+      fetch("data/jspace/systems.json").then(r => r.json()),
+      fetch("data/jspace/classes.json").then(r => r.json())]);
+    trafficUi.wh = a;
+    trafficUi.jsys = j;
+    trafficUi.jcls = c;
+  } catch {
+    sum.textContent = "Wormhole activity is not available yet: it is built on the bot's next run, from the daily killmail archives.";
+    return;
+  }
+  const classes = [...new Set(Object.values(trafficUi.jsys).map(v => trafficUi.jcls[v[1]] || String(v[1])))].sort();
+  document.getElementById("wClass").innerHTML = `<option value="">any class</option>` + classes.map(c => `<option>${c}</option>`).join("");
+  renderWh();
+}
+
+function renderWh() {
+  const doc = trafficUi.wh;
+  if (!doc) return;
+  const J = trafficUi.jsys, C = trafficUi.jcls;
+  const cls = document.getElementById("wClass").value;
+  const text = document.getElementById("wText").value.trim().toLowerCase();
+  const sort = document.getElementById("wSort").value;
+  let rows = Object.entries(J).map(([id, v]) => ({ id, n: v[0], c: C[v[1]] || String(v[1]), ...(doc.systems[id] || { t: [0, 0, 0, 0], d: [], h: [], last: "", victims: [], hunters: [] }) }));
+  rows = rows.filter(r => (!cls || r.c === cls) && (!text || r.n.toLowerCase().includes(text)));
+  const kills = r => r.t[0] + r.t[1] + r.t[3];
+  rows.sort({ kills: (a, b) => kills(b) - kills(a), structs: (a, b) => b.t[1] - a.t[1] || kills(b) - kills(a),
+              recent: (a, b) => (b.last || "").localeCompare(a.last || ""), quiet: (a, b) => kills(a) - kills(b) || a.n.localeCompare(b.n) }[sort]);
+  const active = rows.filter(r => kills(r)).length;
+  document.getElementById("tSum").textContent = `${rows.length} wormhole systems · ${active} with kills over ${doc.days.length} days (to ${doc.days[doc.days.length - 1] || "?"})`;
+  const list = document.getElementById("tList");
+  list.innerHTML = rows.slice(0, 200).map(r => `<li class="t-row${r.id === trafficUi.wsel ? " on" : ""}" data-wid="${r.id}">
+      <div class="t-line"><b>${r.n}</b> <span class="t-sec">${r.c}</span>${r.last ? `<span class="t-reg">last kill ${r.last.slice(0, 16).replace("T", " ")}</span>` : ""}</div>
+      <div class="t-line t-nums"><span>${r.t[0]} kills</span><span>${r.t[1]} structures</span>${r.t[3] ? `<span>${r.t[3]} lost to NPCs</span>` : ""}
+        ${r.victims.length ? `<span class="t-ore">${r.victims[0][0]}</span>` : ""}</div>
+      ${r.id === trafficUi.wsel ? whDetail(r) : ""}</li>`).join("") || `<li class="t-row">No wormhole system matches.</li>`;
+  list.querySelectorAll(".t-row[data-wid]").forEach(li => li.onclick = e => {
+    if (e.target.closest(".t-detail")) return;
+    trafficUi.wsel = trafficUi.wsel === li.dataset.wid ? null : li.dataset.wid;
+    renderWh();
+  });
+  list.querySelectorAll("[data-zone]").forEach(b => b.onclick = e => { e.stopPropagation(); trafficUi.local = !trafficUi.local; renderWh(); });
+}
+
+function whDetail(r) {
+  const doc = trafficUi.wh;
+  if (!r.d.length) return `<div class="t-detail"><div class="t-dim">No kills recorded here in the last ${doc.days.length} days.</div></div>`;
+  const shift = Math.round(tOffset());
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const prof = Array.from({ length: 24 }, (_, i) => r.h[((i - shift) % 24 + 24) % 24]);
+  const top = prof.map((v, i) => [v, i]).filter(([v]) => v).sort((a, b) => b[0] - a[0]).slice(0, 3).map(([, i]) => `${hours[i]}:00`);
+  const corps = list => list.map(([n, c]) => `${n} (${c})`).join(", ") || "none";
+  return `<div class="t-detail">
+    <div class="t-facts"><span><b>${r.t[0]}</b> ships and pods killed by players</span><span><b>${r.t[1]}</b> structures</span>
+      <span><b>${r.t[2]}</b> pods</span>${r.t[3] ? `<span><b>${r.t[3]}</b> lost to sleepers or drifters</span>` : ""}</div>
+    <div class="t-h">Most kills at <b>${top.join(", ") || "?"}</b> <span class="t-dim">(${tZone()})</span>
+      <button class="t-zone" data-zone>show ${trafficUi.local ? "EVE time" : "my time"}</button></div>
+    <div class="t-h">Lost ships here, likely residents: <b>${corps(r.victims)}</b></div>
+    <div class="t-h">Killed ships here: <b>${corps(r.hunters)}</b></div>
+    <div class="t-cap">Kills in each hour of the day, total over the period (${tZone()})</div>
+    ${tBars(prof, hours, 3, "#e0524f", "kills")}
+    <div class="t-cap">Kills each day</div>
+    ${tBars(r.d, doc.days.map(d => d.slice(5)), Math.max(1, Math.ceil(doc.days.length / 6)), "#e0a84f", "kills")}
+  </div>`;
+}
+
+function setTrafficMode(mode) {
+  trafficUi.mode = mode;
+  document.querySelectorAll("#traffic [data-tmode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tmode === mode)));
+  document.querySelectorAll("#traffic .t-low").forEach(el => { el.hidden = mode !== "low"; });
+  document.querySelectorAll("#traffic .t-wh").forEach(el => { el.hidden = mode !== "wh"; });
+  document.getElementById("tIntro").textContent = mode === "wh"
+    ? "Every wormhole system's kills over 30 days: when they happen and who is involved. CCP gives no jump counts for wormhole space."
+    : "Every lowsec system's jumps and kills, recorded each hour by the Atlas bot and kept for 30 days.";
+  if (mode === "wh" && !trafficUi.wh) loadWh();
+  else renderTraffic();
+}
+
 (function () {
   document.getElementById("tClose").onclick = () => openTraffic(false);
+  document.querySelectorAll("#traffic [data-tmode]").forEach(b => b.onclick = () => setTrafficMode(b.dataset.tmode));
+  ["wClass", "wSort"].forEach(id => document.getElementById(id).onchange = renderWh);
+  document.getElementById("wText").oninput = renderWh;
   ["tRegion", "tOre", "tSort"].forEach(id => document.getElementById(id).onchange = renderTraffic);
   ["tBelts", "tText"].forEach(id => document.getElementById(id).oninput = renderTraffic);
 })();

@@ -12,7 +12,9 @@ known-space killmails are kept. One pass feeds two stores:
 - highsec ganks merge into the gank ledger by killmail id, so re-running
   is safe;
 - lowsec and nullsec PvP kills become per-day, per-system, per-gate
-  aggregates in pvp_daily.json (tools/ambush.py).
+  aggregates in pvp_daily.json (tools/ambush.py);
+- wormhole-space kills become per-day, per-system aggregates in
+  wh_daily.json (tools/wh_activity.py).
 
     python tools/backfill_everef.py --days 30 --history DIR
     python tools/backfill_everef.py --missing --history DIR
@@ -39,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ambush import WINDOW_DAYS, aggregate_day, load_gates, prune  # noqa: E402
 from fetch_live import UA, load_json, merge_ledger  # noqa: E402
 from gank_detect import detect_ganks  # noqa: E402
+import wh_activity  # noqa: E402
 
 BASE = "https://data.everef.net/killmails"
 DATA = Path(__file__).resolve().parents[1] / "web" / "data"
@@ -85,7 +88,7 @@ def stream_killmails(url: str, keep: set[int]):
                 km = json.load(fh)
             except ValueError:
                 continue
-            if km.get("solar_system_id") in keep:
+            if km.get("solar_system_id") in keep or wh_activity.is_wspace(km.get("solar_system_id")):
                 yield km
 
 
@@ -98,12 +101,15 @@ def main() -> None:
     hs, ln = band_ids()
     gates = load_gates()
     pvp_daily = load_json(hist / "pvp_daily.json", {"days": {}})["days"]
+    wh_daily = load_json(hist / "wh_daily.json", {"days": {}})["days"]
+    meta = load_json(DATA / "type_meta.json", {"t": {}})["t"]
+    cat_of = lambda t: (meta.get(str(t)) or [None, 0])[1]
     listings: dict[int, list[str]] = {}
     found, report = [], []
     for back in range(1, days + 1):                  # yesterday backwards
         day = now - timedelta(days=back)
         tag = f"{day:%Y-%m-%d}"
-        if missing and tag in pvp_daily:
+        if missing and tag in pvp_daily and tag in wh_daily:
             continue
         try:
             if day.year not in listings:
@@ -112,16 +118,18 @@ def main() -> None:
             if not url:
                 report.append(f"{tag}: no archive listed")
                 continue
-            hs_mails, ln_mails = [], []
+            hs_mails, ln_mails, wh_mails = [], [], []
             for km in stream_killmails(url, hs | ln):
-                (hs_mails if km["solar_system_id"] in hs else ln_mails).append(km)
+                sid = km["solar_system_id"]
+                (hs_mails if sid in hs else wh_mails if wh_activity.is_wspace(sid) else ln_mails).append(km)
+            wh_daily[tag] = wh_activity.aggregate_day(wh_mails, cat_of)
             ganks = detect_ganks(hs_mails, hs)
             for g in ganks:
                 g.update({"isk": 0, "src": "everef"})
             found += ganks
             pvp_daily[tag] = aggregate_day(ln_mails, ln, gates)
             report.append(f"{tag}: {len(hs_mails)} highsec killmails, {len(ganks)} ganks; "
-                          f"{len(ln_mails)} low/null killmails")
+                          f"{len(ln_mails)} low/null killmails; {len(wh_mails)} wormhole killmails")
         except Exception as exc:                     # noqa: BLE001 - record and go on
             report.append(f"{tag}: error {exc}")
         print(report[-1], flush=True)
@@ -136,6 +144,10 @@ def main() -> None:
     (hist / "pvp_daily.json").write_text(json.dumps(
         {"updated": now.isoformat(timespec="seconds"), "days": pvp_daily},
         separators=(",", ":")))
+    if wh_daily:
+        wh_daily = wh_activity.prune(wh_daily, max(wh_daily))
+    (hist / "wh_daily.json").write_text(json.dumps(
+        {"updated": now.isoformat(timespec="seconds"), "days": wh_daily}, separators=(",", ":")))
     if any(": no archive" not in r for r in report) or not missing:   # keep a full run's report
         (hist / "backfill_status.json").write_text(json.dumps(
             {"ran": now.isoformat(timespec="seconds"), "days": days, "missingOnly": missing,

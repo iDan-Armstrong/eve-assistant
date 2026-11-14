@@ -729,7 +729,7 @@
       <div class="tm-group">Assets</div>
       <button data-tool="assets"><b>Asset clean-up</b><span>Gather scattered items to sell or consolidate</span></button>
       <div class="tm-group">Intel</div>
-      <button data-tool="traffic"><b>Lowsec traffic</b><span>30 days of hourly jumps and kills, peak and quiet times</span></button>
+      <button data-tool="traffic"><b>Traffic and activity</b><span>Lowsec jumps and kills by the hour; wormhole kills and residents</span></button>
     </div>
   </div>
   <!-- the old one-click buttons stay in the page for the panels' own state, hidden: Tools opens everything -->
@@ -922,20 +922,32 @@
 <section class="route bpo" id="traffic" hidden aria-label="Lowsec traffic">
   <div class="r-head">
     <div class="r-title"><span>LOWSEC TRAFFIC</span><button id="tClose" aria-label="Close lowsec traffic">✕</button></div>
-    <div class="h-ship">Every lowsec system's jumps and kills, recorded each hour by the Atlas bot and kept for 30 days.</div>
-    <div class="h-grid">
+    <div class="r-modes" role="group" aria-label="Kind of space">
+      <button data-tmode="low" aria-pressed="true">Lowsec traffic</button>
+      <button data-tmode="wh" aria-pressed="false">Wormhole activity</button>
+    </div>
+    <div class="h-ship" id="tIntro">Every lowsec system's jumps and kills, recorded each hour by the Atlas bot and kept for 30 days.</div>
+    <div class="h-grid t-wh" hidden>
+      <label for="wClass">class</label><select id="wClass"><option value="">any class</option></select><span></span>
+      <label for="wText">name</label><input type="text" id="wText" autocomplete="off" placeholder="J-system name"><span></span>
+      <label for="wSort">sort</label><select id="wSort"><option value="kills">most kills</option><option value="structs">most structures killed</option>
+        <option value="recent">most recent kill</option><option value="quiet">fewest kills</option></select><span></span>
+    </div>
+    <div class="h-grid t-low">
       <label for="tRegion">region</label><select id="tRegion"><option value="">every lowsec region</option></select><span></span>
       <label for="tText">name</label><input type="text" id="tText" autocomplete="off" placeholder="system name"><span></span>
       <label for="tBelts">belts</label><input type="text" id="tBelts" inputmode="numeric" placeholder="0"><span class="h-unit">or more</span>
       <label for="tSort">sort</label><select id="tSort"><option value="quiet">quietest first</option><option value="busy">busiest first</option>
         <option value="kills">most pilot kills</option><option value="belts">most belts</option></select><span></span>
     </div>
-    <label class="m-heat"><input type="checkbox" id="tOre"> Only systems whose belts carry a Nocxium ore</label>
+    <label class="m-heat t-low"><input type="checkbox" id="tOre"> Only systems whose belts carry a Nocxium ore</label>
     <div class="r-sum" id="tSum">Open to load the traffic record.</div>
   </div>
   <ol id="tList" class="m-list t-list"></ol>
-  <div class="r-note">Counts are CCP's last-hour figures, one sample an hour; an hour the bot missed stays empty rather than guessed.
+  <div class="r-note t-low">Counts are CCP's last-hour figures, one sample an hour; an hour the bot missed stays empty rather than guessed.
     Jumps per day and kills per week are averages over the hours recorded. Which belts carry which ore follows the published spawn rules by security and empire.</div>
+  <div class="r-note t-wh" hidden>CCP publishes no jumps or NPC kills for wormhole space, so this is built from killmails: ships, pods and structures destroyed,
+    from the daily EVE Ref archives (about a day behind). The corporations that lose ships in a system are often the people who live there.</div>
 </section>
 
 <section class="route bpo" id="bpo" hidden aria-label="Blueprint finder">

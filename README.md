@@ -707,6 +707,14 @@ GitHub run that never happens leaves no gap; the site's data job merges those
 hours into the record (`tools/lowsec_traffic.py`, kept on the `live-data`
 branch). An hour nobody sampled stays empty, never guessed.
 
+**Wormhole activity** (the second view in the same panel). CCP publishes no
+jumps or NPC kills for wormhole space, so this view is built from killmails:
+for every J-system over 30 days, the ships, pods and structures destroyed,
+ships lost to sleepers or drifters, kills by hour of day and by day, the
+last kill, and the corporations that lost ships there (often the residents)
+or killed ships there. The data comes from the EVE Ref daily killmail
+archives (`tools/wh_activity.py`), about one day behind.
+
 ### J-Space Survey (systems, planets and scans)
 
 The **Systems** tab of the survey page is the J-Space Survey: a record of
