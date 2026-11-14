@@ -245,13 +245,23 @@ async function contractContents(cid, el) {
       const r = await fetch(`${ESI_BASE}/universe/names`, { method: "POST", headers: { ...ESI_HEADERS, "Content-Type": "application/json" }, body: JSON.stringify(missing) });
       if (r.ok) for (const n of await r.json()) names.set(n.id, n.name);
     }
-    const give = items.filter(i => i.is_included !== false), want = items.filter(i => i.is_included === false);
+    /* the same item on several lines (a fitted ship's modules, stacks) reads as one line */
+    const group = list => {
+      const m = new Map();
+      for (const i of list) {
+        const k = [i.type_id, i.is_blueprint_copy ? 1 : 0, i.material_efficiency || 0, i.time_efficiency || 0, i.runs || 0].join(":");
+        const g = m.get(k);
+        if (g) g.quantity = (g.quantity || 1) + (i.quantity || 1); else m.set(k, { ...i, quantity: i.quantity || 1 });
+      }
+      return [...m.values()].sort((a, b) => (b.type_id === market.item[0]) - (a.type_id === market.item[0]));
+    };
+    const give = group(items.filter(i => i.is_included !== false)), want = group(items.filter(i => i.is_included === false));
     const row = i => `<div class="mc-it${i.type_id === market.item[0] ? " hit" : ""}"><span>${esc(names.get(i.type_id) || `type ${i.type_id}`)}` +
       `${i.is_blueprint_copy ? ` (copy${i.runs ? `, ${i.runs} runs` : ""})` : ""}` +
       `${i.material_efficiency || i.time_efficiency ? ` ME ${i.material_efficiency || 0} TE ${i.time_efficiency || 0}` : ""}</span>` +
       `<b>${(i.quantity || 1).toLocaleString()}</b></div>`;
     el.innerHTML = `<div class="mc-items">
-        <div class="m-meta">${give.length} item line${give.length === 1 ? "" : "s"} you receive:</div>${give.map(row).join("")}
+        <div class="m-meta">You receive (${give.length} kind${give.length === 1 ? "" : "s"}):</div>${give.map(row).join("")}
         ${want.length ? `<div class="m-meta">and it asks you to hand over:</div>${want.map(row).join("")}` : ""}
         <div><button class="mc-btn" data-open="${cid}">Open in game</button></div></div>`;
     el.dataset.loaded = "1";
