@@ -256,8 +256,22 @@
     padding: 2px 7px; font: inherit; font-size: 11.5px; cursor: pointer; }
   .o-members td { vertical-align: top; }
   /* tall forms: the whole panel scrolls instead of squeezing the results */
-  #bpo, #haul { overflow-y: auto; }
+  #bpo, #haul, #traffic { overflow-y: auto; }
   #bpo > *, #haul > * { flex-shrink: 0; }
+  #traffic > * { flex-shrink: 0; }
+  .t-list { list-style: none; padding: 0; margin: 0; }
+  .t-row { padding: 7px 10px; border-bottom: 1px solid var(--panel-edge); cursor: pointer; }
+  .t-row:hover, .t-row.on { background: #111a2a; }
+  .t-line { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+  .t-sec { color: #e0a84f; font-size: 12px; } .t-reg { color: var(--ink-dim); font-size: 12px; }
+  .t-nums { font-size: 12px; color: var(--ink-dim); } .t-ore { color: #8ff0b0; }
+  .t-detail { margin-top: 8px; cursor: default; display: grid; gap: 4px; font-size: 12px; }
+  .t-facts { display: flex; flex-wrap: wrap; gap: 10px; }
+  .t-cap { margin-top: 6px; color: var(--ink-dim); }
+  .t-dim { color: var(--ink-faint); }
+  .t-chart { width: 100%; height: auto; display: block; }
+  .t-chart text { fill: var(--ink-dim); font-size: 8px; } .t-chart .t-max { fill: var(--ink-faint); }
+  .t-zone { background: none; border: 1px solid var(--panel-edge); color: var(--ink-dim); border-radius: 4px; font-size: 11px; padding: 1px 6px; cursor: pointer; margin-left: 6px; }
   .route .m-list li.on { background: #14263a; }
   .fw-key { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 11.5px; color: var(--ink); }
   .fw-key span { white-space: nowrap; }
@@ -714,6 +728,8 @@
       <button data-tool="bpo"><b>Blueprint finder</b><span>Originals you do not own, cheapest first</span></button>
       <div class="tm-group">Assets</div>
       <button data-tool="assets"><b>Asset clean-up</b><span>Gather scattered items to sell or consolidate</span></button>
+      <div class="tm-group">Intel</div>
+      <button data-tool="traffic"><b>Lowsec traffic</b><span>30 days of hourly jumps and kills, peak and quiet times</span></button>
     </div>
   </div>
   <!-- the old one-click buttons stay in the page for the panels' own state, hidden: Tools opens everything -->
@@ -901,6 +917,25 @@
   <div class="r-note">Picks up loose items from station hangars and from containers in them; fitted modules, ship cargo and assembled ships stay put.
     Values are what the best trade hub's buy orders pay; a sell run then plans the sale from your last pickup with live orders.
     CCP's asset list can be up to an hour old.</div>
+</section>
+
+<section class="route bpo" id="traffic" hidden aria-label="Lowsec traffic">
+  <div class="r-head">
+    <div class="r-title"><span>LOWSEC TRAFFIC</span><button id="tClose" aria-label="Close lowsec traffic">✕</button></div>
+    <div class="h-ship">Every lowsec system's jumps and kills, recorded each hour by the Atlas bot and kept for 30 days.</div>
+    <div class="h-grid">
+      <label for="tRegion">region</label><select id="tRegion"><option value="">every lowsec region</option></select><span></span>
+      <label for="tText">name</label><input type="text" id="tText" autocomplete="off" placeholder="system name"><span></span>
+      <label for="tBelts">belts</label><input type="text" id="tBelts" inputmode="numeric" placeholder="0"><span class="h-unit">or more</span>
+      <label for="tSort">sort</label><select id="tSort"><option value="quiet">quietest first</option><option value="busy">busiest first</option>
+        <option value="kills">most pilot kills</option><option value="belts">most belts</option></select><span></span>
+    </div>
+    <label class="m-heat"><input type="checkbox" id="tOre"> Only systems whose belts carry a Nocxium ore</label>
+    <div class="r-sum" id="tSum">Open to load the traffic record.</div>
+  </div>
+  <ol id="tList" class="m-list t-list"></ol>
+  <div class="r-note">Counts are CCP's last-hour figures, one sample an hour; an hour the bot missed stays empty rather than guessed.
+    Jumps per day and kills per week are averages over the hours recorded. Which belts carry which ore follows the published spawn rules by security and empire.</div>
 </section>
 
 <section class="route bpo" id="bpo" hidden aria-label="Blueprint finder">
@@ -2336,6 +2371,7 @@ boot().catch(err => {
 <script src="asset_core.js"></script>
 <script src="assets.js"></script>
 <script src="org.js"></script>
+<script src="traffic.js"></script>
 <script src="tools.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>

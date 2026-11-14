@@ -14,12 +14,14 @@
     fit: () => openFit(true),
     bpo: () => openBpo(true),
     assets: () => openAssets(true),
+    traffic: () => openTraffic(true),
   };
 
   btn.onclick = e => { e.stopPropagation(); show(menu.hidden); };
   menu.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => {
     show(false);
     const [tool, mode] = b.dataset.tool.split(":");
+    if (tool !== "traffic") { const t = document.getElementById("traffic"); if (t) t.hidden = true; }
     if (tool === "haul") {
       /* set the mode now if the planner is already open, else when it opens */
       haul.pendingMode = mode;

@@ -692,6 +692,21 @@ structure, starbase, deployable, drone and fighter types that appear on
 directional scan, refreshed by the manual "J-space reference data" workflow;
 `tools/build_kspace_index.py` writes a 0.4 MB known-space name and gate index.
 
+### Lowsec traffic
+
+**Tools, Lowsec traffic** shows every lowsec system's jumps and pilot kills,
+recorded each hour and kept for 30 days: average jumps a day, kills a week,
+the busiest and quietest hours of the day (in your time or EVE time), jumps
+for each day and week, and the average for each day of the week. Filter by
+region, belts, or systems whose belts carry a Nocxium ore (Hedbergite,
+Hemorphite, Jaspet), and sort by quietest, busiest, kills or belts.
+
+The samples are CCP's last-hour counts. The Atlas relay takes one every hour
+on a Cloudflare cron (`GET /traffic/hours` serves them), so a scheduled
+GitHub run that never happens leaves no gap; the site's data job merges those
+hours into the record (`tools/lowsec_traffic.py`, kept on the `live-data`
+branch). An hour nobody sampled stays empty, never guessed.
+
 ### J-Space Survey (systems, planets and scans)
 
 The **Systems** tab of the survey page is the J-Space Survey: a record of

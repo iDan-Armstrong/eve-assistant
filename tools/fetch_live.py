@@ -36,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import traffic  # noqa: E402
+import lowsec_traffic  # noqa: E402
 from ambush import summarize  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[1] / "web" / "data" / "live"
@@ -309,8 +310,25 @@ def main() -> None:
     daily = {}
     hour = traffic.esi_hour(activity.get("lastModified"), now)
     store = {}
+    relay_hours: dict = {}
     if hist_dir:
         store = load_json(hist_dir / "traffic_hours.json", {"hours": {}})
+        # hours the relay's own hourly sampler caught while this job did not run
+        relay = lowsec_traffic.relay_url()
+        if relay:
+            try:
+                since = traffic.hour_key(now - timedelta(days=30))
+                relay_hours = lowsec_traffic.pull_relay(lambda u: http(u), relay, since)
+                filled = 0
+                for h, rows in relay_hours.items():
+                    if h not in store.setdefault("hours", {}) and h >= traffic.hour_key(now - timedelta(hours=traffic.KEEP_HOURS)):
+                        store["hours"][h] = {sid: v for sid, v in rows.items()}
+                        filled += 1
+                for old in sorted(store["hours"])[:-traffic.KEEP_HOURS]:
+                    del store["hours"][old]
+                status["relayTraffic"] = f"{len(relay_hours)} hours from the relay, {filled} filled the weekly store"
+            except Exception as exc:                 # noqa: BLE001
+                status["relayTraffic"] = f"error: {exc}"
         new_hour = traffic.add_hour(store, hour, activity)
         (hist_dir / "traffic_hours.json").write_text(json.dumps(store, separators=(",", ":")))
         daily = load_json(hist_dir / "activity_daily.json", {"days": {}})["days"]
@@ -345,6 +363,10 @@ def main() -> None:
                       "gates": "[[destination system id, kills on that gate]]"},
            "systems": summarize(pvp_daily)}
     status["pvpHistory"] = f"{len(pvp_daily)} days of low/null kill history"
+    try:
+        lowsec_traffic.run(hist_dir, activity, hour, now, OUT, status, relay_hours)
+    except Exception as exc:                         # noqa: BLE001 - never block the rest
+        status["lowsecTraffic"] = f"error: {exc}"
     for name, doc in (("activity", activity), ("ganks", ganks_now), ("history", history),
                       ("wormholes", wormholes), ("pvp_history", pvp),
                       ("traffic", traffic.summarize(store, now))):

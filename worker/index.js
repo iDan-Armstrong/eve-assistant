@@ -563,12 +563,64 @@ async function jspaceShot(body, env, headers) {
   return new Response(obj.body, { headers: { ...headers, "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400" } });
 }
 
+/* ---- Traffic sampler (cron, every hour) ----------------------------------
+   CCP's /universe/system_jumps and /universe/system_kills each describe the
+   last clock hour; the Last-Modified header says which. Every hour the
+   relay stores that hour once, under "traffic:<YYYY-MM-DDTHH>", as
+   {systemId: [jumps, shipKills, podKills, npcKills]} for systems with any
+   activity, kept 31 days. The site's data job reads the hours it is missing
+   from GET /traffic/hours, so a skipped GitHub run no longer leaves a gap. */
+const ESI_BASE = "https://esi.evetech.net";
+const TRAFFIC_TTL = 31 * 86400;
+const hourKey = d => d.toISOString().slice(0, 13);
+
+async function sampleTraffic(env) {
+  const h = { "X-Compatibility-Date": "2025-09-30", "User-Agent": "eve-assistant New Eden Atlas relay (+https://github.com/iDan-Armstrong/eve-assistant)" };
+  const [jr, kr] = await Promise.all([fetch(`${ESI_BASE}/universe/system_jumps`, { headers: h }),
+                                      fetch(`${ESI_BASE}/universe/system_kills`, { headers: h })]);
+  if (!jr.ok || !kr.ok) throw new Error(`ESI ${jr.status}/${kr.status}`);
+  const lm = jr.headers.get("Last-Modified");
+  const hour = hourKey(lm ? new Date(lm) : new Date());
+  const key = `traffic:${hour}`;
+  if (await env.SIGHTINGS.get(key)) return { hour, stored: false };
+  const rows = {};
+  for (const r of await kr.json()) rows[r.system_id] = [0, r.ship_kills || 0, r.pod_kills || 0, r.npc_kills || 0];
+  for (const r of await jr.json()) (rows[r.system_id] ||= [0, 0, 0, 0])[0] = r.ship_jumps || 0;
+  for (const [id, v] of Object.entries(rows)) if (!v.some(Boolean)) delete rows[id];
+  await env.SIGHTINGS.put(key, JSON.stringify(rows), { expirationTtl: TRAFFIC_TTL, metadata: { n: Object.keys(rows).length } });
+  return { hour, stored: true, systems: Object.keys(rows).length };
+}
+
+async function trafficHours(url, env, headers) {
+  const from = url.searchParams.get("from") || "";
+  const limit = Math.min(48, +url.searchParams.get("limit") || 24);
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.SIGHTINGS.list({ prefix: "traffic:", cursor });
+    keys.push(...page.keys.map(k => k.name.slice(8)));
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  keys.sort();
+  const want = keys.filter(k => k > from).slice(0, limit);
+  const hours = {};
+  for (const k of want) hours[k] = await env.SIGHTINGS.get(`traffic:${k}`, "json");
+  return json({ held: keys.length, first: keys[0] || null, last: keys[keys.length - 1] || null,
+                more: keys.filter(k => k > from).length > want.length, hours }, 200,
+              { ...headers, "Cache-Control": "no-store" });
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sampleTraffic(env).catch(err => console.log("traffic sample failed", String(err))));
+  },
+
   async fetch(req, env) {
     const headers = cors(req, env);
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
     try {
+      if (req.method === "GET" && url.pathname === "/traffic/hours") return await trafficHours(url, env, headers);
       if (req.method === "POST" && url.pathname === "/org") {
         const body = await req.json();
         const who = await verify(body.token, env);

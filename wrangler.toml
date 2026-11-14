@@ -43,3 +43,7 @@ new_sqlite_classes = ["OrgDirectory"]
 [[r2_buckets]]
 binding = "SHOTS"
 bucket_name = "atlas-survey-shots"
+
+# hourly traffic sample (CCP's last-hour jumps and kills), read by the site's data job
+[triggers]
+crons = ["7 * * * *"]
