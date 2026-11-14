@@ -382,8 +382,20 @@ function wireMarket() {
       if (!pass && starts.length >= LIMIT) break;
     }
     let hits = [...starts, ...has].slice(0, LIMIT);
-    /* nothing by name: a misspelling, so offer the closest names */
-    const fuzzy = !hits.length && q.length >= 4 ? closeNames(q, market.types.filter(t => !pass || pass(t[0])), 8) : [];
+    /* nothing by name: a misspelling, so offer the closest names once typing pauses */
+    clearTimeout(market.fuzzyTimer);
+    let fuzzy = [];
+    if (!hits.length && q.length >= 4) {
+      if (market.fuzzyFor === q) fuzzy = market.fuzzyHits;
+      else {
+        market.fuzzyTimer = setTimeout(() => {
+          market.fuzzyFor = q;
+          market.fuzzyHits = closeNames(q, market.types.filter(t => !pass || pass(t[0])), 8);
+          if (input.value.trim().toLowerCase() === q) input.oninput();
+        }, 250);
+        return;
+      }
+    }
     if (fuzzy.length) hits = fuzzy;
     results.innerHTML = (fuzzy.length ? `<div class="m-count">No item is called that. Did you mean:</div>` : "") + hits.map(t => `<button data-id="${t[0]}"><span class="m-tag">${esc(itemTag(t[0]))}</span>${esc(t[1])}</button>`).join("") +
       (pass && total > hits.length ? `<div class="m-count">${total} items match; type more of the name to narrow it</div>` : "") +
