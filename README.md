@@ -218,7 +218,17 @@ faction, deadspace, officer and so on) and kind of item. With a filter set,
 an empty item box lists everything that matches, and each suggestion shows
 its slot and tech. The facts come from the SDE (`tools/build_type_meta.py`:
 the slot from each type's dogma effects, read by effect name) and load only
-when Find item opens.
+when Find item opens. A misspelt name finds nothing by itself, so the box
+then offers the closest item names (swapped letters count as one slip).
+
+**Contracts in Find item.** With "Also search public contracts" ticked (the
+default), buying an item also lists every public item-exchange contract that
+hands it over, from the hourly contract scan (`tools/fetch_contracts.py`
+writes `data/live/contract_items/`): price, system and security, jumps from
+you, the station or structure, quantity, other items in it, blueprint ME and
+TE, days left and the title. A contract's price is for everything in it.
+Click one to read its full contents live from CCP, including anything it
+asks you to hand over, and open it in game.
 
 **Find item** answers "where can I buy (or sell) this near me?" The
 browser searches every region's orders for one item live from CCP, then

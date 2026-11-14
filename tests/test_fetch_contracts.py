@@ -82,3 +82,16 @@ def test_deals_merge_repeats_and_drop_rigs_of_an_assembled_ship():
     row = fc.deals([packed], {"7": rec}, {60004588: 30002510}, books, meta)[0]
     assert row[4] == 61e6 and row[11] == 0
     assert [31000, 2] in row[8]
+
+
+def test_item_index_groups_by_item_cheapest_first():
+    import fetch_contracts as F
+    contracts = [{"contract_id": 1, "start_location_id": 60003760, "price": 900, "date_expired": "2026-12-01T00:00:00Z",
+                  "title": "Rifters", "volume": 50},
+                 {"contract_id": 2, "start_location_id": 60003760, "price": 100, "date_expired": "2026-12-01T00:00:00Z"},
+                 {"contract_id": 3, "start_location_id": 999, "price": 50}]
+    seen = {"1": [[587, 2, 0, 0, 0], [587, 1, 0, 0, 0], [34, 1000, 0, 0, 0]], "2": [[587, 1, 0, 0, 0]], "3": [[587, 1, 0, 0, 0]]}
+    idx = F.item_index(contracts, seen, {60003760: 30000142})
+    assert [r[0] for r in idx[587]] == [2, 1]                     # contract 3: unknown system, left out
+    assert idx[587][1][4] == 3 and idx[587][1][5] == 2 and idx[587][1][7] == "Rifters"
+    assert idx[34][0][4] == 1000

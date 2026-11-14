@@ -28,6 +28,13 @@ Haul planner, from the same scan (web/data/live/):
                   station, volume m3, item kinds, [[typeId, qty], ...top 3 by value],
                   units no hub buys, expires]
 
+Find item (web/data/live/contract_items/<typeId % 64>.json):
+
+    {typeId: [[contractId, location, system, price, quantity of this item, item kinds,
+               expires, title, volume m3, isCopy, me, te], ...]}
+    every public item-exchange contract holding that item, cheapest first, at most
+    ITEM_KEEP per item
+
 Contents are remembered as [[typeId, qty, isCopy, me, te], ...] (0 when the
 contract asks for items back or is too big to judge), so every use above
 comes from one read per contract.
@@ -162,6 +169,41 @@ def deals(contracts: list[dict], seen: dict, systems: dict, books: dict, meta: d
     return out[:DEAL_KEEP]
 
 
+ITEM_KEEP = 60
+
+
+def item_index(contracts: list[dict], seen: dict, systems: dict, keep: int = ITEM_KEEP) -> dict:
+    """{typeId: [[cid, loc, sys, price, qty, kinds, expires, title, volume, copy, me, te], ...]}"""
+    out: dict[int, list] = {}
+    for c in contracts:
+        rec = seen.get(str(c["contract_id"]))
+        if not rec:
+            continue
+        loc = c.get("start_location_id") or 0
+        sysid = systems.get(loc, 0)
+        if not sysid:
+            continue
+        kinds = len({r[0] for r in rec})
+        per: dict[tuple, list] = {}
+        for tid, qty, copy, me, te in rec:
+            k = (tid, copy, me, te)
+            per[k] = [tid, (per.get(k) or [0, 0])[1] + qty, copy, me, te]
+        for tid, qty, copy, me, te in per.values():
+            out.setdefault(tid, []).append([c["contract_id"], loc, sysid, c["price"], qty, kinds,
+                                            c.get("date_expired", ""), (c.get("title") or "")[:60],
+                                            c.get("volume", 0), copy, me, te])
+    return {t: sorted(rows, key=lambda r: r[3])[:keep] for t, rows in out.items()}
+
+
+def write_item_shards(index: dict, out_dir: Path, shards: int = 64) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    parts: list[dict] = [{} for _ in range(shards)]
+    for tid, rows in index.items():
+        parts[int(tid) % shards][str(tid)] = rows
+    for n, part in enumerate(parts):
+        (out_dir / f"{n}.json").write_text(json.dumps(part, separators=(",", ":")))
+
+
 def couriers(contracts: list[dict], systems: dict) -> list:
     out = []
     for c in contracts:
@@ -284,6 +326,8 @@ def main() -> None:
     meta_path = DATA / "type_meta.json"
     meta = json.loads(meta_path.read_text())["t"] if meta_path.exists() else {}
     deal_rows = deals(contracts, seen, systems, books, meta)
+    items_idx = item_index(contracts, seen, systems)
+    write_item_shards(items_idx, OUT / "contract_items")
     backlog = sum(1 for c in contracts if str(c["contract_id"]) not in seen)
     (OUT / "deals.json").write_text(json.dumps({"generated": stamp, "tax": DEAL_TAX, "hubs": list(books),
                                                 "known": len(seen), "backlog": backlog, "rows": deal_rows},
@@ -292,7 +336,7 @@ def main() -> None:
                       "contracts": len(contracts), "known": len(seen), "readNow": len(todo), "errors": errors,
                       "backlog": backlog,
                       "bpoContracts": sum(len(v) for v in idx["ct"].values()),
-                      "bpoStructures": len(idx["st"]), "failedRegions": failed}))
+                      "bpoStructures": len(idx["st"]), "itemsIndexed": len(items_idx), "failedRegions": failed}))
 
 
 def _safe(fn, *a):

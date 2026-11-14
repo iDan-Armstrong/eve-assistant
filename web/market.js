@@ -157,6 +157,7 @@ async function runMarketSearch() {
   const extra = await structureOrders(market.item[0], market.side);
   orders.push(...extra);
   const dist = origin ? distancesFrom(origin.id) : null;
+  loadContractsFor(market.item[0], dist);
   market.rows = orders.filter(o => state.byId.has(o.system_id)).map(o => ({
     price: o.price, qty: o.volume_remain, min: o.min_volume || 1, range: o.range,
     system: o.system_id, location: o.location_id,
@@ -164,6 +165,100 @@ async function runMarketSearch() {
     safe: dist ? dist.safe.get(o.system_id) : null,
   }));
   drawMarket();
+}
+
+/* ---- contracts holding the item --------------------------------------------------
+   From the hourly contract scan (tools/fetch_contracts.py): every public
+   item-exchange contract that hands the item over, cheapest first. A row's
+   price is the whole contract's; a click lists everything in it, live from CCP. */
+async function loadContractsFor(typeId, dist) {
+  const box = document.getElementById("mContracts");
+  market.crows = [];
+  if (!document.getElementById("mWithContracts").checked || market.side !== "sell") { box.hidden = true; return; }
+  box.hidden = false;
+  document.getElementById("mcSum").textContent = "Looking through public contracts…";
+  document.getElementById("mcList").innerHTML = "";
+  try {
+    if (!market.structures) market.structures = await fetch("data/live/structures.json").then(r => r.ok ? r.json() : {});
+    const shard = await fetch(`data/live/contract_items/${typeId % 64}.json`).then(r => r.ok ? r.json() : {});
+    if (!market.item || market.item[0] !== typeId) return;           /* a newer search took over */
+    market.crows = (shard[typeId] || []).filter(r => state.byId.has(r[2])).map(r => ({
+      cid: r[0], loc: r[1], system: r[2], price: r[3], qty: r[4], kinds: r[5], expires: r[6], title: r[7],
+      volume: r[8], copy: r[9], me: r[10], te: r[11],
+      jumps: dist ? dist.jumps.get(r[2]) : null, safe: dist ? dist.safe.get(r[2]) : null }));
+  } catch { market.crows = []; }
+  drawContracts();
+}
+
+function drawContracts() {
+  const box = document.getElementById("mContracts"), sum = document.getElementById("mcSum"), list = document.getElementById("mcList");
+  if (box.hidden || !market.item) return;
+  const far = x => x == null ? Infinity : x;
+  const rows = [...(market.crows || [])];
+  if (market.sort === "jumps") rows.sort((a, b) => far(a.jumps) - far(b.jumps) || a.price - b.price);
+  else if (market.sort === "safe") rows.sort((a, b) => far(a.safe) - far(b.safe) || a.price - b.price);
+  else rows.sort((a, b) => a.price / a.qty - b.price / b.qty);
+  if (!rows.length) { sum.textContent = `No public contract holds ${market.item[1]} right now.`; list.innerHTML = ""; return; }
+  sum.innerHTML = `<b>${rows.length}</b> contract${rows.length === 1 ? "" : "s"} holding <b>${esc(market.item[1])}</b>. ` +
+    `A contract's price is for everything in it; click one for its full contents.`;
+  list.innerHTML = rows.slice(0, 40).map(r => {
+    const p = state.byId.get(r.system);
+    const st = market.structures && market.structures[r.loc];
+    const where = stationName(r.loc) || (st ? `${st[0]} (player structure)` : "player structure");
+    const dist = r.jumps == null ? "" : `${r.jumps} jump${r.jumps === 1 ? "" : "s"}`;
+    const bp = r.copy ? `copy, ME ${r.me} TE ${r.te}` : (r.me || r.te) ? `ME ${r.me} TE ${r.te}` : "";
+    const days = r.expires ? Math.max(0, Math.round((Date.parse(r.expires) - Date.now()) / 86400e3)) : null;
+    return `<li data-cid="${r.cid}"><div class="r-sys">
+        <span class="m-price">${fmtPrice(r.price)}</span>
+        <span style="color:${secColor(p.sec)}">${p.sec.toFixed(1)}</span><span>${esc(p.name)}</span>
+        <span class="r-reg">${esc(p.region)}</span></div>
+      <div class="m-meta">${r.qty.toLocaleString()} × ${esc(market.item[1])}${bp ? ` (${bp})` : ""}` +
+      `${r.kinds > 1 ? ` + ${r.kinds - 1} other item kind${r.kinds > 2 ? "s" : ""}` : ""}` +
+      `${r.kinds === 1 && r.qty > 1 ? `, ${fmtPrice(r.price / r.qty)} each` : ""}${dist ? `; ${dist}` : ""}</div>
+      <div class="m-meta">${esc(where)}${days != null ? ` · ${days} day${days === 1 ? "" : "s"} left` : ""}${r.title ? ` · “${esc(r.title)}”` : ""}</div>
+      <div class="mc-detail" hidden></div></li>`;
+  }).join("");
+  list.querySelectorAll("li[data-cid]").forEach(li => li.onclick = e => {
+    if (e.target.closest(".mc-detail")) return;
+    const d = li.querySelector(".mc-detail");
+    d.hidden = !d.hidden;
+    if (!d.hidden && !d.dataset.loaded) contractContents(+li.dataset.cid, d);
+  });
+}
+
+async function contractContents(cid, el) {
+  el.innerHTML = `<div class="mc-items">Reading the contract from CCP…</div>`;
+  try {
+    const items = [];
+    for (let page = 1; page <= 5; page++) {
+      const r = await fetch(`${ESI_BASE}/contracts/public/items/${cid}?page=${page}`, { headers: ESI_HEADERS });
+      if (r.status === 204 || r.status === 404) break;
+      if (!r.ok) throw new Error(`CCP answered ${r.status}`);
+      items.push(...await r.json());
+      if (+(r.headers.get("x-pages") || 1) <= page) break;
+    }
+    if (!items.length) { el.innerHTML = `<div class="mc-items">This contract has ended or holds nothing CCP will show.</div>`; return; }
+    const ids = [...new Set(items.map(i => i.type_id))];
+    const names = new Map((market.types || []).filter(t => ids.includes(t[0])).map(t => [t[0], t[1]]));
+    const missing = ids.filter(i => !names.has(i));
+    if (missing.length) {
+      const r = await fetch(`${ESI_BASE}/universe/names`, { method: "POST", headers: { ...ESI_HEADERS, "Content-Type": "application/json" }, body: JSON.stringify(missing) });
+      if (r.ok) for (const n of await r.json()) names.set(n.id, n.name);
+    }
+    const give = items.filter(i => i.is_included !== false), want = items.filter(i => i.is_included === false);
+    const row = i => `<div class="mc-it${i.type_id === market.item[0] ? " hit" : ""}"><span>${esc(names.get(i.type_id) || `type ${i.type_id}`)}` +
+      `${i.is_blueprint_copy ? ` (copy${i.runs ? `, ${i.runs} runs` : ""})` : ""}` +
+      `${i.material_efficiency || i.time_efficiency ? ` ME ${i.material_efficiency || 0} TE ${i.time_efficiency || 0}` : ""}</span>` +
+      `<b>${(i.quantity || 1).toLocaleString()}</b></div>`;
+    el.innerHTML = `<div class="mc-items">
+        <div class="m-meta">${give.length} item line${give.length === 1 ? "" : "s"} you receive:</div>${give.map(row).join("")}
+        ${want.length ? `<div class="m-meta">and it asks you to hand over:</div>${want.map(row).join("")}` : ""}
+        <div><button class="mc-btn" data-open="${cid}">Open in game</button></div></div>`;
+    el.dataset.loaded = "1";
+    if (typeof wireContractButtons === "function") wireContractButtons(el);
+  } catch (err) {
+    el.innerHTML = `<div class="mc-items">Could not read the contract (${esc(err.message)}).</div>`;
+  }
 }
 
 function sortedRows() {
@@ -426,6 +521,7 @@ function wireMarket() {
     if (e.key === "Enter") { const b = results.querySelector("button"); if (b) b.click(); }
   };
   document.getElementById("mFrom").onchange = () => market.item && runMarketSearch();
+  document.getElementById("mWithContracts").onchange = () => market.item && runMarketSearch();
   document.querySelectorAll("#market [data-side]").forEach(b => b.onclick = () => {
     market.side = b.dataset.side;
     document.querySelectorAll("#market [data-side]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
@@ -435,6 +531,7 @@ function wireMarket() {
     market.sort = b.dataset.sort;
     document.querySelectorAll("#market [data-sort]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
     drawMarket();
+    drawContracts();
   });
   map.on("zoomend", () => { const r = radiusFor(map.getZoom());
     for (const { m, extra } of [...market.rings, ...market.heatRings]) m.setRadius(r + extra); });

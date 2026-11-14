@@ -256,7 +256,13 @@
     padding: 2px 7px; font: inherit; font-size: 11.5px; cursor: pointer; }
   .o-members td { vertical-align: top; }
   /* tall forms: the whole panel scrolls instead of squeezing the results */
-  #bpo, #haul, #traffic { overflow-y: auto; }
+  #bpo, #haul, #traffic, #market { overflow-y: auto; }
+  #market > * { flex-shrink: 0; }
+  .mc-list li { cursor: pointer; }
+  .mc-items { margin: 6px 0 2px; font-size: 12px; display: grid; gap: 2px; cursor: default; }
+  .mc-items .mc-it { display: flex; justify-content: space-between; gap: 8px; }
+  .mc-items .mc-it.hit { color: #8ff0b0; }
+  .mc-btn { background: none; border: 1px solid var(--panel-edge); color: var(--ink-dim); border-radius: 4px; font-size: 11px; padding: 2px 8px; cursor: pointer; margin-top: 4px; }
   #bpo > *, #haul > * { flex-shrink: 0; }
   #traffic > * { flex-shrink: 0; }
   .t-list { list-style: none; padding: 0; margin: 0; }
@@ -1013,9 +1019,14 @@
     <label class="m-heat" id="mHeatWrap" hidden><input type="checkbox" id="mHeat"> Deal heat map: every system
       with orders, green for the best deals through red for the worst</label>
     <div class="m-ramp" id="mRamp" hidden><span>good deal</span><i></i><span>bad deal</span></div>
+    <label class="m-heat"><input type="checkbox" id="mWithContracts" checked> Also search public contracts that hold the item</label>
     <div class="r-sum" id="mSum">Pick an item. Every region's NPC market is searched live from CCP.</div>
   </div>
   <ol id="mList" class="m-list"></ol>
+  <div id="mContracts" hidden>
+    <div class="r-sum" id="mcSum"></div>
+    <ol id="mcList" class="m-list mc-list"></ol>
+  </div>
   <div class="r-note">NPC-station orders live from CCP; player-structure orders from the hourly collector (public trade structures). Click a row to plan the safer route.</div>
 </section>
 
