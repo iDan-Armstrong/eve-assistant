@@ -15,6 +15,7 @@
     bpo: () => openBpo(true),
     assets: () => openAssets(true),
     traffic: () => openTraffic(true),
+    planner: () => openPlanner(true),
   };
 
   btn.onclick = e => { e.stopPropagation(); show(menu.hidden); };
@@ -22,6 +23,7 @@
     show(false);
     const [tool, mode] = b.dataset.tool.split(":");
     if (tool !== "traffic") { const t = document.getElementById("traffic"); if (t) t.hidden = true; }
+    if (tool !== "planner") { const p = document.getElementById("planner"); if (p) p.hidden = true; }
     if (tool === "haul") {
       /* set the mode now if the planner is already open, else when it opens */
       haul.pendingMode = mode;

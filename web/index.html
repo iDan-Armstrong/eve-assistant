@@ -437,6 +437,49 @@
     color: var(--ink); font: inherit; font-size: 12px; padding: 5px; cursor: pointer; }
   .route .r-pilot button:hover { background: #1b2a44; }
 
+  /* ---- mission planner ---------------------------------------------- */
+  #planner { width: 560px; max-height: calc(100vh - var(--header-h, 56px) - 40px); overflow: hidden; }
+  #planner > * { flex-shrink: 0; }
+  #planner .pl-pane { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  #planner #plView:not([hidden]) { flex: 1 1 auto; flex-shrink: 1; }
+  #planner .pl-pane[hidden], #planner .h-grid[hidden] { display: none; }
+  .pl-live { margin-left: auto; margin-right: 10px; font-size: 11px; letter-spacing: .06em; color: var(--ink-faint); }
+  .pl-live::before { content: "●"; margin-right: 5px; color: #6b7380; }
+  .pl-live.on { color: #7fe0a0; }
+  .pl-live.on::before { color: #3ddc84; }
+  #plStatus.bad, .pl-err { color: #ff8f7a; }
+  .pl-bar { display: flex; align-items: center; gap: 10px; }
+  .pl-link { background: none; border: 0; color: var(--ink-dim); font: inherit; cursor: pointer; padding: 2px 0; text-decoration: underline; }
+  .pl-link:hover { color: var(--ink); }
+  .pl-bar .pl-link:last-child { margin-left: auto; }
+  .pl-plans { max-height: 52vh; overflow-y: auto; }
+  .pl-plans li { cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+  .pl-plans li.pl-empty { cursor: default; color: var(--ink-dim); }
+  .pl-lab { color: var(--ink-dim); }
+  #planner textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 6px 8px; background: rgba(13,19,31,.85);
+    color: var(--ink); border: 1px solid var(--panel-edge); border-radius: 3px; font: inherit; font-size: 12.5px; }
+  .pl-title { margin: 2px 0 0; font-size: 14px; font-weight: 600; }
+  .pl-thread { flex: 1 1 auto; min-height: 120px; max-height: 56vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .pl-msg { border: 1px solid var(--panel-edge); border-radius: 3px; padding: 8px 10px; line-height: 1.5; }
+  .pl-msg.me { background: rgba(29,74,48,.18); border-color: #2a5a3e; }
+  .pl-msg.ai { background: rgba(20,38,58,.45); }
+  .pl-msg.pl-wait { color: var(--ink-dim); font-style: italic; }
+  .pl-by { font-size: 11px; color: var(--ink-faint); margin-bottom: 4px; }
+  .pl-md h2, .pl-md h3, .pl-md h4 { margin: 10px 0 4px; font-size: 13px; color: #9fd0ff; }
+  .pl-md h2:first-child, .pl-md h3:first-child { margin-top: 0; }
+  .pl-md p { margin: 4px 0; }
+  .pl-md ul, .pl-md ol { margin: 4px 0; padding-left: 20px; }
+  .pl-md li.sub { margin-left: 16px; }
+  .pl-md .box { color: #9fd0ff; }
+  .pl-md table { border-collapse: collapse; margin: 6px 0; font-size: 12px; display: block; overflow-x: auto; }
+  .pl-md th, .pl-md td { border: 1px solid var(--panel-edge); padding: 3px 6px; text-align: left; }
+  .pl-md code { background: rgba(255,255,255,.07); padding: 0 3px; border-radius: 2px; }
+  .pl-md pre { background: rgba(0,0,0,.3); padding: 6px; overflow-x: auto; }
+  .pl-md a { color: #8fc8ff; }
+  .pl-compose { display: flex; gap: 8px; align-items: flex-end; }
+  .pl-compose .h-go { flex-shrink: 0; }
+  @media (max-width: 720px) { #planner { width: auto; max-height: 80vh; } .pl-thread { max-height: 46vh; } }
+
   /* ---- traffic chart ------------------------------------------------- */
   .traffic { margin: 10px 0 2px; font-size: 12px; color: var(--ink-dim); }
   .traffic:empty { display: none; }
@@ -736,6 +779,8 @@
       <button data-tool="assets"><b>Asset clean-up</b><span>Gather scattered items to sell or consolidate</span></button>
       <div class="tm-group">Intel</div>
       <button data-tool="traffic"><b>Traffic and activity</b><span>Lowsec jumps and kills by the hour; wormhole kills and residents</span></button>
+      <div class="tm-group">Org</div>
+      <button data-tool="planner"><b>Mission planner</b><span>Plan a mission with Claude, shared with your org</span></button>
     </div>
   </div>
   <!-- the old one-click buttons stay in the page for the panels' own state, hidden: Tools opens everything -->
@@ -954,6 +999,46 @@
     Jumps per day and kills per week are averages over the hours recorded. Which belts carry which ore follows the published spawn rules by security and empire.</div>
   <div class="r-note t-wh" hidden>CCP publishes no jumps or NPC kills for wormhole space, so this is built from killmails: ships, pods and structures destroyed,
     from the daily EVE Ref archives (about a day behind). The corporations that lose ships in a system are often the people who live there.</div>
+</section>
+
+<section class="route bpo" id="planner" hidden aria-label="Mission planner">
+  <div class="r-head">
+    <div class="r-title"><span>MISSION PLANNER</span><span class="pl-live" id="plLive"></span><button id="plClose" aria-label="Close mission planner">✕</button></div>
+    <div class="h-grid" hidden><label for="plOrg">org</label><select id="plOrg"></select><span></span></div>
+    <div class="r-sum" id="plStatus">Open to load your org's plans.</div>
+  </div>
+  <div id="plList" class="pl-pane" hidden>
+    <div class="pl-bar"><button class="h-go" id="plNewBtn">New plan</button><button class="pl-link" id="plArchived">Show archived plans</button></div>
+    <ol id="plPlans" class="m-list pl-plans"></ol>
+  </div>
+  <div id="plNew" class="pl-pane" hidden>
+    <div class="h-grid">
+      <label for="plKind">mission</label><select id="plKind"></select><span></span>
+      <label for="plName">name</label><input type="text" id="plName" maxlength="80" placeholder="optional, e.g. Huna Hedbergite op"><span></span>
+    </div>
+    <label class="pl-lab" for="plObjective">What do you want to do?</label>
+    <textarea id="plObjective" rows="4" maxlength="4000" placeholder="e.g. Mine Hedbergite in a quiet lowsec system near our highsec staging, two Ventures and a Procurer, home before downtime"></textarea>
+    <div class="h-grid">
+      <label for="plWhere">where</label><input type="text" id="plWhere" maxlength="120" placeholder="systems, region or staging"><span></span>
+      <label for="plWho">pilots</label><input type="text" id="plWho" maxlength="400" placeholder="who flies what"><span></span>
+      <label for="plWhen">when</label><input type="text" id="plWhen" maxlength="120" placeholder="e.g. Saturday 20:00 EVE"><span></span>
+      <label for="plRisk">risk</label><select id="plRisk"><option value="">not sure</option><option value="low">low: no losses</option>
+        <option value="medium">medium: cheap ships at risk</option><option value="high">high: we accept losses</option></select><span></span>
+    </div>
+    <div class="pl-bar"><button class="h-go" id="plStartBtn">Start planning</button><button class="pl-link" id="plCancel">Cancel</button></div>
+  </div>
+  <div id="plView" class="pl-pane" hidden>
+    <div class="pl-bar"><button class="pl-link" id="plBack">◂ All plans</button><button class="pl-link" id="plArchive">Archive</button></div>
+    <h3 class="pl-title" id="plTitle"></h3>
+    <div class="m-meta" id="plMeta"></div>
+    <div class="pl-thread" id="plThread"></div>
+    <div class="pl-compose" id="plCompose">
+      <textarea id="plText" rows="3" maxlength="4000" placeholder="Ask for changes, add intel, or ask a question (Ctrl+Enter sends)"></textarea>
+      <button class="h-go" id="plSend">Send</button>
+    </div>
+  </div>
+  <div class="r-note">Answers come from Claude, using Atlas data, CCP's live figures, zKillboard and the web. Check anything that would cost a ship.
+    Every member of the org can read and add to every plan.</div>
 </section>
 
 <section class="route bpo" id="bpo" hidden aria-label="Blueprint finder">
@@ -2395,6 +2480,8 @@ boot().catch(err => {
 <script src="assets.js"></script>
 <script src="org.js"></script>
 <script src="traffic.js"></script>
+<script src="md_core.js"></script>
+<script src="planner.js"></script>
 <script src="tools.js"></script>
 <script src="shelf.js"></script>
 <script src="fit.js"></script>

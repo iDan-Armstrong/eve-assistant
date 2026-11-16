@@ -762,6 +762,21 @@ them. Switching an org from Public to Org only hides all of its scans,
 old ones included. Pictures are stored in Cloudflare R2 and served only to
 pilots who may read the scan. Without sharing they stay in the browser.
 
+### Mission planner (org only)
+
+Tools ▸ Mission planner opens a shared planning room for the members of an Atlas org. A member picks the kind of mission (org operations such as mining, wormhole work, hauling, roams and structure work; PvE agent missions and combat sites; exploration; industry and PI campaigns), says what they want to do, and Claude drafts a plan they can fly: objective, intel, fleet and fits, route and staging, numbered steps, risks and fallbacks, the Atlas tools to use, and the expected payout or cost. Members keep talking to it in the same plan to change it, and every member of the org can read and add to every plan.
+
+Before answering, Claude can look things up through the relay: a system's security, neighbours, last-hour jumps and kills, the 30-day lowsec traffic pattern or the 30-day wormhole killmail record; a gate route with the kills along it; recent killmails in a system (zKillboard and ESI); hub prices; wormhole types; the org's N-Space Survey chain and J-Space Survey planet scans; and the asking pilot's location, ship and skills, as far as their Atlas login allows. It can also search the web for game mechanics. Each reply lists what it checked.
+
+How it is run:
+
+- The relay calls the Anthropic Messages API. The API key is the Worker secret `ANTHROPIC_API_KEY`, set in the Cloudflare dashboard (Workers ▸ atlas-sightings ▸ Settings ▸ Variables and Secrets); it never appears in the repository or the page.
+- `PLANNER_ORGS` in `wrangler.toml` lists the org ids it is open to; only approved members of those orgs (and the Atlas operator) can read or write plans. `PLANNER_LIVE = "1"` switches it on; with "0", members can still read plans but get no new answers.
+- `PLANNER_MODEL` picks the Claude model and `PLANNER_DAILY` the replies each pilot may ask for per UTC day (40 by default), which keeps the API bill in check. `PLANNER_WEB = "0"` turns off web search.
+- Plans are kept in the relay's KV store for a year. A pilot's EVE token is used only during their own request and is never stored or sent to Claude.
+
+Code: `worker/planner.js` (endpoint, tools, Claude calls), `worker/planner_core.js` (prompt, tool list, history; tested), `web/planner.js` (panel) and `web/md_core.js` (a small escaping Markdown renderer for the replies).
+
 ### Live data
 
 Live inputs refresh hourly: a scheduled GitHub Action runs

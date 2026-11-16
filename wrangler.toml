@@ -13,7 +13,14 @@ ALLOWED_ORIGINS = "https://idan-armstrong.github.io,http://localhost:8765"
 # Atlas operator characters (comma separated): reset org passwords, settle disputes
 OPERATORS = "Varg Soth"
 # development: "1" = orgs ask for no passwords and approve joins at once; "0" = passwords and approval
-ORG_OPEN = "1"
+ORG_OPEN = "0"
+# Mission planner (worker/planner.js): the orgs that may use it (org ids, comma separated),
+# "1" = live, the Claude model, replies per pilot per day. The Anthropic API key is the
+# Worker secret ANTHROPIC_API_KEY, set in the Cloudflare dashboard, never in this file.
+PLANNER_ORGS = "1h1n1b1550"
+PLANNER_LIVE = "0"
+PLANNER_MODEL = "claude-sonnet-5-5"
+PLANNER_DAILY = "40"
 
 [[kv_namespaces]]
 binding = "SIGHTINGS"

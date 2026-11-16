@@ -53,6 +53,8 @@
    of the corporation's, so a pilot shares with their corp or one of their
    orgs, never both at once.
 
+   Mission planner (org-only, answered by Claude): POST /planner, see worker/planner.js.
+
    J-Space Survey planet scans:
    POST /jspace/get   body {"token", "org", "systems": [ids]} -> {"planets": {system: {planet: {resource: scan}}}, "shots"}
    POST /jspace/scan  body {"token", "org", "system", "planet", "resource", "d", "image": base64 JPEG}
@@ -72,6 +74,7 @@ import { applyScan, mergeStores, resolutionOf } from "../web/survey/jspace_core.
 import WORMHOLES from "../web/data/jspace/wormholes.json";
 import JSYSTEMS from "../web/data/jspace/systems.json";
 import CLASSES from "../web/data/jspace/classes.json";
+import { planner } from "./planner.js";
 
 const KB_KINDS = new Set(["visit", "static", "dscan", "probe", "claim"]);
 const classOf = id => { const j = JSYSTEMS[id]; return j ? CLASSES[j[1]] || null : null; };
@@ -674,6 +677,10 @@ export default {
       }
       if (req.method === "POST" && url.pathname === "/jspace/shot") {
         return await jspaceShot(await req.json(), env, headers);
+      }
+      if (req.method === "POST" && url.pathname === "/planner") {
+        return json(await planner(await req.json(), env, { verify, orgCall, isOperator, room, esiAuthed }), 200,
+                    { ...headers, "Cache-Control": "no-store" });
       }
       if (req.method === "POST" && url.pathname === "/report") {
         return json(await report(req, env), 200, headers);
