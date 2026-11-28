@@ -1,0 +1,15 @@
+{
+ "generated": "2026-11-28T05:00:26+00:00",
+ "esi_kills": "ok, 2726 systems",
+ "esi_hour": "Sat, 28 Nov 2026 04:51:56 GMT",
+ "esi_jumps": "ok, 4748 systems",
+ "evescout": "ok, 30 signatures, 30 connections; fields: completed, completed_at, completed_by_id, completed_by_name, created_at, created_by_id, created_by_name, expires_at, id, in_region_id, in_region_name, in_signature, in_system_class, in_system_id, in_system_name, max_ship_size, out_signature, out_system_id, out_system_name, remaining_hours, signature_type, updated_at, updated_by_id, updated_by_name, wh_exits_outward, wh_type",
+ "zkill": "ok via label/ganked, 200 summaries",
+ "zkill_new": "12 new ganks, 0 ESI lookups failed",
+ "relayTraffic": "321 hours from the relay, 5 filled the weekly store",
+ "traffic": "ESI hour 2026-11-28T04: new, 168 hours held",
+ "ledger": "2357 ganks held, oldest 2026-10-29T06:54:28Z, 22 activity days",
+ "pvpHistory": "30 days of low/null kill history",
+ "lowsecTraffic": "687 lowsec systems, hour 2026-11-28T04 new, 390 hours held, 5 from the relay",
+ "whActivity": "2450 wormhole systems with kills over 30 days"
+}
